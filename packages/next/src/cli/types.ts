@@ -46,6 +46,7 @@ export interface FluxProjectInfo {
   nextConfigFormat?: NextConfigFormat;
   nextConfigPaths: string[];
   language: ProjectLanguage;
+  usesAtAlias: boolean;
   rootPagePath?: string;
   catchAllPath?: string;
   packages: FluxProjectPackages;

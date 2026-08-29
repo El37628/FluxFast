@@ -303,6 +303,28 @@ function detectFluxConfig(
   };
 }
 
+function detectAtAlias(root: string, usesSrcDirectory: boolean): boolean {
+  const configPath = ["tsconfig.json", "jsconfig.json"]
+    .map(file => path.join(root, file))
+    .find(isFile);
+  if (!configPath) {
+    return false;
+  }
+
+  const content = fs.readFileSync(configPath, "utf8");
+  const aliasMatch = /["']@\/\*["']\s*:\s*\[\s*["']([^"']+)["']/.exec(
+    content
+  );
+  if (!aliasMatch) {
+    return false;
+  }
+
+  const normalizedTarget = aliasMatch[1].replace(/\\/g, "/").replace(/^\.\//, "");
+  return usesSrcDirectory
+    ? normalizedTarget === "src/*"
+    : normalizedTarget === "*";
+}
+
 function findPageFile(directory: string): string | undefined {
   for (const extension of PAGE_EXTENSIONS) {
     const candidate = path.join(directory, `page.${extension}`);
@@ -376,6 +398,7 @@ export function detectFluxProject(startPath = process.cwd()): FluxProjectInfo {
     nextConfigFormat: nextConfig?.[1],
     nextConfigPaths: nextConfigs.map(([file]) => path.join(root, file)),
     language,
+    usesAtAlias: detectAtAlias(root, layout.usesSrcDirectory),
     rootPagePath: findPageFile(layout.appDir),
     catchAllPath: findPageFile(catchAllDirectory),
     packages: {
