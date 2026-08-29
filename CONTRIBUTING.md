@@ -7,6 +7,3 @@ Before opening a change, run the Python suite, both TypeScript suites,
 typechecking, and builds using the commands in `AGENTS.md`. Protocol changes
 must update `docs/protocol.md`; cache changes must include isolation tests;
 performance changes must include benchmark evidence.
-
-The standalone example is maintained in `../fluxfast-example`. Framework code
-must not import from or otherwise depend on that sibling project.

@@ -55,9 +55,6 @@ export default function RoomsPage() {
 - `packages/core`: framework-neutral browser runtime with no React or Next.js
   imports.
 - `packages/next`: Next.js 16 App Router adapter and registry generator.
-- `../fluxfast-example`: independently installable companion example with
-  FastAPI, Next.js, and Playwright tests. It intentionally lives outside this
-  repository.
 
 ## Development
 
@@ -68,16 +65,6 @@ pnpm test
 pnpm build
 ./.venv/bin/python -m pytest -q python/fluxfast/tests
 pnpm benchmark
-```
-
-For the full application and browser suite, see the
-[standalone example](../fluxfast-example/README.md).
-
-The standalone application runs through one same-origin development command:
-
-```bash
-cd ../fluxfast-example
-.venv/bin/fluxfast dev backend.app.main:app
 ```
 
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),

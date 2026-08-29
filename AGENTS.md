@@ -7,9 +7,6 @@ FastAPI owns application routing and resource definitions.
 `packages/core` is framework-neutral. `packages/next` may depend on React and
 Next.js. Never make `packages/core` import React, Next.js, Vue, Svelte, or Solid.
 
-The companion application lives in the sibling `../fluxfast-example` project;
-do not move it back into this repository or add it to this workspace.
-
 ## Protocol
 
 Read `docs/protocol.md` before modifying wire types. Do not make incompatible
@@ -20,7 +17,7 @@ independent of package versions.
 
 Add a regression test before or alongside every non-trivial bug fix. Fix the
 owning layer: backend engine, wire protocol, framework-neutral core, adapter, or
-example.
+consumer application.
 
 ## Git Handoff
 
@@ -40,9 +37,6 @@ handoff unless the user explicitly asks otherwise:
 - Never push commits or branches. Leave remote mutation to the user and report
   the branch name, commit hash, verification performed, remaining worktree
   changes, and suggested `git push -u origin <branch>` command.
-- Treat `../fluxfast-example` as a local-only test fixture. Do not create
-  branches, stage changes, commit, tag, or push in that sibling repository
-  unless the user explicitly requests Git operations there.
 
 ## Performance
 
@@ -70,17 +64,6 @@ pnpm build
 
 # Controlled benchmark
 pnpm benchmark
-
-# Standalone example and browser tests
-cd ../fluxfast-example
-npm install
-npm run generate
-npm run typecheck
-npm run build
-npm run test:e2e
-
-# One-command application development
-.venv/bin/fluxfast dev backend.app.main:app
 ```
 
 ## Generated Files

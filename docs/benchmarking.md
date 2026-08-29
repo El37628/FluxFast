@@ -27,5 +27,5 @@ shared values are absent and their loaders executed only once. Results are not
 committed as universal claims because wall-clock timings vary by environment.
 
 The Python suite separately proves structured concurrency with 50 ms, 80 ms,
-and 100 ms loaders. Browser rendering and mutation latency belong to the
-standalone example's Playwright suite rather than this payload microbenchmark.
+and 100 ms loaders. Browser rendering and mutation latency require separate
+browser-level integration tests and are outside this payload microbenchmark.
