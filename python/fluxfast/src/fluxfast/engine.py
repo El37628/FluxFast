@@ -2,6 +2,7 @@
 
 import inspect
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import anyio
@@ -13,6 +14,14 @@ from .protocol import ResourceWireRecord
 from .resource import ResourceSpec
 from .serialization import compute_version, to_jsonable
 from .timing import TimingMetrics
+
+
+@dataclass(slots=True)
+class ResourceResolution:
+    """Internal result of resolving immediate and pending page resources."""
+
+    resources: dict[str, ResourceWireRecord[Any]]
+    deferred: list[str]
 
 
 class ResourceEngine:
@@ -30,7 +39,9 @@ class ResourceEngine:
         only_keys: set[str] | None,
         cache: ResourceCacheBackend,
         metrics: TimingMetrics,
-    ) -> dict[str, ResourceWireRecord[Any]]:
+        *,
+        client_supports_deferred: bool = False,
+    ) -> ResourceResolution:
         t0 = time.perf_counter()
 
         specs_to_process = page.resources
@@ -38,6 +49,7 @@ class ResourceEngine:
             specs_to_process = [s for s in specs_to_process if s.key in only_keys]
 
         resolved_records: dict[str, ResourceWireRecord[Any]] = {}
+        deferred_keys: list[str] = []
         pending_misses: list[ResourceSpec] = []
 
         # 1. Evaluate cache hits
@@ -63,6 +75,9 @@ class ResourceEngine:
 
             # Cache miss or uncacheable
             metrics.cache_misses += 1
+            if spec.defer and client_supports_deferred and only_keys is None:
+                deferred_keys.append(spec.key)
+                continue
             pending_misses.append(spec)
 
         # 2. Concurrently resolve misses
@@ -124,4 +139,7 @@ class ResourceEngine:
                     )
 
         metrics.resources_dur_ms = (time.perf_counter() - t0) * 1000.0
-        return resolved_records
+        return ResourceResolution(
+            resources=resolved_records,
+            deferred=deferred_keys,
+        )

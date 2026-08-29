@@ -103,7 +103,7 @@ class FluxRouter(APIRouter):
                     known_versions = parse_known_header(request.headers.get(HEADER_KNOWN))
                     only_keys = parse_only_header(request.headers.get(HEADER_ONLY))
 
-                    resolved_resources = await ResourceEngine.resolve_page_resources(
+                    resolution = await ResourceEngine.resolve_page_resources(
                         page=result,
                         known_versions=known_versions,
                         only_keys=only_keys,
@@ -123,7 +123,7 @@ class FluxRouter(APIRouter):
                             url=requested_url,
                             meta=result.meta,
                         ),
-                        resources=resolved_resources,
+                        resources=resolution.resources,
                     )
                     payload = envelope.model_dump(mode="json")
                     metrics.serialize_dur_ms = (time.perf_counter() - t_ser) * 1000.0
