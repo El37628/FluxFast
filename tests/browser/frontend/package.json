@@ -1,0 +1,29 @@
+{
+  "name": "fluxfast-browser-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "next dev",
+    "generate": "fluxfast generate",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fluxfast/core": "workspace:*",
+    "@fluxfast/next": "workspace:*",
+    "next": "16.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "22.20.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  }
+}

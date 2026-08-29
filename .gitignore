@@ -5,5 +5,13 @@ dist/
 .ruff_cache/
 __pycache__/
 *.pyc
+*.tsbuildinfo
 coverage/
 benchmark-results/
+playwright-report/
+test-results/
+tests/browser/frontend/.next/
+tests/browser/frontend/AGENTS.md
+tests/browser/frontend/CLAUDE.md
+tests/browser/frontend/next-env.d.ts
+tests/browser/frontend/src/.fluxfast/

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import signal
@@ -48,12 +49,23 @@ def _frontend_command(frontend: Path, host: str, port: int) -> list[str]:
         ("bun.lockb", "bun"),
         ("package-lock.json", "npm"),
     )
-    manager = next((name for lock, name in candidates if (frontend / lock).exists()), "npm")
+    manager = next((name for lock, name in candidates if (frontend / lock).exists()), None)
+    if manager is None:
+        try:
+            manifest = json.loads((frontend / "package.json").read_text(encoding="utf8"))
+        except (OSError, json.JSONDecodeError):
+            manifest = {}
+        declared_manager = manifest.get("packageManager")
+        if isinstance(declared_manager, str):
+            candidate = declared_manager.split("@", 1)[0]
+            if candidate in {name for _lock, name in candidates}:
+                manager = candidate
+    manager = manager or "npm"
     if shutil.which(manager) is None:
         raise DevServerError(
             f"Could not find '{manager}' on PATH for frontend directory {frontend}"
         )
-    separator = [] if manager == "yarn" else ["--"]
+    separator = ["--"] if manager == "npm" else []
     return [
         manager,
         "run",

@@ -65,7 +65,8 @@ parameters remain part of `page.url`.
 
 The five patch operations are `replace-resource`, `merge-object`,
 `replace-item`, `remove-item`, and `append-item`. All mutation fields are
-optional. `externalRedirect` is an optional additive v1 field; the legacy
+optional and absent fields are omitted rather than encoded as `null`.
+`externalRedirect` is an optional additive v1 field; the legacy
 `X-FluxFast-External-Redirect` response header is also accepted.
 
 Patches apply first, invalidations second, then active invalidated resources are

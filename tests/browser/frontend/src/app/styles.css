@@ -1,0 +1,30 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 2rem;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 48rem;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 24rem;
+}
+
+button,
+input {
+  font: inherit;
+  padding: 0.5rem;
+}
+
+[role="alert"] {
+  color: #b42318;
+}

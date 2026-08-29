@@ -12,6 +12,17 @@ Create GitHub environments named `pypi` and `npm`. Add required reviewers to
 both environments so a tag cannot publish without approval. Protect release
 tags matching `v*` in the repository rules as well.
 
+Before the first public release, also configure these repository settings:
+
+- Protect `main`, require pull requests, and require the Python, JavaScript,
+  integration, release-artifact, dependency-security, and CodeQL checks.
+- Enable private vulnerability reporting, Dependabot alerts, and Dependabot
+  security updates under **Settings → Security**.
+- Keep the default workflow token read-only. The release workflow grants its
+  publish jobs only the narrower write permissions they require.
+- Limit creation of tags matching `v*` to maintainers and disallow tag updates
+  and deletion.
+
 For PyPI, configure a pending or existing trusted publisher for `fluxfast`:
 
 - Owner: `El37628`
@@ -59,14 +70,17 @@ automation tokens.
 
 ## Publish a stable release
 
-Update these version fields together:
+Add user-facing changes beneath `Unreleased` in `CHANGELOG.md`, then synchronize
+the package manifests, Python runtime version, lockfile, and dated release
+section together:
 
-- `package.json`
-- `packages/core/package.json`
-- `packages/next/package.json`
-- `packages/next/package.json` dependency on `@fluxfast/core`
-- `python/fluxfast/pyproject.toml`
-- `python/fluxfast/src/fluxfast/__init__.py`
+```bash
+pnpm release:prepare 0.1.0
+pnpm release:check v0.1.0
+```
+
+Commit and review the generated version changes before tagging. Do not edit or
+move a tag after publishing.
 
 After the version change has passed review and reached `main`, release it from
 an up-to-date checkout. For version `0.1.0`:
@@ -74,7 +88,7 @@ an up-to-date checkout. For version `0.1.0`:
 ```bash
 git switch main
 git pull --ff-only
-node scripts/check-release-version.mjs v0.1.0
+pnpm release:check v0.1.0
 git tag -a v0.1.0 -m "FluxFast 0.1.0"
 git push origin v0.1.0
 ```

@@ -1,58 +1,49 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import {
+  VERSION_FILES,
+  readVersionSnapshot,
+  validateStableVersion,
+} from "./version-files.mjs";
 
 const tag = process.argv[2];
-if (!tag || !/^v\d+\.\d+\.\d+$/.test(tag)) {
+if (!tag?.startsWith("v")) {
   console.error("Release tag must use the stable vMAJOR.MINOR.PATCH format.");
   process.exit(1);
 }
 
 const expectedVersion = tag.slice(1);
-const packageFiles = [
-  "package.json",
-  "packages/core/package.json",
-  "packages/next/package.json",
-];
+try {
+  validateStableVersion(expectedVersion);
+} catch {
+  console.error("Release tag must use the stable vMAJOR.MINOR.PATCH format.");
+  process.exit(1);
+}
+
+const files = Object.fromEntries(
+  VERSION_FILES.map(file => [file, fs.readFileSync(file, "utf8")])
+);
+const snapshot = readVersionSnapshot(files);
 const mismatches = [];
 
-for (const packageFile of packageFiles) {
-  const manifest = JSON.parse(fs.readFileSync(packageFile, "utf8"));
-  if (manifest.version !== expectedVersion) {
-    mismatches.push(`${packageFile}: ${manifest.version ?? "missing"}`);
-  }
+for (const [file, version] of Object.entries(snapshot)) {
+  const expected = file.endsWith(" @fluxfast/core")
+    ? `^${expectedVersion}`
+    : expectedVersion;
+  if (version !== expected) mismatches.push(`${file}: ${version ?? "missing"}`);
 }
 
-const pyprojectFile = "python/fluxfast/pyproject.toml";
-const pyproject = fs.readFileSync(pyprojectFile, "utf8");
-const projectSection = pyproject.match(/\[project\]([\s\S]*?)(?:\n\[|$)/)?.[1];
-const pythonVersion = projectSection?.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
-if (pythonVersion !== expectedVersion) {
-  mismatches.push(`${pyprojectFile}: ${pythonVersion ?? "missing"}`);
-}
-
-const pythonInitFile = "python/fluxfast/src/fluxfast/__init__.py";
-const pythonInit = fs.readFileSync(pythonInitFile, "utf8");
-const runtimeVersion = pythonInit.match(/^__version__\s*=\s*"([^"]+)"/m)?.[1];
-if (runtimeVersion !== expectedVersion) {
-  mismatches.push(`${pythonInitFile}: ${runtimeVersion ?? "missing"}`);
-}
-
-const nextManifest = JSON.parse(
-  fs.readFileSync("packages/next/package.json", "utf8")
-);
-const expectedCoreRange = `^${expectedVersion}`;
-const coreRange = nextManifest.dependencies?.["@fluxfast/core"];
-if (coreRange !== expectedCoreRange) {
-  mismatches.push(
-    `packages/next/package.json @fluxfast/core: ${coreRange ?? "missing"}`
-  );
+const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
+const escapedVersion = expectedVersion.replaceAll(".", "\\.");
+if (!new RegExp(`^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}$`, "m").test(changelog)) {
+  mismatches.push(`CHANGELOG.md: missing dated ${expectedVersion} release section`);
 }
 
 if (mismatches.length > 0) {
-  console.error(`Release ${tag} does not match every package version:`);
+  console.error(`Release ${tag} does not match every release file:`);
   for (const mismatch of mismatches) console.error(`- ${mismatch}`);
   process.exit(1);
 }
 
-console.log(`Release ${tag} matches every package version and dependency.`);
+console.log(`Release ${tag} matches every package version and changelog entry.`);

@@ -38,21 +38,28 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm build
+          pnpm audit --audit-level high
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
       - name: Install Python build and test dependencies
-        run: python -m pip install build "./python/fluxfast[dev]"
+        run: python -m pip install build pip-audit==2.10.1 twine "./python/fluxfast[dev]"
       - name: Test Python package
         run: |
           python -m ruff check python/fluxfast tests/release-consumer/python
           python -m pytest -q python/fluxfast/tests
+          python -m pip_audit python/fluxfast --strict --progress-spinner off
+      - name: Test same-origin browser integration
+        run: |
+          pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
+          FLUXFAST_E2E_PYTHON=python pnpm test:e2e
       - name: Build distributions
         run: |
           mkdir -p release/python release/npm
           python -m build --outdir release/python python/fluxfast
           npm pack ./packages/core --pack-destination release/npm
           npm pack ./packages/next --pack-destination release/npm
+          python -m twine check release/python/*
       - name: Verify npm distributions
         run: |
           mkdir -p "$RUNNER_TEMP/fluxfast-release/javascript"
@@ -162,6 +169,7 @@ jobs:
             fi
             npm publish "$tarball" \
               --access public \
+              --provenance \
               --registry=https://registry.npmjs.org/
           }
 

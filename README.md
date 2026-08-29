@@ -80,7 +80,9 @@ pnpm benchmark
 
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
 [caching](docs/caching.md), [Next.js integration](docs/nextjs-adapter.md), and
-[mutations](docs/mutations.md) before extending a wire or cache boundary.
+[mutations](docs/mutations.md) before extending a wire or cache boundary. The
+[compatibility and versioning policy](docs/versioning.md) lists supported
+runtimes and the deprecation policy.
 Maintainers can find the registry and tag procedure in the
 [release guide](docs/releasing.md).
 

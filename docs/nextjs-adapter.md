@@ -1,6 +1,6 @@
 # Next.js Adapter
 
-FluxFast supports the Next.js 16 App Router through one optional catch-all shell.
+FluxFast supports the Next.js 16.3+ App Router through one optional catch-all shell.
 FastAPI remains the application router; Next supplies the document, bundling,
 React runtime, and code splitting.
 
@@ -57,6 +57,8 @@ the Next server process, and starts the frontend on port 3000. The browser uses
 relative URLs on the Next origin; the `X-FluxFast: 1` rewrite condition sends
 only protocol visits and mutations to FastAPI. Normal document requests remain
 owned by the Next catch-all shell, and no CORS configuration is required.
+The supervisor selects npm, pnpm, Yarn, or Bun from the frontend lockfile, then
+falls back to the standard `packageManager` manifest field and finally npm.
 
 Set `backendUrl` explicitly only when the Next server cannot use the injected
 `FLUXFAST_BACKEND_URL`. Set `clientUrl` only for a deliberate cross-origin

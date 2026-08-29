@@ -31,6 +31,27 @@ def test_frontend_command_reports_missing_manager(tmp_path: Path, monkeypatch: p
         _frontend_command(tmp_path, "127.0.0.1", 3000)
 
 
+def test_frontend_command_honors_declared_package_manager_without_local_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    (tmp_path / "package.json").write_text(
+        '{"packageManager":"pnpm@10.15.0"}',
+        encoding="utf8",
+    )
+    monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
+
+    assert _frontend_command(tmp_path, "127.0.0.1", 3100) == [
+        "pnpm",
+        "run",
+        "dev",
+        "--hostname",
+        "127.0.0.1",
+        "--port",
+        "3100",
+    ]
+
+
 def test_dev_supervisor_injects_private_backend_and_stops_both_processes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

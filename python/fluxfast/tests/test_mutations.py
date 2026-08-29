@@ -1,8 +1,11 @@
 """Tests for mutation building, patching, invalidation, and redirects."""
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from fluxfast import (
+    FluxFast,
     append_item,
     flux_external_redirect,
     flux_redirect,
@@ -80,3 +83,24 @@ def test_mutation_rejects_unknown_or_incomplete_patch_operations():
         mutation(patches={"rooms": {"op": "execute-code"}})
     with pytest.raises(ValueError, match="requires an id"):
         mutation(patches={"rooms": {"op": "remove-item"}})
+
+
+def test_mutation_response_omits_unset_optional_wire_fields():
+    app = FastAPI()
+    flux = FluxFast(app)
+
+    @flux.mutation("/rooms")
+    async def add_room():
+        return mutation(patch={"rooms": append_item({"id": 2})})
+
+    response = TestClient(app).post(
+        "/rooms",
+        headers={"X-FluxFast": "1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mutation"] == {
+        "patches": {
+            "rooms": [{"op": "append-item", "value": {"id": 2}}],
+        }
+    }

@@ -161,7 +161,7 @@ class FluxRouter(APIRouter):
                         headers["X-FluxFast-External-Redirect"] = result.external_redirect
 
                     return JSONResponse(
-                        content=envelope.model_dump(mode="json"),
+                        content=envelope.model_dump(mode="json", exclude_none=True),
                         media_type=PROTOCOL_MEDIA_TYPE,
                         headers=headers,
                     )
@@ -249,7 +249,7 @@ class FluxRouter(APIRouter):
                         headers["X-FluxFast-External-Redirect"] = result.external_redirect
 
                     return JSONResponse(
-                        content=envelope.model_dump(mode="json"),
+                        content=envelope.model_dump(mode="json", exclude_none=True),
                         media_type=PROTOCOL_MEDIA_TYPE,
                         headers=headers,
                     )
