@@ -7,6 +7,10 @@ updates:
     groups:
       javascript-dependencies:
         patterns: ["*"]
+    ignore:
+      # Keep type coverage aligned with the oldest supported Node.js runtime.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pip
     directory: /python/fluxfast
