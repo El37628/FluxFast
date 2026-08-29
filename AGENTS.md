@@ -40,6 +40,9 @@ handoff unless the user explicitly asks otherwise:
 - Never push commits or branches. Leave remote mutation to the user and report
   the branch name, commit hash, verification performed, remaining worktree
   changes, and suggested `git push -u origin <branch>` command.
+- Treat `../fluxfast-example` as a local-only test fixture. Do not create
+  branches, stage changes, commit, tag, or push in that sibling repository
+  unless the user explicitly requests Git operations there.
 
 ## Performance
 
