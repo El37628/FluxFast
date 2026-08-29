@@ -53,6 +53,11 @@ jobs:
           npm run generate
           npm run typecheck
           npm run smoke
+      - name: Initialize and build a clean Next.js consumer
+        env:
+          FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-release/artifacts
+          FLUXFAST_NEXT_VERSION: ${{ matrix.next-version }}
+        run: pnpm test:consumer:init
 
   python-consumer:
     name: Python wheel consumer
