@@ -15,6 +15,13 @@ async function main() {
   assert.equal(typeof core.createFluxRuntime, "function");
   assert.equal(typeof nextAdapter.defineFluxConfig, "function");
   assert.equal(fs.existsSync(path.join(installedRoot, ".bin", "fluxfast")), true);
+  for (const packageName of ["core", "next"]) {
+    const license = fs.readFileSync(
+      path.join(installedRoot, "@fluxfast", packageName, "LICENSE"),
+      "utf8"
+    );
+    assert.match(license, /MIT License/);
+  }
 
   const store = new core.ResourceStore();
   store.set({ key: "health", version: "v1", value: { ok: true } });

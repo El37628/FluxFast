@@ -3,12 +3,25 @@
   "version": "0.1.0",
   "license": "MIT",
   "description": "Next.js App Router adapter for FluxFast",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/El37628/FluxFast.git",
+    "directory": "packages/next"
+  },
+  "homepage": "https://github.com/El37628/FluxFast#readme",
+  "bugs": {
+    "url": "https://github.com/El37628/FluxFast/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": ["bin", "dist"],
   "bin": {
-    "fluxfast": "./bin/fluxfast.js"
+    "fluxfast": "bin/fluxfast.js"
   },
   "exports": {
     ".": {

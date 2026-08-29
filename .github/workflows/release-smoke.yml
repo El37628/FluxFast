@@ -14,6 +14,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Validate synchronized package versions
+        run: node scripts/check-release-version.mjs "v$(node -p 'require(\"./package.json\").version')"
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Pack npm artifacts

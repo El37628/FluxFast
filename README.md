@@ -9,6 +9,17 @@ versioned resources. Shared resources can be reused across pages, cached with
 explicit security scopes, resolved concurrently, and selectively invalidated
 after mutations. The MVP frontend adapter targets the Next.js 16 App Router.
 
+## Installation
+
+Install the backend and Next.js adapter from their package registries:
+
+```bash
+pip install fluxfast
+npm install @fluxfast/next
+```
+
+`@fluxfast/next` installs its compatible `@fluxfast/core` dependency.
+
 ```python
 from fastapi import Depends, FastAPI
 from fluxfast import FluxFast, Page, resource, scope
@@ -70,5 +81,7 @@ pnpm benchmark
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
 [caching](docs/caching.md), [Next.js integration](docs/nextjs-adapter.md), and
 [mutations](docs/mutations.md) before extending a wire or cache boundary.
+Maintainers can find the registry and tag procedure in the
+[release guide](docs/releasing.md).
 
 FluxFast is not an Inertia wrapper and does not implement the Inertia protocol.

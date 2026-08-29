@@ -1,0 +1,202 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Test and build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global pnpm@10.15.0
+      - name: Validate release tag
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          node scripts/check-release-version.mjs "$GITHUB_REF_NAME"
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test JavaScript packages
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm build
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Install Python build and test dependencies
+        run: python -m pip install build "./python/fluxfast[dev]"
+      - name: Test Python package
+        run: |
+          python -m ruff check python/fluxfast tests/release-consumer/python
+          python -m pytest -q python/fluxfast/tests
+      - name: Build distributions
+        run: |
+          mkdir -p release/python release/npm
+          python -m build --outdir release/python python/fluxfast
+          npm pack ./packages/core --pack-destination release/npm
+          npm pack ./packages/next --pack-destination release/npm
+      - name: Verify npm distributions
+        run: |
+          mkdir -p "$RUNNER_TEMP/fluxfast-release/javascript"
+          cp -R tests/release-consumer/javascript/. "$RUNNER_TEMP/fluxfast-release/javascript"
+          npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false
+          npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false --no-save \
+            "$GITHUB_WORKSPACE"/release/npm/fluxfast-core-*.tgz \
+            "$GITHUB_WORKSPACE"/release/npm/fluxfast-next-*.tgz
+          npm run --prefix "$RUNNER_TEMP/fluxfast-release/javascript" generate
+          npm run --prefix "$RUNNER_TEMP/fluxfast-release/javascript" typecheck
+          npm run --prefix "$RUNNER_TEMP/fluxfast-release/javascript" smoke
+      - name: Verify Python distribution
+        run: |
+          python -m venv "$RUNNER_TEMP/fluxfast-release/venv"
+          "$RUNNER_TEMP/fluxfast-release/venv/bin/python" -m pip install \
+            "$GITHUB_WORKSPACE"/release/python/fluxfast-*.whl
+          "$RUNNER_TEMP/fluxfast-release/venv/bin/python" \
+            tests/release-consumer/python/smoke.py
+          "$RUNNER_TEMP/fluxfast-release/venv/bin/fluxfast" --help
+      - name: Upload immutable Python distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: python-distributions
+          path: release/python/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload immutable npm distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-distributions
+          path: release/npm/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-pypi:
+    name: Publish fluxfast to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/fluxfast
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-distributions
+          path: release/python
+      - name: Publish Python distributions
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: release/python
+
+  publish-npm:
+    name: Publish JavaScript packages to npm
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Download distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-distributions
+          path: release/npm
+      - name: Install an OIDC-capable npm CLI
+        run: npm install --global "npm@^11.5.1"
+      - name: Publish npm packages
+        run: |
+          shopt -s nullglob
+
+          publish_package() {
+            package_name="$1"
+            version="$2"
+            tarball="$3"
+            error_log="$RUNNER_TEMP/npm-view-error.log"
+            local_integrity="sha512-$(openssl dgst -sha512 -binary "$tarball" | base64 -w 0)"
+
+            if remote_json="$(npm view \
+              "${package_name}@${version}" \
+              dist.integrity \
+              --json \
+              --registry=https://registry.npmjs.org/ \
+              2>"$error_log")"; then
+              remote_integrity="$(node -e \
+                'process.stdout.write(JSON.parse(process.argv[1]))' \
+                "$remote_json")"
+              if [ "$remote_integrity" != "$local_integrity" ]; then
+                echo "${package_name}@${version} already exists with different contents." >&2
+                return 1
+              fi
+              echo "${package_name}@${version} already contains this exact artifact."
+              return 0
+            fi
+
+            if ! grep -q "E404" "$error_log"; then
+              cat "$error_log" >&2
+              return 1
+            fi
+            npm publish "$tarball" \
+              --access public \
+              --registry=https://registry.npmjs.org/
+          }
+
+          core_tarballs=(release/npm/fluxfast-core-*.tgz)
+          next_tarballs=(release/npm/fluxfast-next-*.tgz)
+          [ "${#core_tarballs[@]}" -eq 1 ]
+          [ "${#next_tarballs[@]}" -eq 1 ]
+          publish_package "@fluxfast/core" "${GITHUB_REF_NAME#v}" "${core_tarballs[0]}"
+          publish_package "@fluxfast/next" "${GITHUB_REF_NAME#v}" "${next_tarballs[0]}"
+
+  github-release:
+    name: Create GitHub release
+    needs: [publish-pypi, publish-npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-distributions
+          path: release/python
+      - name: Download npm distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-distributions
+          path: release/npm
+      - name: Create release and attach distributions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release/python/* \
+            release/npm/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --title "FluxFast ${GITHUB_REF_NAME#v}"

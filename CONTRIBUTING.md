@@ -7,3 +7,6 @@ Before opening a change, run the Python suite, both TypeScript suites,
 typechecking, and builds using the commands in `AGENTS.md`. Protocol changes
 must update `docs/protocol.md`; cache changes must include isolation tests;
 performance changes must include benchmark evidence.
+
+Maintainers should follow [the release guide](docs/releasing.md) for registry
+setup, synchronized versioning, release tags, and trusted publishing.

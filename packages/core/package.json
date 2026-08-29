@@ -3,6 +3,19 @@
   "version": "0.1.0",
   "license": "MIT",
   "description": "Framework-neutral core client runtime for FluxFast",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/El37628/FluxFast.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/El37628/FluxFast#readme",
+  "bugs": {
+    "url": "https://github.com/El37628/FluxFast/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -1,4 +1,4 @@
-from importlib.metadata import version
+from importlib.metadata import files, version
 from pathlib import Path
 
 import fluxfast
@@ -8,6 +8,8 @@ from fluxfast import FluxFast, Page, resource, scope
 installed_module = Path(fluxfast.__file__).resolve()
 assert "site-packages" in installed_module.parts, installed_module
 assert fluxfast.__version__ == version("fluxfast")
+installed_files = files("fluxfast") or []
+assert any(str(file).endswith("licenses/LICENSE") for file in installed_files)
 
 app = FastAPI()
 runtime = FluxFast(app)
