@@ -34,6 +34,141 @@ describe("FluxRouter Core", () => {
     expect(router.resourceStore.getSnapshot("rooms")).toEqual([{ id: 101 }]);
   });
 
+  it("loads resources without updating PageStore or history", async () => {
+    const transport = new MockTransport();
+    let resolveLoad!: (value: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveLoad = resolve; })
+    );
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "rooms/index", url: "/rooms" },
+      initialResources: {
+        summary: { version: "v1", value: { count: 1 } },
+      },
+    });
+    const originalPage = router.pageStore.getSnapshot();
+    const pageSubscriber = vi.fn();
+    router.pageStore.subscribe(pageSubscriber);
+    const push = vi.spyOn(router.history, "push");
+    const replace = vi.spyOn(router.history, "replace");
+
+    const loading = router.loadResources(["summary"], {
+      url: "/rooms",
+      reason: "refresh",
+    });
+
+    expect(transport.visitMock).toHaveBeenCalledWith(expect.objectContaining({
+      url: "/rooms",
+      knownVersions: { summary: "v1" },
+      only: ["summary"],
+    }));
+    expect(router.resourceStore.getStateSnapshot("summary")).toEqual({
+      data: { count: 1 },
+      status: "loading",
+      error: null,
+      stale: true,
+    });
+
+    resolveLoad({
+      protocol: "fluxfast/1",
+      page: { component: "ignored/index", url: "/ignored" },
+      resources: { summary: { version: "v2", value: { count: 2 } } },
+    });
+    await loading;
+
+    expect(router.resourceStore.getSnapshot("summary")).toEqual({ count: 2 });
+    expect(router.resourceStore.getStateSnapshot("summary").status).toBe("ready");
+    expect(router.pageStore.getSnapshot()).toBe(originalPage);
+    expect(pageSubscriber).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("applies mixed resource results and settles unchanged known resources", async () => {
+    const transport = new MockTransport();
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+      initialResources: {
+        summary: { version: "v1", value: { count: 1 } },
+      },
+    });
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {
+        analytics: { version: "a1", value: { revenue: 95_000 } },
+      },
+      resourceErrors: {
+        activity: {
+          type: "ResourceError",
+          message: "A deferred resource could not be resolved",
+        },
+      },
+    });
+
+    await router.loadResources(["summary", "analytics", "activity"], {
+      reason: "deferred",
+    });
+
+    expect(router.resourceStore.getStateSnapshot("summary")).toEqual({
+      data: { count: 1 },
+      status: "ready",
+      error: null,
+      stale: false,
+    });
+    expect(router.resourceStore.getStateSnapshot("analytics")).toMatchObject({
+      data: { revenue: 95_000 },
+      status: "ready",
+      error: null,
+    });
+    expect(router.resourceStore.getStateSnapshot("activity")).toMatchObject({
+      status: "error",
+      error: {
+        type: "ResourceError",
+        message: "A deferred resource could not be resolved",
+      },
+    });
+  });
+
+  it("routes selective refresh through resource-only loading", async () => {
+    const router = new FluxRouter({
+      transport: new MockTransport(),
+      initialPage: { component: "rooms/index", url: "/rooms" },
+    });
+    const loadResources = vi
+      .spyOn(router, "loadResources")
+      .mockResolvedValue(undefined);
+
+    await router.refresh({ only: ["summary", "rooms"] });
+
+    expect(loadResources).toHaveBeenCalledWith(
+      ["summary", "rooms"],
+      { url: "/rooms", reason: "refresh" }
+    );
+  });
+
+  it("marks resource-only transport failures as retryable resource errors", async () => {
+    const transport = new MockTransport();
+    transport.visitMock.mockRejectedValueOnce(new Error("Network unavailable"));
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+    });
+
+    await expect(router.loadResources(["analytics", "activity"], {
+      reason: "deferred",
+    })).rejects.toThrow("Network unavailable");
+
+    for (const key of ["analytics", "activity"]) {
+      expect(router.resourceStore.getStateSnapshot(key)).toMatchObject({
+        status: "error",
+        error: { type: "Error", message: "Network unavailable" },
+      });
+    }
+  });
+
   it("handles race condition: latest navigation wins (Section 27)", async () => {
     const transport = new MockTransport();
     const router = new FluxRouter({ transport });

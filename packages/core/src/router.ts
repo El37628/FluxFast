@@ -21,6 +21,15 @@ export interface RefreshOptions {
   only?: string[];
 }
 
+export type ResourceLoadReason = "deferred" | "refresh" | "mutation" | "retry";
+
+export interface LoadResourcesOptions {
+  url?: string;
+  reason: ResourceLoadReason;
+  signal?: AbortSignal;
+  headers?: Record<string, string>;
+}
+
 export interface MutateOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -54,6 +63,7 @@ export class FluxRouter {
   private currentVisitId: string | null = null;
   private activeController: AbortController | null = null;
   private visitCounter = 0;
+  private resourceLoadCounter = 0;
   private readonly hardNavigate: (url: string) => void;
   private stopHistoryListener?: () => void;
 
@@ -192,12 +202,97 @@ export class FluxRouter {
 
   async refresh(options: RefreshOptions = {}): Promise<void> {
     const currentUrl = this.pageStore.getSnapshot().url || "/";
+    if (options.only?.length) {
+      await this.loadResources(options.only, {
+        url: currentUrl,
+        reason: "refresh",
+      });
+      return;
+    }
     await this.visit(currentUrl, {
       preserveState: true,
       preserveScroll: true,
       usePrefetch: false,
-      only: options.only,
     });
+  }
+
+  /** Load a resource batch without changing the current page or browser history. */
+  async loadResources(
+    keys: string[],
+    options: LoadResourcesOptions
+  ): Promise<void> {
+    const requestedKeys = Array.from(new Set(
+      keys.filter((key): key is string => typeof key === "string" && key.length > 0)
+    ));
+    if (requestedKeys.length === 0) return;
+
+    const url = options.url ?? (this.pageStore.getSnapshot().url || "/");
+    const knownVersions = this.resourceStore.exportKnownVersions();
+    const loadId = `resource_${options.reason}_${++this.resourceLoadCounter}_${Date.now().toString(36)}`;
+    this.resourceStore.markLoading(requestedKeys);
+
+    try {
+      const envelope = await this.transport.visit({
+        url,
+        visitId: loadId,
+        knownVersions,
+        only: requestedKeys,
+        signal: options.signal,
+        headers: options.headers,
+      });
+      const updatedKeys = this.resourceStore.setMany(envelope.resources);
+      this.emitResourceUpdates(updatedKeys);
+
+      const returnedKeys = new Set(Object.keys(envelope.resources));
+      const errorKeys = new Set(Object.keys(envelope.resourceErrors ?? {}));
+      for (const [key, error] of Object.entries(envelope.resourceErrors ?? {})) {
+        this.resourceStore.setResourceError(key, error);
+      }
+
+      for (const key of requestedKeys) {
+        if (returnedKeys.has(key) || errorKeys.has(key)) continue;
+
+        const record = this.resourceStore.getRecord(key);
+        if (record) {
+          if (this.resourceStore.set({
+            key,
+            version: record.version,
+            value: record.value,
+          })) {
+            this.events.emit("resource:update", { key, version: record.version });
+          }
+        } else {
+          this.resourceStore.invalidate(key);
+        }
+      }
+    } catch (error) {
+      const aborted =
+        options.signal?.aborted ||
+        (error instanceof Error && error.name === "AbortError");
+      for (const key of requestedKeys) {
+        const record = this.resourceStore.getRecord(key);
+        if (aborted) {
+          if (record) {
+            this.resourceStore.set({
+              key,
+              version: record.version,
+              value: record.value,
+            });
+          } else {
+            this.resourceStore.invalidate(key);
+          }
+        } else {
+          const normalized = error instanceof Error
+            ? error
+            : new Error(String(error));
+          this.resourceStore.setResourceError(key, {
+            type: normalized.name || "ResourceError",
+            message: normalized.message,
+          });
+        }
+      }
+      throw error;
+    }
   }
 
   async prefetch(url: string): Promise<PageEnvelope> {
