@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fluxfast"
+version = "0.1.0"
+description = "High-performance server-driven application runtime for FastAPI"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "FluxFast Contributors" }]
+dependencies = [
+    "fastapi>=0.139.0,<1.0.0",
+    "pydantic>=2.0.0",
+    "anyio>=4.0.0",
+    "starlette>=0.52.0,<1.0.0",
+    "uvicorn>=0.30.0,<1.0.0",
+]
+
+[project.scripts]
+fluxfast = "fluxfast.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28.0",
+    "pytest>=8.0.0",
+    "ruff>=0.3.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fluxfast"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["B008"]

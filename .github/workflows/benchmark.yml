@@ -1,0 +1,20 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:
+
+jobs:
+  controlled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e 'python/fluxfast[dev]'
+      - run: mkdir -p benchmark-results
+      - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_cross_page.py | tee benchmark-results/cross-page.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: controlled-benchmark
+          path: benchmark-results/cross-page.txt

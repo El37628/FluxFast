@@ -1,0 +1,73 @@
+"use client";
+
+import React, { createContext, useContext, useEffect, useMemo } from "react";
+import { createFetchTransport, FluxRouter, PageEnvelope } from "@fluxfast/core";
+import { ComponentRegistry } from "./resolver";
+import { FluxCacheConfig } from "./config";
+
+export interface FluxContextValue {
+  router: FluxRouter;
+  registry: ComponentRegistry;
+}
+
+export const FluxContext = createContext<FluxContextValue | null>(null);
+
+export interface FluxProviderProps {
+  initialEnvelope?: PageEnvelope;
+  registry?: ComponentRegistry;
+  router?: FluxRouter;
+  clientUrl?: string;
+  cache?: FluxCacheConfig;
+  children: React.ReactNode;
+}
+
+export function FluxProvider({
+  initialEnvelope,
+  registry,
+  router: customRouter,
+  clientUrl,
+  cache,
+  children,
+}: FluxProviderProps) {
+  const router = useMemo(() => {
+    if (customRouter) {
+      return customRouter;
+    }
+
+    return new FluxRouter({
+      initialPage: initialEnvelope?.page,
+      initialResources: initialEnvelope?.resources,
+      transport: createFetchTransport(clientUrl),
+      maxResources: cache?.maxResources,
+      maxPages: cache?.maxPages,
+      deferHistory: true,
+    });
+  }, [customRouter, clientUrl, cache?.maxPages, cache?.maxResources]);
+
+  const value = useMemo(
+    () => ({ router, registry: registry ?? {} }),
+    [router, registry]
+  );
+
+  useEffect(() => {
+    if (customRouter) return;
+    router.startHistory();
+    return () => router.stopHistory();
+  }, [customRouter, router]);
+
+  return (
+    <FluxContext.Provider value={value}>
+      {children}
+    </FluxContext.Provider>
+  );
+}
+
+export function useFluxContext(): FluxContextValue {
+  const ctx = useContext(FluxContext);
+  if (!ctx) {
+    throw new Error(
+      "useFluxContext must be used within a <FluxProvider> or <FluxRoot>"
+    );
+  }
+  return ctx;
+}

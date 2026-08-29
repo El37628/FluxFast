@@ -1,0 +1,23 @@
+{
+  "name": "fluxfast-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "typecheck": "pnpm --filter @fluxfast/core run build && pnpm -r --if-present run typecheck",
+    "test": "pnpm --filter @fluxfast/core run build && pnpm -r --if-present run test",
+    "test:python": "./.venv/bin/python -m pytest -q python/fluxfast/tests",
+    "benchmark": "PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_cross_page.py"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

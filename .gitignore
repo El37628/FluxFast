@@ -1,0 +1,9 @@
+.venv/
+node_modules/
+dist/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+coverage/
+benchmark-results/
