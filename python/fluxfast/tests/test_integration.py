@@ -390,6 +390,42 @@ def test_resource_failure_returns_protocol_error_without_private_details():
     }
 
 
+def test_deferred_follow_up_returns_successes_and_sanitized_resource_errors():
+    app = FastAPI()
+    flux = FluxFast(app, debug=False)
+
+    @flux.page("/deferred-errors")
+    async def deferred_errors_page():
+        def fail_activity():
+            raise RuntimeError("database password must stay private")
+
+        return Page(
+            component="dashboard/index",
+            resources=[
+                resource("analytics", lambda: {"visits": 42}, defer=True),
+                resource("activity", fail_activity, defer=True),
+            ],
+        )
+
+    response = TestClient(app).get(
+        "/deferred-errors",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_CAPABILITIES: CAPABILITY_DEFERRED_RESOURCES,
+            HEADER_ONLY: "analytics,activity",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["resources"]["analytics"]["value"] == {"visits": 42}
+    assert response.json()["resourceErrors"] == {
+        "activity": {
+            "type": "ResourceError",
+            "message": "A deferred resource could not be resolved",
+        }
+    }
+
+
 def test_user_parameter_named_request_does_not_replace_injected_request():
     app = FastAPI()
     flux = FluxFast(app)

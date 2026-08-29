@@ -10,7 +10,7 @@ import anyio
 from .cache import CachedResource, ResourceCacheBackend
 from .errors import ResourceError
 from .page import Page
-from .protocol import ResourceWireRecord
+from .protocol import ResourceErrorDetail, ResourceWireRecord
 from .resource import ResourceSpec
 from .serialization import compute_version, to_jsonable
 from .timing import TimingMetrics
@@ -22,6 +22,7 @@ class ResourceResolution:
 
     resources: dict[str, ResourceWireRecord[Any]]
     deferred: list[str]
+    errors: dict[str, ResourceErrorDetail]
 
 
 class ResourceEngine:
@@ -41,6 +42,7 @@ class ResourceEngine:
         metrics: TimingMetrics,
         *,
         client_supports_deferred: bool = False,
+        debug: bool = False,
     ) -> ResourceResolution:
         t0 = time.perf_counter()
 
@@ -50,6 +52,7 @@ class ResourceEngine:
 
         resolved_records: dict[str, ResourceWireRecord[Any]] = {}
         deferred_keys: list[str] = []
+        resource_errors: dict[str, ResourceErrorDetail] = {}
         pending_misses: list[ResourceSpec] = []
 
         # 1. Evaluate cache hits
@@ -101,6 +104,21 @@ class ResourceEngine:
                     ver = compute_version(wire_value)
                     miss_results[spec.key] = (ver, wire_value, spec)
                 except Exception as e:
+                    if (
+                        spec.defer
+                        and client_supports_deferred
+                        and only_keys is not None
+                    ):
+                        message = "A deferred resource could not be resolved"
+                        if debug:
+                            message = (
+                                f"Error loading deferred resource '{spec.key}': {e}"
+                            )
+                        resource_errors[spec.key] = ResourceErrorDetail(
+                            type="ResourceError",
+                            message=message,
+                        )
+                        return
                     raise ResourceError(f"Error loading resource '{spec.key}': {e}") from e
 
             try:
@@ -142,4 +160,5 @@ class ResourceEngine:
         return ResourceResolution(
             resources=resolved_records,
             deferred=deferred_keys,
+            errors=resource_errors,
         )
