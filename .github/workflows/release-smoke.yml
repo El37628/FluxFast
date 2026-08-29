@@ -1,0 +1,59 @@
+name: Release artifacts
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  javascript-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Pack npm artifacts
+        run: |
+          mkdir -p "$RUNNER_TEMP/fluxfast-release/artifacts"
+          npm pack ./packages/core --pack-destination "$RUNNER_TEMP/fluxfast-release/artifacts"
+          npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-release/artifacts"
+      - name: Install artifacts in an isolated consumer
+        run: |
+          mkdir -p "$RUNNER_TEMP/fluxfast-release/javascript"
+          cp -R tests/release-consumer/javascript/. "$RUNNER_TEMP/fluxfast-release/javascript"
+          npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false
+          npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false --no-save \
+            "$RUNNER_TEMP"/fluxfast-release/artifacts/fluxfast-core-*.tgz \
+            "$RUNNER_TEMP"/fluxfast-release/artifacts/fluxfast-next-*.tgz
+      - name: Verify npm artifacts
+        working-directory: ${{ runner.temp }}/fluxfast-release/javascript
+        run: |
+          npm run generate
+          npm run typecheck
+          npm run smoke
+
+  python-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - name: Build Python artifacts
+        run: |
+          mkdir -p "$RUNNER_TEMP/fluxfast-release/artifacts"
+          python -m build --outdir "$RUNNER_TEMP/fluxfast-release/artifacts" python/fluxfast
+      - name: Install wheel in an isolated environment
+        run: |
+          python -m venv "$RUNNER_TEMP/fluxfast-release/venv"
+          "$RUNNER_TEMP/fluxfast-release/venv/bin/python" -m pip install \
+            "$RUNNER_TEMP"/fluxfast-release/artifacts/fluxfast-*.whl
+      - name: Verify Python artifact
+        run: |
+          "$RUNNER_TEMP/fluxfast-release/venv/bin/python" tests/release-consumer/python/smoke.py
+          "$RUNNER_TEMP/fluxfast-release/venv/bin/fluxfast" --help
