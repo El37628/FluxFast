@@ -1,6 +1,12 @@
 import { generatePagesRegistry } from "../generate";
 import { applyInitPlan } from "./apply";
 import {
+  validateFluxProject,
+  type DiagnosticSection,
+  type FluxDiagnostic,
+  type FluxValidationReport,
+} from "./diagnostics";
+import {
   changedOperations,
   createInitPlan,
   relativeProjectPath,
@@ -23,7 +29,9 @@ const defaultIo: CliIo = {
 
 const USAGE = `Usage:
   fluxfast init [--dry-run] [--yes]
+  fluxfast init --check
   fluxfast generate
+  fluxfast doctor
   fluxfast --help`;
 
 function displayPath(plan: InitPlan, target: string): string {
@@ -101,12 +109,60 @@ function renderAppliedPlan(plan: InitPlan, io: CliIo): void {
   }
 }
 
+function diagnosticLine(item: FluxDiagnostic): string {
+  const symbol = item.status === "pass" ? "✓" : item.status === "warning" ? "!" : "✗";
+  return `${symbol} ${item.message}`;
+}
+
+function uniqueFixes(report: FluxValidationReport): string[] {
+  return [
+    ...new Set(
+      report.diagnostics
+        .filter(item => item.status === "fail" || item.blocksCheck)
+        .map(item => item.fix)
+        .filter((fix): fix is string => Boolean(fix))
+    ),
+  ];
+}
+
+function renderFixes(report: FluxValidationReport, io: CliIo): void {
+  const fixes = uniqueFixes(report);
+  if (fixes.length === 0) return;
+  io.stdout("\nFix:\n");
+  for (const fix of fixes) {
+    io.stdout(`  ${fix}`);
+  }
+}
+
+function runCheck(io: CliIo): number {
+  const project = detectFluxProject(io.cwd);
+  const report = validateFluxProject(project);
+  io.stdout("FluxFast Configuration Check\n");
+  for (const item of report.diagnostics) {
+    io.stdout(diagnosticLine(item));
+  }
+  if (report.valid) {
+    io.stdout("\nFluxFast is configured correctly.");
+    return 0;
+  }
+  renderFixes(report, io);
+  io.stdout("\nFluxFast configuration is incomplete.");
+  return 1;
+}
+
 function runInit(args: string[], io: CliIo): number {
-  const supportedOptions = new Set(["--dry-run", "--yes"]);
+  const supportedOptions = new Set(["--dry-run", "--yes", "--check"]);
   const unknown = args.find(argument => !supportedOptions.has(argument));
   if (unknown) {
     io.stderr(`Unknown option: ${unknown}\n\n${USAGE}`);
     return 2;
+  }
+  if (args.includes("--check")) {
+    if (args.length !== 1) {
+      io.stderr(`--check cannot be combined with other init options.\n\n${USAGE}`);
+      return 2;
+    }
+    return runCheck(io);
   }
 
   const project = detectFluxProject(io.cwd);
@@ -140,6 +196,48 @@ function runInit(args: string[], io: CliIo): number {
   return 0;
 }
 
+const DOCTOR_SECTIONS: DiagnosticSection[] = [
+  "Environment",
+  "Packages",
+  "Project",
+  "Configuration",
+  "Pages",
+  "Registry",
+];
+
+function runDoctor(args: string[], io: CliIo): number {
+  if (args.length > 0) {
+    io.stderr(`Unknown option: ${args[0]}\n\n${USAGE}`);
+    return 2;
+  }
+  const project = detectFluxProject(io.cwd);
+  const report = validateFluxProject(project);
+  io.stdout("FluxFast Doctor");
+  for (const section of DOCTOR_SECTIONS) {
+    const items = report.diagnostics.filter(item => item.section === section);
+    if (items.length === 0) continue;
+    io.stdout(`\n${section}`);
+    for (const item of items) {
+      io.stdout(`  ${diagnosticLine(item)}`);
+    }
+    if (section === "Pages") {
+      for (const page of report.pages) {
+        io.stdout(`    ✓ ${page}`);
+      }
+    }
+  }
+  renderFixes(report, io);
+  const hasWarnings = report.diagnostics.some(item => item.status === "warning");
+  if (report.valid && !hasWarnings) {
+    io.stdout("\nNo problems found.");
+  } else if (report.valid) {
+    io.stdout("\nNo blocking problems found.");
+  } else {
+    io.stdout("\nFluxFast found configuration problems.");
+  }
+  return report.valid ? 0 : 1;
+}
+
 function runGenerate(args: string[], io: CliIo): number {
   if (args.length > 0) {
     io.stderr(`Unknown option: ${args[0]}\n\n${USAGE}`);
@@ -169,6 +267,9 @@ export function runCli(args: string[], io: CliIo = defaultIo): number {
     }
     if (command === "generate") {
       return runGenerate(commandArgs, io);
+    }
+    if (command === "doctor") {
+      return runDoctor(commandArgs, io);
     }
     io.stderr(`Unknown command: ${command}\n\n${USAGE}`);
     return 2;

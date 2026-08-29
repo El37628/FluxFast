@@ -58,4 +58,23 @@ describe("Pages Registry Generator", () => {
     );
     expect(fs.existsSync(outputFile)).toBe(false);
   });
+
+  it("rejects duplicate identifiers from TypeScript and JavaScript pages", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    fs.mkdirSync(path.join(pagesDir, "rooms"), { recursive: true });
+    fs.writeFileSync(
+      path.join(pagesDir, "rooms/index.tsx"),
+      "export default function Rooms() {}"
+    );
+    fs.writeFileSync(
+      path.join(pagesDir, "rooms/index.jsx"),
+      "export default function DuplicateRooms() {}"
+    );
+    const outputFile = path.join(tmpDir, "src/.fluxfast/pages.generated.ts");
+
+    expect(() => generatePagesRegistry({ pagesDir, outputFile })).toThrow(
+      /Duplicate FluxFast page identifier/
+    );
+    expect(fs.existsSync(outputFile)).toBe(false);
+  });
 });
