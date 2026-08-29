@@ -22,6 +22,25 @@ Add a regression test before or alongside every non-trivial bug fix. Fix the
 owning layer: backend engine, wire protocol, framework-neutral core, adapter, or
 example.
 
+## Git Handoff
+
+For every completed task that changes this repository, prepare a local Git
+handoff unless the user explicitly asks otherwise:
+
+- Inspect the branch and worktree before making Git changes. Preserve all
+  pre-existing user changes and never stage unrelated files.
+- When work begins on `main`, `master`, or another default branch, create a
+  concise task branch using an appropriate `feat/`, `fix/`, `docs/`, or
+  `chore/` prefix. Keep an existing non-default branch when it already matches
+  the task.
+- Run the relevant verification, stage task-owned paths explicitly, review the
+  staged diff, and commit with a concise Conventional Commit message.
+- Do not amend, rebase, reset, stash, tag, or otherwise rewrite history unless
+  the user explicitly requests it.
+- Never push commits or branches. Leave remote mutation to the user and report
+  the branch name, commit hash, verification performed, remaining worktree
+  changes, and suggested `git push -u origin <branch>` command.
+
 ## Performance
 
 Performance claims require repeatable benchmarks. Record the baseline, workload,
