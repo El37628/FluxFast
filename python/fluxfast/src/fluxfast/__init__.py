@@ -39,7 +39,7 @@ from .resource import ResourceLoader, ResourceSpec, resource
 from .router import FluxRouter
 from .scope import CacheScope, ScopeType, scope
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "PROTOCOL_MEDIA_TYPE",
