@@ -17,6 +17,7 @@ HEADER_PROTOCOL = "X-FluxFast-Protocol"
 HEADER_VISIT = "X-FluxFast-Visit"
 HEADER_KNOWN = "X-FluxFast-Known"
 HEADER_ONLY = "X-FluxFast-Only"
+HEADER_CAPABILITIES = "X-FluxFast-Capabilities"
 HEADER_APP_VERSION = "X-FluxFast-App-Version"
 HEADER_SERVER_TIMING = "Server-Timing"
 

@@ -6,10 +6,35 @@ import {
   FetchTransport,
 } from "../src/transport";
 import { MutationError, ProtocolError, ValidationError } from "../src/errors";
+import { HEADER_CAPABILITIES, serializeCapabilities } from "../src/capabilities";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("FetchTransport", () => {
+  it("advertises capabilities on visits and mutations", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: {},
+      }), { headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        protocol: "fluxfast/1",
+        mutation: {},
+      }), { headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = new FetchTransport();
+
+    await transport.visit({ url: "/rooms", visitId: "visit_1" });
+    await transport.mutate({ url: "/rooms", data: {} });
+
+    for (const call of fetchMock.mock.calls) {
+      expect(call[1]?.headers).toMatchObject({
+        [HEADER_CAPABILITIES]: serializeCapabilities(),
+      });
+    }
+  });
+
   it("encodes unicode known-resource metadata as base64url", () => {
     const encoded = encodeKnownVersions({ "hôtel": "版本-1" });
     expect(encoded).toBeDefined();
