@@ -3,7 +3,12 @@
  * Framework-neutral, suitable for React useSyncExternalStore or other UI bindings.
  */
 
-import { PageDescriptor, ResourcePatch, ResourceWireRecord } from "./protocol";
+import {
+  PageDescriptor,
+  ResourceErrorDetail,
+  ResourcePatch,
+  ResourceWireRecord,
+} from "./protocol";
 import { applyPatchToValue } from "./mutation";
 
 export interface ResourceRecord<T = unknown> {
@@ -12,6 +17,22 @@ export interface ResourceRecord<T = unknown> {
   readonly value: T;
   readonly updatedAt: number;
 }
+
+export type ResourceStatus = "missing" | "pending" | "loading" | "ready" | "error";
+
+export interface ResourceStateSnapshot<T = unknown> {
+  readonly data: T | undefined;
+  readonly status: ResourceStatus;
+  readonly error: Readonly<ResourceErrorDetail> | null;
+  readonly stale: boolean;
+}
+
+const MISSING_RESOURCE_STATE: ResourceStateSnapshot = Object.freeze({
+  data: undefined,
+  status: "missing",
+  error: null,
+  stale: false,
+});
 
 export interface PageState {
   component: string;
@@ -25,6 +46,7 @@ export class ResourceStore {
   private globalSubscribers: Set<() => void> = new Set();
   private lruOrder: string[] = [];
   private staleKeys: Set<string> = new Set();
+  private stateSnapshots: Map<string, ResourceStateSnapshot> = new Map();
   private readonly maxResources: number;
 
   constructor(options: { maxResources?: number } = {}) {
@@ -82,6 +104,14 @@ export class ResourceStore {
     return rec ? (rec.value as T) : undefined;
   }
 
+  /** Return stable loading metadata for a resource key. */
+  getStateSnapshot<T = unknown>(key: string): ResourceStateSnapshot<T> {
+    if (this.records.has(key)) this.touchLru(key);
+    return (
+      this.stateSnapshots.get(key) ?? MISSING_RESOURCE_STATE
+    ) as ResourceStateSnapshot<T>;
+  }
+
   /**
    * Return full record metadata.
    */
@@ -96,8 +126,15 @@ export class ResourceStore {
    */
   set<T = unknown>(record: { key: string; version: string; value: T }): boolean {
     const existing = this.records.get(record.key);
+    const currentState = this.getStateSnapshot(record.key);
 
-    if (existing && existing.version === record.version && !this.staleKeys.has(record.key)) {
+    if (
+      existing &&
+      existing.version === record.version &&
+      !this.staleKeys.has(record.key) &&
+      currentState.status === "ready" &&
+      currentState.error === null
+    ) {
       this.touchLru(record.key);
       return false;
     }
@@ -111,6 +148,7 @@ export class ResourceStore {
 
     this.records.set(record.key, newRecord);
     this.staleKeys.delete(record.key);
+    this.updateStateSnapshot(record.key, "ready", null, false);
     this.touchLru(record.key);
     this.evictIfNeeded();
     this.notify(record.key);
@@ -132,6 +170,56 @@ export class ResourceStore {
       }
     }
     return updatedKeys;
+  }
+
+  /** Mark resources announced for deferred resolution but not requested yet. */
+  markPending(keys: string[]): void {
+    for (const key of keys) {
+      const hasData = this.records.has(key);
+      if (hasData) this.staleKeys.add(key);
+      if (this.updateStateSnapshot(key, "pending", null, hasData)) {
+        this.notify(key);
+      }
+    }
+  }
+
+  /** Mark resources as actively loading while preserving any stale value. */
+  markLoading(keys: string[]): void {
+    for (const key of keys) {
+      const hasData = this.records.has(key);
+      if (hasData) this.staleKeys.add(key);
+      if (this.updateStateSnapshot(key, "loading", null, hasData)) {
+        this.notify(key);
+      }
+    }
+  }
+
+  /** Store a sanitized per-resource error without discarding stale data. */
+  setResourceError(key: string, error: ResourceErrorDetail): void {
+    const hasData = this.records.has(key);
+    if (hasData) this.staleKeys.add(key);
+    if (this.updateStateSnapshot(key, "error", error, hasData)) {
+      this.notify(key);
+    }
+  }
+
+  /** Clear a resource error and restore its ready or missing state. */
+  clearResourceError(key: string): void {
+    const current = this.getStateSnapshot(key);
+    if (current.error === null) return;
+
+    const hasData = this.records.has(key);
+    const status: ResourceStatus = hasData ? "ready" : "missing";
+    if (
+      this.updateStateSnapshot(
+        key,
+        status,
+        null,
+        hasData && this.staleKeys.has(key)
+      )
+    ) {
+      this.notify(key);
+    }
   }
 
   /**
@@ -157,6 +245,7 @@ export class ResourceStore {
 
     this.records.set(key, newRecord);
     this.staleKeys.add(key);
+    this.updateStateSnapshot(key, "ready", null, true);
     this.touchLru(key);
     this.notify(key);
     return true;
@@ -166,19 +255,24 @@ export class ResourceStore {
    * Invalidate a resource key.
    */
   invalidate(key: string): void {
-    if (this.records.has(key)) {
-      this.records.delete(key);
-      this.staleKeys.delete(key);
-      this.removeFromLru(key);
-      this.notify(key);
-    }
+    const hadState = this.stateSnapshots.has(key);
+    const hadRecord = this.records.delete(key);
+    const wasStale = this.staleKeys.delete(key);
+    if (!hadState && !hadRecord && !wasStale) return;
+
+    this.stateSnapshots.delete(key);
+    this.removeFromLru(key);
+    this.notify(key);
   }
 
   /** Keep the last value visible while excluding its version from revalidation. */
   markStale(key: string): void {
-    if (this.records.has(key)) {
-      this.staleKeys.add(key);
-    }
+    if (!this.records.has(key) || this.staleKeys.has(key)) return;
+
+    this.staleKeys.add(key);
+    const current = this.getStateSnapshot(key);
+    this.updateStateSnapshot(key, current.status, current.error, true);
+    this.notify(key);
   }
 
   isStale(key: string): boolean {
@@ -213,14 +307,67 @@ export class ResourceStore {
    * Clear all records (e.g. upon user logout).
    */
   clear(): void {
-    const allKeys = Array.from(this.records.keys());
+    const allKeys = new Set([
+      ...this.records.keys(),
+      ...this.stateSnapshots.keys(),
+      ...this.staleKeys,
+    ]);
     this.records.clear();
     this.staleKeys.clear();
+    this.stateSnapshots.clear();
     this.lruOrder = [];
 
     for (const key of allKeys) {
       this.notify(key);
     }
+  }
+
+  private updateStateSnapshot(
+    key: string,
+    status: ResourceStatus,
+    error: Readonly<ResourceErrorDetail> | null,
+    stale: boolean
+  ): boolean {
+    const data = this.records.get(key)?.value;
+    const current = this.stateSnapshots.get(key) ?? MISSING_RESOURCE_STATE;
+    const sameError =
+      current.error === error ||
+      (current.error !== null &&
+        error !== null &&
+        current.error.type === error.type &&
+        current.error.message === error.message &&
+        current.error.details === error.details);
+
+    if (
+      current.data === data &&
+      current.status === status &&
+      sameError &&
+      current.stale === stale
+    ) {
+      return false;
+    }
+
+    if (status === "missing" && data === undefined && error === null && !stale) {
+      this.stateSnapshots.delete(key);
+      return true;
+    }
+
+    const frozenError = error === null
+      ? null
+      : sameError && current.error !== null
+        ? current.error
+        : Object.freeze({
+            type: error.type,
+            message: error.message,
+            ...(error.details !== undefined ? { details: error.details } : {}),
+          });
+    this.stateSnapshots.set(key, Object.freeze({
+      data,
+      status,
+      error: frozenError,
+      stale,
+    }));
+    return true;
   }
 
   private notify(key: string): void {
@@ -264,6 +411,7 @@ export class ResourceStore {
       }
       if (this.records.delete(oldestKey)) {
         this.staleKeys.delete(oldestKey);
+        this.stateSnapshots.delete(oldestKey);
         this.notify(oldestKey);
       }
     }
