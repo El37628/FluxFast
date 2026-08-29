@@ -18,8 +18,14 @@
     "release:prepare": "node scripts/set-release-version.mjs"
   },
   "devDependencies": {
-    "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "@types/node": "^22.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/node": "22.20.1"
+    }
   },
   "engines": {
     "node": "^22.0.0 || ^24.0.0"
