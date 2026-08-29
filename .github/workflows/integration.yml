@@ -17,6 +17,7 @@ jobs:
       - run: python -m pip install -e 'python/fluxfast[dev]'
       - run: pytest -q python/fluxfast/tests/test_integration.py
       - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_cross_page.py
+      - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_deferred.py --samples 1
 
   browser:
     name: Same-origin browser flow
