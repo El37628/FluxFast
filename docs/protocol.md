@@ -42,17 +42,25 @@ An explicitly unsupported `X-FluxFast-Protocol` receives a 409 protocol error.
     "url": "/rooms?status=available",
     "meta": { "title": "Rooms" }
   },
+  "resourceKeys": ["rooms", "analytics"],
   "resources": {
     "rooms": {
       "version": "f81d94f7a18e...",
       "value": []
     }
-  }
+  },
+  "deferred": ["analytics"]
 }
 ```
 
 Resources already known at the same server-cached version are absent. Search
-parameters remain part of `page.url`.
+parameters remain part of `page.url`. For clients that advertise the
+`deferred-resources` capability, `resourceKeys` lists the complete logical
+resource graph and `deferred` lists cache-miss resources whose loaders still
+need a resource-only follow-up request. An optional `resourceErrors` object maps
+resource keys to sanitized `{ type, message, details? }` errors. These fields
+are additive: old envelopes without them remain valid, and servers omit them
+for clients that do not advertise deferred-resource support.
 
 ## Mutation envelope
 

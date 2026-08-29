@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from fluxfast import (
+    CAPABILITY_DEFERRED_RESOURCES,
     FluxFast,
     FluxRouter,
     Page,
@@ -14,6 +15,7 @@ from fluxfast import (
     scope,
 )
 from fluxfast.headers import (
+    HEADER_CAPABILITIES,
     HEADER_FLUXFAST,
     HEADER_KNOWN,
     HEADER_ONLY,
@@ -236,6 +238,61 @@ def test_partial_refresh_only_header():
     assert "summary" in data["resources"]
     assert "auth" not in data["resources"]
     assert "hotel" not in data["resources"]
+
+
+def test_deferred_page_metadata_requires_capability_and_only_resolves_follow_up():
+    app = FastAPI()
+    flux = FluxFast(app)
+    loader_counts = {"summary": 0, "analytics": 0}
+
+    def load_summary():
+        loader_counts["summary"] += 1
+        return {"occupied": 42}
+
+    def load_analytics():
+        loader_counts["analytics"] += 1
+        return {"revenue": 95_000}
+
+    @flux.page("/deferred")
+    async def deferred_page():
+        return Page(
+            component="deferred/index",
+            resources=[
+                resource("summary", load_summary),
+                resource("analytics", load_analytics, defer=True),
+            ],
+        )
+
+    client = TestClient(app)
+
+    legacy = client.get("/deferred", headers={HEADER_FLUXFAST: "1"})
+    assert legacy.status_code == 200
+    assert set(legacy.json()["resources"]) == {"summary", "analytics"}
+    assert "resourceKeys" not in legacy.json()
+    assert "deferred" not in legacy.json()
+    assert loader_counts == {"summary": 1, "analytics": 1}
+
+    capable_headers = {
+        HEADER_FLUXFAST: "1",
+        HEADER_CAPABILITIES: CAPABILITY_DEFERRED_RESOURCES,
+    }
+    initial = client.get("/deferred", headers=capable_headers)
+    assert initial.status_code == 200
+    assert set(initial.json()["resources"]) == {"summary"}
+    assert initial.json()["resourceKeys"] == ["summary", "analytics"]
+    assert initial.json()["deferred"] == ["analytics"]
+    assert "resourceErrors" not in initial.json()
+    assert loader_counts == {"summary": 2, "analytics": 1}
+
+    follow_up = client.get(
+        "/deferred",
+        headers={**capable_headers, HEADER_ONLY: "analytics"},
+    )
+    assert follow_up.status_code == 200
+    assert set(follow_up.json()["resources"]) == {"analytics"}
+    assert follow_up.json()["resourceKeys"] == ["summary", "analytics"]
+    assert "deferred" not in follow_up.json()
+    assert loader_counts == {"summary": 2, "analytics": 2}
 
 
 def test_mutation_and_cache_invalidation():

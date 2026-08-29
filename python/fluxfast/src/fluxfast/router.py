@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from .cache import MemoryResourceCache, ResourceCacheBackend
+from .capabilities import CAPABILITY_DEFERRED_RESOURCES, client_supports
 from .engine import ResourceEngine
 from .headers import (
     HEADER_FLUXFAST,
@@ -102,6 +103,9 @@ class FluxRouter(APIRouter):
 
                     known_versions = parse_known_header(request.headers.get(HEADER_KNOWN))
                     only_keys = parse_only_header(request.headers.get(HEADER_ONLY))
+                    supports_deferred = client_supports(
+                        request, CAPABILITY_DEFERRED_RESOURCES
+                    )
 
                     resolution = await ResourceEngine.resolve_page_resources(
                         page=result,
@@ -109,6 +113,7 @@ class FluxRouter(APIRouter):
                         only_keys=only_keys,
                         cache=cache,
                         metrics=metrics,
+                        client_supports_deferred=supports_deferred,
                     )
 
                     t_ser = time.perf_counter()
@@ -124,8 +129,18 @@ class FluxRouter(APIRouter):
                             meta=result.meta,
                         ),
                         resources=resolution.resources,
+                        resourceKeys=(
+                            [spec.key for spec in result.resources]
+                            if supports_deferred
+                            else None
+                        ),
+                        deferred=(
+                            resolution.deferred
+                            if supports_deferred and resolution.deferred
+                            else None
+                        ),
                     )
-                    payload = envelope.model_dump(mode="json")
+                    payload = envelope.model_dump(mode="json", exclude_none=True)
                     metrics.serialize_dur_ms = (time.perf_counter() - t_ser) * 1000.0
 
                     headers = {

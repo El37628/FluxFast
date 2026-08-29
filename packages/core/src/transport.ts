@@ -95,6 +95,29 @@ export function assertPageEnvelope(data: unknown): asserts data is PageEnvelope 
       throw new ProtocolError(`Invalid PageEnvelope resource record for '${key}'`);
     }
   }
+  for (const field of ["resourceKeys", "deferred"] as const) {
+    const value = data[field];
+    if (
+      value !== undefined &&
+      (!Array.isArray(value) || value.some((key) => typeof key !== "string"))
+    ) {
+      throw new ProtocolError(`Invalid PageEnvelope: ${field} must be an array of strings`);
+    }
+  }
+  if (data.resourceErrors !== undefined) {
+    if (!isObject(data.resourceErrors)) {
+      throw new ProtocolError("Invalid PageEnvelope: resourceErrors must be an object");
+    }
+    for (const [key, error] of Object.entries(data.resourceErrors)) {
+      if (
+        !isObject(error) ||
+        typeof error.type !== "string" ||
+        typeof error.message !== "string"
+      ) {
+        throw new ProtocolError(`Invalid PageEnvelope resource error for '${key}'`);
+      }
+    }
+  }
 }
 
 export function assertMutationEnvelope(data: unknown): asserts data is MutationEnvelope {

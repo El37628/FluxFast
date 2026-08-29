@@ -35,6 +35,7 @@ from .protocol import (
     MutationPayload,
     PageDescriptor,
     PageEnvelope,
+    ResourceErrorDetail,
     ResourceWireRecord,
 )
 from .resource import ResourceLoader, ResourceSpec, resource
@@ -67,6 +68,7 @@ __all__ = [
     "ProtocolError",
     "ResourceCacheBackend",
     "ResourceError",
+    "ResourceErrorDetail",
     "ResourceLoader",
     "ResourceSpec",
     "ResourceWireRecord",
