@@ -15,3 +15,4 @@ tests/browser/frontend/AGENTS.md
 tests/browser/frontend/CLAUDE.md
 tests/browser/frontend/next-env.d.ts
 tests/browser/frontend/src/.fluxfast/
+NEXT_PHASE.md

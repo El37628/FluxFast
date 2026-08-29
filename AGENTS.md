@@ -38,8 +38,14 @@ handoff unless the user explicitly asks otherwise:
   branch name, commit hash, verification performed, remaining worktree changes,
   and suggested `git push -u origin <branch>` command.
 - After the user confirms the branch is pushed, open a pull request against the
-  default branch with a concise summary and verification notes. Leave merging
-  to the user unless they explicitly ask otherwise.
+  default branch with a concise summary and verification notes. Monitor every
+  required check and do not bypass branch protection or merge while a required
+  check is queued, running, skipped, cancelled, or failing.
+- When all required checks pass, merge the pull request using the repository's
+  normal merge strategy unless the user asks to merge it themselves. Then
+  switch to the default branch, update it with `git pull --ff-only`, and report
+  the merged pull request and synchronized commit. If a check fails, diagnose
+  it and prepare the fix on the task branch instead of merging.
 
 ## Performance
 
