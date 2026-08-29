@@ -2,6 +2,7 @@
 
 from .app import FluxFast
 from .cache import CachedResource, MemoryResourceCache, ResourceCacheBackend
+from .capabilities import CAPABILITY_DEFERRED_RESOURCES, client_supports
 from .errors import (
     FluxFastError,
     PageNotFoundError,
@@ -10,6 +11,7 @@ from .errors import (
     ScopeError,
     ValidationError,
 )
+from .headers import HEADER_CAPABILITIES
 from .mutation import (
     InvalidateResource,
     MutationResult,
@@ -42,6 +44,8 @@ from .scope import CacheScope, ScopeType, scope
 __version__ = "0.2.0"
 
 __all__ = [
+    "CAPABILITY_DEFERRED_RESOURCES",
+    "HEADER_CAPABILITIES",
     "PROTOCOL_MEDIA_TYPE",
     "PROTOCOL_VERSION",
     "CacheScope",
@@ -70,6 +74,7 @@ __all__ = [
     "ScopeType",
     "ValidationError",
     "append_item",
+    "client_supports",
     "flux_external_redirect",
     "flux_redirect",
     "invalidate_resource",

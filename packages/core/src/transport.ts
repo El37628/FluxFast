@@ -14,6 +14,7 @@ import {
   ValidationError,
   VersionMismatchError,
 } from "./errors";
+import { HEADER_CAPABILITIES, serializeCapabilities } from "./capabilities";
 
 const MAX_KNOWN_RESOURCES = 100;
 const MAX_KNOWN_BYTES = 16 * 1024;
@@ -176,6 +177,7 @@ export class FetchTransport implements FluxTransport {
       "X-FluxFast": "1",
       "X-FluxFast-Protocol": "1",
       "X-FluxFast-Visit": request.visitId,
+      [HEADER_CAPABILITIES]: serializeCapabilities(),
     };
     const encodedKnown = encodeKnownVersions(request.knownVersions);
     if (encodedKnown) headers["X-FluxFast-Known"] = encodedKnown;
@@ -202,6 +204,7 @@ export class FetchTransport implements FluxTransport {
       "Content-Type": "application/json",
       "X-FluxFast": "1",
       "X-FluxFast-Protocol": "1",
+      [HEADER_CAPABILITIES]: serializeCapabilities(),
     };
     const response = await fetch(this.resolveUrl(request.url), {
       method: request.method ?? "POST",

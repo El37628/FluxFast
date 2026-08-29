@@ -5,8 +5,10 @@ import { headers as nextHeaders } from "next/headers";
 import { notFound } from "next/navigation";
 import {
   assertPageEnvelope,
+  HEADER_CAPABILITIES,
   PageEnvelope,
   PROTOCOL_MEDIA_TYPE,
+  serializeCapabilities,
   TransportError,
 } from "@fluxfast/core";
 import { FluxNextConfig, resolveFluxBackendUrl } from "./config";
@@ -83,6 +85,7 @@ export async function fetchInitialEnvelope({
       "X-FluxFast": "1",
       "X-FluxFast-Protocol": "1",
       "X-FluxFast-Visit": `ssr_${Date.now().toString(36)}`,
+      [HEADER_CAPABILITIES]: serializeCapabilities(),
     },
     cache: "no-store",
   });

@@ -14,12 +14,21 @@ X-FluxFast-Protocol: 1
 X-FluxFast-Visit: visit_123
 X-FluxFast-Known: <base64url JSON object>
 X-FluxFast-Only: rooms,summary
+X-FluxFast-Capabilities: deferred-resources
 ```
 
 `X-FluxFast-Known` maps logical keys to opaque versions. Limits are 100 records,
 16 KiB decoded JSON, 128 characters per key, and 128 characters per version.
 Invalid or oversized metadata is ignored or omitted; correctness falls back to
 transferring values. `X-FluxFast-Only` requests resource-specific refresh.
+
+`X-FluxFast-Capabilities` is an optional, comma-separated list of additive
+client features and is independent of `fluxfast/1`. Capability tokens contain
+only lowercase ASCII letters, digits, and hyphens. Servers bound parsing to a
+2,048-byte header, 32 tokens, and 64 characters per token; malformed and unknown
+capabilities are ignored. A missing header preserves the behavior of older
+clients. FluxFast 0.3 clients advertise `deferred-resources` on initial SSR,
+navigation, refresh, prefetch, and mutation requests.
 
 An explicitly unsupported `X-FluxFast-Protocol` receives a 409 protocol error.
 
