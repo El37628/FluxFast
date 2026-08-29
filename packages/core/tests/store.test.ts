@@ -2,6 +2,178 @@ import { describe, it, expect, vi } from "vitest";
 import { ResourceStore, PageStore } from "../src/store";
 
 describe("ResourceStore", () => {
+  it("returns a stable frozen missing-state snapshot", () => {
+    const store = new ResourceStore();
+
+    const first = store.getStateSnapshot("analytics");
+    const second = store.getStateSnapshot("analytics");
+
+    expect(first).toBe(second);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(first).toEqual({
+      data: undefined,
+      status: "missing",
+      error: null,
+      stale: false,
+    });
+  });
+
+  it("transitions missing to pending to loading to ready", () => {
+    const store = new ResourceStore();
+    const callback = vi.fn();
+    store.subscribe("analytics", callback);
+
+    const missing = store.getStateSnapshot("analytics");
+    store.markPending(["analytics"]);
+    const pending = store.getStateSnapshot("analytics");
+    store.markLoading(["analytics"]);
+    const loading = store.getStateSnapshot("analytics");
+    store.set({ key: "analytics", version: "v1", value: { revenue: 95_000 } });
+    const ready = store.getStateSnapshot<{ revenue: number }>("analytics");
+
+    expect(pending).not.toBe(missing);
+    expect(pending).toMatchObject({ status: "pending", error: null, stale: false });
+    expect(loading).not.toBe(pending);
+    expect(loading).toMatchObject({ status: "loading", error: null, stale: false });
+    expect(ready).not.toBe(loading);
+    expect(ready).toEqual({
+      data: { revenue: 95_000 },
+      status: "ready",
+      error: null,
+      stale: false,
+    });
+    expect(callback).toHaveBeenCalledTimes(3);
+  });
+
+  it("transitions loading to error to loading to ready and clears errors", () => {
+    const store = new ResourceStore();
+    store.markLoading(["activity"]);
+    store.setResourceError("activity", {
+      type: "ResourceError",
+      message: "A deferred resource could not be resolved",
+    });
+
+    const failed = store.getStateSnapshot("activity");
+    expect(failed.status).toBe("error");
+    expect(failed.error).toEqual({
+      type: "ResourceError",
+      message: "A deferred resource could not be resolved",
+    });
+    expect(Object.isFrozen(failed.error)).toBe(true);
+
+    store.markLoading(["activity"]);
+    expect(store.getStateSnapshot("activity")).toMatchObject({
+      status: "loading",
+      error: null,
+    });
+
+    store.set({ key: "activity", version: "v1", value: [] });
+    expect(store.getStateSnapshot("activity")).toEqual({
+      data: [],
+      status: "ready",
+      error: null,
+      stale: false,
+    });
+  });
+
+  it("preserves stale data while loading or reporting a refresh error", () => {
+    const store = new ResourceStore();
+    const data = { count: 1 };
+    store.set({ key: "summary", version: "v1", value: data });
+
+    store.markLoading(["summary"]);
+    expect(store.getStateSnapshot("summary")).toEqual({
+      data,
+      status: "loading",
+      error: null,
+      stale: true,
+    });
+    expect(store.exportKnownVersions()).toEqual({});
+
+    store.setResourceError("summary", {
+      type: "ResourceError",
+      message: "Refresh failed",
+    });
+    expect(store.getStateSnapshot("summary")).toEqual({
+      data,
+      status: "error",
+      error: { type: "ResourceError", message: "Refresh failed" },
+      stale: true,
+    });
+
+    store.clearResourceError("summary");
+    expect(store.getStateSnapshot("summary")).toEqual({
+      data,
+      status: "ready",
+      error: null,
+      stale: true,
+    });
+  });
+
+  it("lets a successful set clear an error even when the version is unchanged", () => {
+    const store = new ResourceStore();
+    const data = { count: 1 };
+    store.set({ key: "summary", version: "v1", value: data });
+    store.setResourceError("summary", {
+      type: "ResourceError",
+      message: "Refresh failed",
+    });
+
+    expect(store.set({ key: "summary", version: "v1", value: data })).toBe(true);
+    expect(store.getStateSnapshot("summary")).toEqual({
+      data,
+      status: "ready",
+      error: null,
+      stale: false,
+    });
+  });
+
+  it("invalidates state-only and ready resources back to missing", () => {
+    const store = new ResourceStore();
+    const callback = vi.fn();
+    store.subscribe("analytics", callback);
+
+    store.markPending(["analytics"]);
+    store.invalidate("analytics");
+    expect(store.getStateSnapshot("analytics").status).toBe("missing");
+
+    store.set({ key: "analytics", version: "v1", value: { value: 1 } });
+    store.invalidate("analytics");
+    expect(store.getStateSnapshot("analytics").status).toBe("missing");
+    expect(store.getSnapshot("analytics")).toBeUndefined();
+    expect(callback).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps patched resources ready but marks their canonical version stale", () => {
+    const store = new ResourceStore();
+    store.set({ key: "rooms", version: "v1", value: [{ id: 1, open: true }] });
+
+    store.patch("rooms", [
+      { op: "replace-item", id: 1, value: { id: 1, open: false } },
+    ]);
+
+    expect(store.getStateSnapshot("rooms")).toMatchObject({
+      data: [{ id: 1, open: false }],
+      status: "ready",
+      error: null,
+      stale: true,
+    });
+    expect(store.exportKnownVersions()).toEqual({});
+  });
+
+  it("does not notify or replace snapshots for repeated identical states", () => {
+    const store = new ResourceStore();
+    const callback = vi.fn();
+    store.subscribe("analytics", callback);
+
+    store.markPending(["analytics"]);
+    const pending = store.getStateSnapshot("analytics");
+    store.markPending(["analytics"]);
+
+    expect(store.getStateSnapshot("analytics")).toBe(pending);
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
   it("stores and retrieves resource values with stable snapshots", () => {
     const store = new ResourceStore();
     const data = { name: "Grand Hotel", stars: 5 };
