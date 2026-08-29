@@ -4,6 +4,7 @@ import { validateInitPrerequisites } from "./diagnostics";
 import {
   desiredCatchAllPath,
   desiredHomePagePath,
+  isFluxCatchAll,
   renderCatchAll,
   renderFluxConfig,
   renderStarterPage,
@@ -28,6 +29,10 @@ export interface InitPlan {
   manualActions: string[];
 }
 
+export interface InitPlanOptions {
+  force?: boolean;
+}
+
 function isFile(filePath: string): boolean {
   try {
     return fs.statSync(filePath).isFile();
@@ -45,7 +50,10 @@ function isDirectory(directoryPath: string): boolean {
 }
 
 /** Create a deterministic, read-only plan for FluxFast-owned scaffolding. */
-export function createInitPlan(project: FluxProjectInfo): InitPlan {
+export function createInitPlan(
+  project: FluxProjectInfo,
+  options: InitPlanOptions = {}
+): InitPlan {
   const operations: InitOperation[] = [];
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -80,11 +88,33 @@ export function createInitPlan(project: FluxProjectInfo): InitPlan {
 
   const catchAllPath = desiredCatchAllPath(project);
   if (isFile(catchAllPath)) {
-    operations.push({
-      type: "skip",
-      path: catchAllPath,
-      reason: "FluxFast catch-all already exists",
-    });
+    const before = fs.readFileSync(catchAllPath, "utf8");
+    const after = renderCatchAll(project);
+    if (before === after || (isFluxCatchAll(before) && !options.force)) {
+      operations.push({
+        type: "skip",
+        path: catchAllPath,
+        reason: "FluxFast catch-all already exists",
+      });
+    } else if (options.force) {
+      operations.push({
+        type: "modify",
+        path: catchAllPath,
+        before,
+        after,
+      });
+      warnings.push(
+        `${relativeProjectPath(project, catchAllPath)} was replaced because --force was used.`
+      );
+    } else {
+      const displayPath = relativeProjectPath(project, catchAllPath);
+      const warning = `${displayPath} exists but is not a valid FluxFast catch-all.`;
+      warnings.push(warning);
+      manualActions.push(
+        `Repair ${displayPath} manually or run npx fluxfast init --force.`
+      );
+      operations.push({ type: "skip", path: catchAllPath, reason: warning });
+    }
   } else {
     operations.push({
       type: "create",

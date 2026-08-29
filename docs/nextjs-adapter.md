@@ -53,6 +53,7 @@ than risking user code. Resolve the route conflict and run `init` again.
 | `npx fluxfast init` | Analyze, configure, and generate the frontend scaffold. |
 | `npx fluxfast init --dry-run` | Show the initialization plan without writes. |
 | `npx fluxfast init --check` | Return success only when configuration is complete. |
+| `npx fluxfast init --force` | Replace an invalid or customized FluxFast catch-all with the generated template. |
 | `npx fluxfast generate` | Regenerate the allowlisted page registry. |
 | `npx fluxfast doctor` | Diagnose packages, layout, routes, config, pages, and registry freshness. |
 
@@ -155,6 +156,10 @@ client runtime.
 - If `next.config` uses an unknown wrapper or export expression, FluxFast leaves
   it unchanged. Follow the wrapper-order guidance in the
   [manual setup guide](nextjs-manual-setup.md).
+- If the generated catch-all is invalid, inspect its diff and run
+  `npx fluxfast init --dry-run --force`, then `npx fluxfast init --force` to
+  replace it. The flag changes only how an existing catch-all is handled; the
+  rest of the normal initialization plan still applies.
 - If the initial envelope returns `404 Not Found`, confirm that FastAPI defines
   the requested path and that its `Page.component` exactly matches a registered
   `flux-pages` component such as `home/index`.

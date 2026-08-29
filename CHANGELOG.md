@@ -11,7 +11,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   App Router projects, creates the frontend scaffold, integrates `next.config`,
   migrates the standard starter page, and generates the component registry.
 - Read-only `fluxfast init --dry-run`, `fluxfast init --check`, and
-  `fluxfast doctor` diagnostics for previewing and validating frontend setup.
+  `fluxfast doctor` diagnostics for previewing and validating frontend setup,
+  plus an explicit `init --force` repair for invalid generated catch-all files.
 - Packed clean-consumer build and live same-origin integration coverage for the
   initialized frontend.
 

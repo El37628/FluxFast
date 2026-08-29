@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyInitPlan } from "../../src/cli/apply";
 import { validateFluxProject } from "../../src/cli/diagnostics";
+import { desiredCatchAllPath } from "../../src/cli/files";
 import { createInitPlan } from "../../src/cli/init";
 import { detectFluxProject } from "../../src/cli/project";
 import type { FluxProjectInfo } from "../../src/cli/types";
@@ -57,6 +58,26 @@ describe("FluxFast project diagnostics", () => {
         id: "config.fluxfast",
         status: "fail",
         fix: "npx fluxfast init",
+      })
+    );
+  });
+
+  it("recommends force only for an invalid existing catch-all", () => {
+    const project = initialize();
+    fs.writeFileSync(
+      desiredCatchAllPath(project),
+      "export default null;\n",
+      "utf8"
+    );
+
+    const report = validateFluxProject(detectFluxProject(tmpDir));
+
+    expect(report.valid).toBe(false);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "config.catch-all",
+        status: "fail",
+        fix: "npx fluxfast init --force",
       })
     );
   });

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createPagesRegistrySnapshot } from "../generate";
-import { desiredCatchAllPath } from "./files";
+import { desiredCatchAllPath, isFluxCatchAll } from "./files";
 import { transformNextConfig } from "./next-config";
 import type {
   CompatibilityStatus,
@@ -312,9 +312,7 @@ export function validateFluxProject(
   const catchAllPath = desiredCatchAllPath(project);
   const catchAllContent = readFile(catchAllPath);
   diagnostics.push(
-    catchAllContent &&
-      /\bcreateFluxNextPage\s*\(/.test(catchAllContent) &&
-      /\bfluxConfig\b/.test(catchAllContent)
+    catchAllContent && isFluxCatchAll(catchAllContent)
       ? diagnostic(
           "config.catch-all",
           "Configuration",
@@ -326,7 +324,11 @@ export function validateFluxProject(
           "Configuration",
           "fail",
           "FluxFast catch-all is missing or invalid.",
-          { fix: "npx fluxfast init" }
+          {
+            fix: catchAllContent
+              ? "npx fluxfast init --force"
+              : "npx fluxfast init",
+          }
         )
   );
 
