@@ -48,4 +48,9 @@ export function createTestProject(
   }
   const appDirectory = layout === "src" ? "src/app" : layout === "root" ? "app" : "pages";
   fs.mkdirSync(path.join(root, appDirectory), { recursive: true });
+  writeTestFile(
+    root,
+    "node_modules/@fluxfast/core/package.json",
+    '{"name":"@fluxfast/core","version":"0.1.0"}\n'
+  );
 }

@@ -118,23 +118,31 @@ function readInstalledVersion(
   root: string,
   packageName: DetectedPackageName
 ): string | undefined {
-  const packagePath = path.join(
-    root,
-    "node_modules",
-    ...packageName.split("/"),
-    "package.json"
-  );
-  if (!isFile(packagePath)) {
-    return undefined;
+  const packageSegments = [...packageName.split("/"), "package.json"];
+  const candidates = [path.join(root, "node_modules", ...packageSegments)];
+  if (packageName === "@fluxfast/core") {
+    candidates.push(
+      path.join(
+        root,
+        "node_modules",
+        "@fluxfast",
+        "next",
+        "node_modules",
+        ...packageSegments
+      )
+    );
   }
 
-  try {
-    const packageJson: unknown = JSON.parse(fs.readFileSync(packagePath, "utf8"));
-    if (isRecord(packageJson) && typeof packageJson.version === "string") {
-      return packageJson.version;
+  for (const packagePath of candidates) {
+    if (!isFile(packagePath)) continue;
+    try {
+      const packageJson: unknown = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+      if (isRecord(packageJson) && typeof packageJson.version === "string") {
+        return packageJson.version;
+      }
+    } catch {
+      // Try another static package location before reporting an unknown version.
     }
-  } catch {
-    // A broken node_modules entry is reported as an unknown installed version.
   }
   return undefined;
 }
@@ -405,6 +413,7 @@ export function detectFluxProject(startPath = process.cwd()): FluxProjectInfo {
       next: detectPackage(root, packageJson, "next"),
       react: detectPackage(root, packageJson, "react"),
       reactDom: detectPackage(root, packageJson, "react-dom"),
+      fluxfastCore: detectPackage(root, packageJson, "@fluxfast/core"),
       fluxfastNext: detectPackage(root, packageJson, "@fluxfast/next"),
     },
   };

@@ -12,6 +12,7 @@ export type DetectedPackageName =
   | "next"
   | "react"
   | "react-dom"
+  | "@fluxfast/core"
   | "@fluxfast/next";
 
 export interface DetectedPackage {
@@ -26,6 +27,7 @@ export interface FluxProjectPackages {
   next: DetectedPackage;
   react: DetectedPackage;
   reactDom: DetectedPackage;
+  fluxfastCore: DetectedPackage;
   fluxfastNext: DetectedPackage;
 }
 

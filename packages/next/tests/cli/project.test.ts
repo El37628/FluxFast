@@ -171,6 +171,27 @@ describe("FluxFast project analyzer", () => {
     });
   });
 
+  it("finds @fluxfast/core installed transitively beneath @fluxfast/next", () => {
+    writePackageJson({
+      dependencies: {
+        "@fluxfast/next": "^0.1.0",
+        next: "16.3.3",
+      },
+    });
+    write("app/layout.tsx", "export default function Layout() { return null; }\n");
+    write(
+      "node_modules/@fluxfast/next/node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.1.2"}\n'
+    );
+
+    const project = detectFluxProject(tmpDir);
+
+    expect(project.packages.fluxfastCore).toMatchObject({
+      installedVersion: "0.1.2",
+      compatibility: "supported",
+    });
+  });
+
   it("classifies exact, range, unsupported, and unknown versions conservatively", () => {
     expect(classifyPackageCompatibility("next", "16.3.0")).toBe("supported");
     expect(classifyPackageCompatibility("next", "16.2.9")).toBe("unsupported");

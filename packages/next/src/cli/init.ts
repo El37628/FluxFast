@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { validateInitPrerequisites } from "./diagnostics";
 import {
   desiredCatchAllPath,
   desiredHomePagePath,
@@ -43,49 +44,17 @@ function isDirectory(directoryPath: string): boolean {
   }
 }
 
-function addProjectErrors(project: FluxProjectInfo, errors: string[]): void {
-  if (!project.hasAppRouter) {
-    errors.push(
-      project.pagesRouterDir
-        ? `FluxFast requires the Next.js App Router; detected Pages Router at ${project.pagesRouterDir}.`
-        : "FluxFast requires a Next.js App Router directory (app/ or src/app/)."
-    );
-  }
-  if (project.packages.next.compatibility === "unsupported") {
-    errors.push(
-      `Unsupported Next.js version: ${project.packages.next.effectiveVersion}. FluxFast supports >=16.3.0 <17.0.0.`
-    );
-  }
-  if (!project.packages.next.effectiveVersion) {
-    errors.push("Next.js is not listed or installed in this project.");
-  }
-  if (!project.packages.fluxfastNext.effectiveVersion) {
-    errors.push(
-      "@fluxfast/next is not installed. Install it before running fluxfast init."
-    );
-  }
-  for (const dependency of [project.packages.react, project.packages.reactDom]) {
-    if (dependency.compatibility === "unsupported") {
-      errors.push(
-        `Unsupported ${dependency.name} version: ${dependency.effectiveVersion}. FluxFast requires React 19 or newer.`
-      );
-    }
-  }
-  if (project.nextConfigPaths.length > 1) {
-    errors.push("Multiple next.config files were detected; keep only the active one.");
-  }
-  if (project.configPaths.length > 1) {
-    errors.push("Multiple fluxfast.config files were detected; keep only the active one.");
-  }
-}
-
 /** Create a deterministic, read-only plan for FluxFast-owned scaffolding. */
 export function createInitPlan(project: FluxProjectInfo): InitPlan {
   const operations: InitOperation[] = [];
   const warnings: string[] = [];
   const errors: string[] = [];
   const manualActions: string[] = [];
-  addProjectErrors(project, errors);
+  errors.push(
+    ...validateInitPrerequisites(project)
+      .filter(item => item.status === "fail" || item.blocksCheck)
+      .map(item => item.message)
+  );
 
   if (errors.length > 0) {
     return { project, operations, warnings, errors, manualActions };

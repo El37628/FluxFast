@@ -106,4 +106,60 @@ describe("FluxFast CLI", () => {
     ).toContain('"home/index"');
     expect(stdout.join("\n")).toContain("Generated FluxFast registry");
   });
+
+  it("checks an initialized project without writing", () => {
+    createTestProject(tmpDir);
+    expect(runCli(["init"], io)).toBe(0);
+    const project = detectFluxProject(tmpDir);
+    const registryBefore = fs.readFileSync(project.registryPath, "utf8");
+    stdout = [];
+
+    expect(runCli(["init", "--check"], io)).toBe(0);
+    expect(stdout.join("\n")).toContain("FluxFast Configuration Check");
+    expect(stdout.join("\n")).toContain("FluxFast is configured correctly.");
+    expect(fs.readFileSync(project.registryPath, "utf8")).toBe(registryBefore);
+  });
+
+  it("returns a failing check with an init recommendation", () => {
+    createTestProject(tmpDir);
+
+    expect(runCli(["init", "--check"], io)).toBe(1);
+    expect(stdout.join("\n")).toContain("FluxFast Configuration Check");
+    expect(stdout.join("\n")).toContain("npx fluxfast init");
+    expect(fs.existsSync(path.join(tmpDir, "src/.fluxfast/pages.generated.ts"))).toBe(
+      false
+    );
+  });
+
+  it("runs doctor with grouped diagnostics and registered pages", () => {
+    createTestProject(tmpDir);
+    expect(runCli(["init"], io)).toBe(0);
+    stdout = [];
+
+    expect(runCli(["doctor"], io)).toBe(0);
+    const output = stdout.join("\n");
+    expect(output).toContain("FluxFast Doctor");
+    expect(output).toContain("Environment");
+    expect(output).toContain("Configuration");
+    expect(output).toContain("home/index");
+    expect(output).toContain("No problems found.");
+  });
+
+  it("doctor detects stale state without repairing it", () => {
+    createTestProject(tmpDir);
+    expect(runCli(["init"], io)).toBe(0);
+    const project = detectFluxProject(tmpDir);
+    const registryBefore = fs.readFileSync(project.registryPath, "utf8");
+    writeTestFile(
+      tmpDir,
+      "src/flux-pages/rooms/index.tsx",
+      "export default function Rooms() { return null; }\n"
+    );
+    stdout = [];
+
+    expect(runCli(["doctor"], io)).toBe(1);
+    expect(stdout.join("\n")).toContain("Registry appears stale");
+    expect(stdout.join("\n")).toContain("npx fluxfast generate");
+    expect(fs.readFileSync(project.registryPath, "utf8")).toBe(registryBefore);
+  });
 });
