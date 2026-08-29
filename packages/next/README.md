@@ -19,6 +19,10 @@ export default withFluxFast({
 });
 ```
 
+Page paths may use ASCII letters, digits, `_`, `.`, `@`, parentheses, brackets,
+and hyphens, with `/` between directories and a `.tsx` or `.jsx` extension.
+The generator rejects other characters before emitting import paths.
+
 Create the optional catch-all shell at
 `app/(flux)/[[...flux]]/page.tsx`:
 
