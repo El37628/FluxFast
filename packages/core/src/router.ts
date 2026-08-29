@@ -434,7 +434,10 @@ export class FluxRouter {
           preserveScroll: options.preserveScroll,
         });
       } else if (activeInvalidations.length > 0) {
-        await this.refresh({ only: activeInvalidations });
+        await this.loadResources(activeInvalidations, {
+          url: this.pageStore.getSnapshot().url || "/",
+          reason: "mutation",
+        });
       }
 
       this.events.emit("mutation:success", { url });
