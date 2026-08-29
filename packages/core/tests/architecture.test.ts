@@ -13,5 +13,6 @@ describe("framework-neutral architecture", () => {
     expect(source).not.toMatch(
       /from\s+["'](?:react|next(?:\/|["'])|vue|svelte|solid)/
     );
+    expect(source).not.toMatch(/\bBuffer\b/);
   });
 });
