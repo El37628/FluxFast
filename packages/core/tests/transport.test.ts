@@ -57,6 +57,44 @@ describe("FetchTransport", () => {
       .toThrowError(ProtocolError);
   });
 
+  it("accepts old and additive deferred-resource page envelopes", () => {
+    expect(() => assertPageEnvelope({
+      protocol: "fluxfast/1",
+      page: { component: "rooms/index", url: "/rooms" },
+      resources: {},
+    })).not.toThrow();
+
+    expect(() => assertPageEnvelope({
+      protocol: "fluxfast/1",
+      page: { component: "rooms/index", url: "/rooms" },
+      resourceKeys: ["rooms", "analytics", "activity"],
+      resources: {},
+      deferred: ["analytics"],
+      resourceErrors: {
+        activity: {
+          type: "ResourceError",
+          message: "A deferred resource could not be resolved",
+        },
+      },
+    })).not.toThrow();
+  });
+
+  it.each([
+    ["resourceKeys", "rooms"],
+    ["resourceKeys", ["rooms", 1]],
+    ["deferred", { analytics: true }],
+    ["deferred", [null]],
+    ["resourceErrors", []],
+    ["resourceErrors", { activity: { type: "ResourceError" } }],
+  ])("rejects malformed page envelope %s metadata", (field, value) => {
+    expect(() => assertPageEnvelope({
+      protocol: "fluxfast/1",
+      page: { component: "rooms/index", url: "/rooms" },
+      resources: {},
+      [field]: value,
+    })).toThrowError(ProtocolError);
+  });
+
   it("rejects unknown mutation patch operations", () => {
     expect(() => assertMutationEnvelope({
       protocol: "fluxfast/1",

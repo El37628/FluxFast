@@ -19,10 +19,19 @@ export interface PageDescriptor {
   meta?: Record<string, unknown>;
 }
 
+export interface ResourceErrorDetail {
+  type: string;
+  message: string;
+  details?: unknown;
+}
+
 export interface PageEnvelope {
   protocol: ProtocolVersion;
   page: PageDescriptor;
   resources: Record<string, ResourceWireRecord>;
+  resourceKeys?: string[];
+  deferred?: string[];
+  resourceErrors?: Record<string, ResourceErrorDetail>;
   appVersion?: string;
 }
 

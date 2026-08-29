@@ -5,7 +5,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
+import pytest
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 
 from fluxfast.headers import (
     MAX_ENCODED_CHARS,
@@ -18,6 +20,7 @@ from fluxfast.protocol import (
     PROTOCOL_VERSION,
     PageDescriptor,
     PageEnvelope,
+    ResourceErrorDetail,
     ResourceWireRecord,
 )
 from fluxfast.serialization import canonical_json, compute_version, to_jsonable
@@ -84,6 +87,68 @@ def test_page_envelope_model():
     assert dumped["page"]["component"] == "dashboard/index"
     assert dumped["resources"]["auth"]["version"] == "abc12345"
     assert dumped["resources"]["auth"]["value"] == {"user": "admin"}
+
+
+def test_page_envelope_accepts_optional_resource_metadata():
+    envelope = PageEnvelope(
+        page=PageDescriptor(component="dashboard/index", url="/dashboard"),
+        resources={},
+        resourceKeys=["auth", "analytics"],
+        deferred=["analytics"],
+        resourceErrors={
+            "activity": ResourceErrorDetail(
+                type="ResourceError",
+                message="A deferred resource could not be resolved",
+            )
+        },
+    )
+
+    dumped = envelope.model_dump(mode="json", exclude_none=True)
+    assert dumped["resourceKeys"] == ["auth", "analytics"]
+    assert dumped["deferred"] == ["analytics"]
+    assert dumped["resourceErrors"] == {
+        "activity": {
+            "type": "ResourceError",
+            "message": "A deferred resource could not be resolved",
+        }
+    }
+
+
+def test_page_envelope_keeps_resource_metadata_optional():
+    envelope = PageEnvelope.model_validate(
+        {
+            "protocol": "fluxfast/1",
+            "page": {"component": "dashboard/index", "url": "/dashboard"},
+            "resources": {},
+        }
+    )
+
+    assert envelope.resourceKeys is None
+    assert envelope.deferred is None
+    assert envelope.resourceErrors is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("resourceKeys", "auth"),
+        ("resourceKeys", ["auth", 1]),
+        ("deferred", {"analytics": True}),
+        ("deferred", [None]),
+        ("resourceErrors", []),
+        ("resourceErrors", {"activity": {"type": "ResourceError"}}),
+    ],
+)
+def test_page_envelope_rejects_malformed_resource_metadata(field, value):
+    payload = {
+        "protocol": "fluxfast/1",
+        "page": {"component": "dashboard/index", "url": "/dashboard"},
+        "resources": {},
+        field: value,
+    }
+
+    with pytest.raises(PydanticValidationError):
+        PageEnvelope.model_validate(payload)
 
 
 def test_known_headers_roundtrip():
