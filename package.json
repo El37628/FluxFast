@@ -12,6 +12,7 @@
     "test": "pnpm --filter @fluxfast/core run build && pnpm -r --if-present run test && pnpm test:release",
     "test:e2e": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --dir tests/browser/frontend run test:e2e",
     "test:release": "node --test scripts/*.test.mjs",
+    "test:consumer:init": "node scripts/test-next-init-consumer.mjs",
     "test:python": "./.venv/bin/python -m pytest -q python/fluxfast/tests",
     "benchmark": "PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_cross_page.py",
     "release:check": "node scripts/check-release-version.mjs",
