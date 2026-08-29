@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "dev": "next dev",
     "typecheck": "next typegen && tsc --noEmit",
     "verify:dry-run": "node verify.cjs dry-run",
     "verify:init": "node verify.cjs initialized"

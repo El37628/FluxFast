@@ -107,6 +107,13 @@ try {
   run(npxCommand, ["--no-install", "fluxfast", "doctor"], consumerRoot);
   run(npmCommand, ["run", "typecheck"], consumerRoot);
   run(npmCommand, ["run", "build"], consumerRoot);
+  if (process.env.FLUXFAST_RUN_LIVE === "1") {
+    run(
+      process.execPath,
+      [path.join(repositoryRoot, "scripts", "test-next-init-live.mjs"), consumerRoot],
+      repositoryRoot
+    );
+  }
 
   console.log(`Packed FluxFast initialization consumer passed with Next.js ${manifest.dependencies.next}.`);
 } finally {
