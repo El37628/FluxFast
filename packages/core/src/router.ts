@@ -111,10 +111,14 @@ export class FluxRouter {
       };
     }
     if (initialPage) {
-      this.pageCache.set(
-        initialPage,
-        this.resourceStore.exportKnownVersions()
-      );
+      if (options.initialEnvelope) {
+        this.cachePageEnvelope(options.initialEnvelope);
+      } else {
+        this.pageCache.set(
+          initialPage,
+          this.resourceStore.exportKnownVersions()
+        );
+      }
     }
 
     if (!options.deferHistory) this.startHistory();
@@ -125,9 +129,17 @@ export class FluxRouter {
     this.stopHistoryListener = this.history.onPopState(url => {
       const cached = this.pageCache.getValid(url, this.resourceStore);
       if (cached) {
+        this.abortActiveDeferred();
         this.abortActiveVisit();
+        this.resourceStore.markPending(cached.pendingDeferred);
         this.pageStore.setPage(cached);
         this.events.emit("cache:hit", { key: url });
+        if (cached.pendingDeferred.length > 0) {
+          void this.startDeferredBatch(
+            cached.pendingDeferred,
+            cached.url || url
+          ).catch(() => undefined);
+        }
         return;
       }
       this.events.emit("cache:miss", { key: url });
@@ -286,6 +298,7 @@ export class FluxRouter {
       });
       const returnedKeys = new Set(Object.keys(envelope.resources));
       const errorKeys = new Set(Object.keys(envelope.resourceErrors ?? {}));
+      const settledKeys: string[] = [];
       for (const key of requestedKeys) {
         if (this.resourceEpochs.get(key) !== capturedEpochs.get(key)) continue;
 
@@ -298,10 +311,12 @@ export class FluxRouter {
           })) {
             this.events.emit("resource:update", { key, version: record.version });
           }
+          settledKeys.push(key);
           continue;
         }
         if (errorKeys.has(key)) {
           this.resourceStore.setResourceError(key, envelope.resourceErrors![key]);
+          settledKeys.push(key);
           continue;
         }
 
@@ -317,11 +332,14 @@ export class FluxRouter {
         } else {
           this.resourceStore.invalidate(key);
         }
+        settledKeys.push(key);
       }
+      this.pageCache.settleResources(url, settledKeys, this.resourceStore);
     } catch (error) {
       const aborted =
         options.signal?.aborted ||
         (error instanceof Error && error.name === "AbortError");
+      const settledKeys: string[] = [];
       for (const key of requestedKeys) {
         if (this.resourceEpochs.get(key) !== capturedEpochs.get(key)) continue;
         const record = this.resourceStore.getRecord(key);
@@ -343,7 +361,11 @@ export class FluxRouter {
             type: normalized.name || "ResourceError",
             message: normalized.message,
           });
+          settledKeys.push(key);
         }
+      }
+      if (!aborted) {
+        this.pageCache.settleResources(url, settledKeys, this.resourceStore);
       }
       throw error;
     }
@@ -361,7 +383,7 @@ export class FluxRouter {
       this.bumpResourceEpoch(key);
     }
     this.emitResourceUpdates(this.resourceStore.setMany(envelope.resources));
-    this.pageCache.set(envelope.page, this.resourceStore.exportKnownVersions());
+    this.cachePageEnvelope(envelope);
     this.events.emit("prefetch:success", { url });
     return envelope;
   }
@@ -456,7 +478,28 @@ export class FluxRouter {
     }
     this.resourceStore.markPending(envelope.deferred ?? []);
     this.pageStore.setPage(envelope.page);
-    this.pageCache.set(envelope.page, this.resourceStore.exportKnownVersions());
+    this.cachePageEnvelope(envelope);
+  }
+
+  private cachePageEnvelope(envelope: PageEnvelope): void {
+    const allKnownVersions = this.resourceStore.exportKnownVersions();
+    if (!envelope.resourceKeys) {
+      this.pageCache.set(envelope.page, allKnownVersions);
+      return;
+    }
+
+    const resourceKeys = Array.from(new Set(envelope.resourceKeys));
+    const pendingDeferred = Array.from(new Set(envelope.deferred ?? []))
+      .filter(key => resourceKeys.includes(key));
+    const versions: Record<string, string> = {};
+    for (const key of resourceKeys) {
+      const version = allKnownVersions[key];
+      if (version !== undefined) versions[key] = version;
+    }
+    this.pageCache.set(envelope.page, versions, {
+      resourceKeys,
+      pendingDeferred,
+    });
   }
 
   private emitResourceUpdates(keys: string[]): void {

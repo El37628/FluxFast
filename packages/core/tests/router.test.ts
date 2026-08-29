@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { FluxRouter } from "../src/router";
 import { FluxTransport, VisitTransportRequest, MutationTransportRequest } from "../src/transport";
 import { PageEnvelope, MutationEnvelope } from "../src/protocol";
+import { HistoryManager } from "../src/history";
 
 class MockTransport implements FluxTransport {
   public visitMock = vi.fn<[VisitTransportRequest], Promise<PageEnvelope>>();
@@ -362,6 +363,154 @@ describe("FluxRouter Core", () => {
     await loading;
 
     expect(router.resourceStore.getSnapshot("analytics")).toBeUndefined();
+  });
+
+  it("caches only an envelope's explicit resource manifest", async () => {
+    const transport = new MockTransport();
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resourceKeys: ["summary"],
+      resources: { summary: { version: "s1", value: { count: 1 } } },
+    });
+    const router = new FluxRouter({ transport });
+    router.resourceStore.set({ key: "unrelated", version: "u1", value: true });
+
+    await router.visit("/dashboard");
+
+    expect(router.pageCache.getValid("/dashboard", router.resourceStore))
+      .toMatchObject({
+        resources: { summary: "s1" },
+        resourceKeys: ["summary"],
+      });
+  });
+
+  it("restores pending deferred state and restarts its batch on back navigation", async () => {
+    const history = new HistoryManager();
+    let popState!: (url: string) => void;
+    vi.spyOn(history, "onPopState").mockImplementation(callback => {
+      popState = callback;
+      return () => undefined;
+    });
+    const transport = new MockTransport();
+    let resolveDeferred!: (envelope: PageEnvelope) => void;
+    transport.visitMock
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["summary", "analytics"],
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        deferred: ["analytics"],
+      })
+      .mockImplementationOnce(
+        () => new Promise(resolve => { resolveDeferred = resolve; })
+      )
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resourceKeys: [],
+        resources: {},
+      })
+      .mockImplementationOnce(
+        () => new Promise(() => undefined)
+      );
+    const router = new FluxRouter({ transport, history, deferHistory: true });
+    router.startHistory();
+
+    await router.visit("/dashboard");
+    await router.visit("/rooms");
+    resolveDeferred({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { analytics: { version: "old", value: { old: true } } },
+    });
+    await Promise.resolve();
+
+    popState("/dashboard");
+
+    expect(router.pageStore.getSnapshot().component).toBe("dashboard/index");
+    expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("loading");
+    expect(transport.visitMock.mock.calls[3][0]).toMatchObject({
+      url: "/dashboard",
+      only: ["analytics"],
+    });
+  });
+
+  it("restores a page with a resolved deferred resource without reloading it", async () => {
+    const history = new HistoryManager();
+    let popState!: (url: string) => void;
+    vi.spyOn(history, "onPopState").mockImplementation(callback => {
+      popState = callback;
+      return () => undefined;
+    });
+    const transport = new MockTransport();
+    transport.visitMock
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["summary", "analytics"],
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        deferred: ["analytics"],
+      })
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { analytics: { version: "a1", value: { revenue: 95_000 } } },
+      })
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resourceKeys: [],
+        resources: {},
+      });
+    const router = new FluxRouter({ transport, history, deferHistory: true });
+    router.startHistory();
+
+    await router.visit("/dashboard");
+    await vi.waitFor(() => {
+      expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("ready");
+    });
+    await router.visit("/rooms");
+    popState("/dashboard");
+
+    expect(router.pageStore.getSnapshot().component).toBe("dashboard/index");
+    expect(router.resourceStore.getSnapshot("analytics")).toEqual({ revenue: 95_000 });
+    expect(transport.visitMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("restores valid cached pages across back and forward navigation", async () => {
+    const history = new HistoryManager();
+    let popState!: (url: string) => void;
+    vi.spyOn(history, "onPopState").mockImplementation(callback => {
+      popState = callback;
+      return () => undefined;
+    });
+    const transport = new MockTransport();
+    transport.visitMock
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["summary"],
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+      })
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resourceKeys: ["rooms"],
+        resources: { rooms: { version: "r1", value: [] } },
+      });
+    const router = new FluxRouter({ transport, history, deferHistory: true });
+    router.startHistory();
+
+    await router.visit("/dashboard");
+    await router.visit("/rooms");
+
+    popState("/dashboard");
+    expect(router.pageStore.getSnapshot().component).toBe("dashboard/index");
+
+    popState("/rooms");
+    expect(router.pageStore.getSnapshot().component).toBe("rooms/index");
+    expect(transport.visitMock).toHaveBeenCalledTimes(2);
   });
 
   it("handles race condition: latest navigation wins (Section 27)", async () => {
