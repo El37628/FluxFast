@@ -8,13 +8,14 @@ import {
   renderStarterPage,
 } from "./files";
 import { inspectPage, prepareMigratedPage } from "./migration";
+import { planNextConfigIntegration } from "./next-config";
 import type { FluxProjectInfo } from "./types";
 
 export type InitOperation =
   | { type: "mkdir"; path: string }
   | { type: "create"; path: string; content: string }
   | { type: "modify"; path: string; before: string; after: string }
-  | { type: "move"; from: string; to: string; content: string }
+  | { type: "move"; from: string; to: string; before: string; content: string }
   | { type: "remove"; path: string }
   | { type: "skip"; path?: string; reason: string };
 
@@ -23,6 +24,7 @@ export interface InitPlan {
   operations: InitOperation[];
   warnings: string[];
   errors: string[];
+  manualActions: string[];
 }
 
 function isFile(filePath: string): boolean {
@@ -82,10 +84,11 @@ export function createInitPlan(project: FluxProjectInfo): InitPlan {
   const operations: InitOperation[] = [];
   const warnings: string[] = [];
   const errors: string[] = [];
+  const manualActions: string[] = [];
   addProjectErrors(project, errors);
 
   if (errors.length > 0) {
-    return { project, operations, warnings, errors };
+    return { project, operations, warnings, errors, manualActions };
   }
 
   if (!isDirectory(project.fluxPagesDir)) {
@@ -126,6 +129,9 @@ export function createInitPlan(project: FluxProjectInfo): InitPlan {
     if (isFile(homePagePath)) {
       const warning = `${project.rootPagePath} remains in place because ${homePagePath} already exists.`;
       warnings.push(warning);
+      manualActions.push(
+        `Remove or migrate ${project.rootPagePath}; it shadows the FluxFast route "/".`
+      );
       operations.push({ type: "skip", path: project.rootPagePath, reason: warning });
     } else {
       const original = fs.readFileSync(project.rootPagePath, "utf8");
@@ -135,6 +141,7 @@ export function createInitPlan(project: FluxProjectInfo): InitPlan {
           type: "move",
           from: project.rootPagePath,
           to: homePagePath,
+          before: original,
           content: prepareMigratedPage(
             original,
             project.rootPagePath,
@@ -147,6 +154,9 @@ export function createInitPlan(project: FluxProjectInfo): InitPlan {
             ? `${project.rootPagePath} uses Server Component APIs and was not selected for migration.`
             : `${project.rootPagePath} appears custom and was not selected for migration.`;
         warnings.push(warning);
+        manualActions.push(
+          `Create or migrate the FluxFast home page at ${homePagePath}, then remove ${project.rootPagePath}.`
+        );
         operations.push({
           type: "skip",
           path: project.rootPagePath,
@@ -168,7 +178,15 @@ export function createInitPlan(project: FluxProjectInfo): InitPlan {
     });
   }
 
-  return { project, operations, warnings, errors };
+  const nextConfig = planNextConfigIntegration(project);
+  if (nextConfig.operation) {
+    operations.push(nextConfig.operation);
+  }
+  if (nextConfig.manualAction) {
+    manualActions.push(nextConfig.manualAction);
+  }
+
+  return { project, operations, warnings, errors, manualActions };
 }
 
 export function changedOperations(plan: InitPlan): InitOperation[] {

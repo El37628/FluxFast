@@ -115,6 +115,11 @@ describe("FluxFast init planner", () => {
       path.relative(tmpDir, desiredCatchAllPath(project)),
       renderCatchAll(project)
     );
+    writeTestFile(
+      tmpDir,
+      "next.config.ts",
+      'import { withFluxFast } from "@fluxfast/next/next-config";\nexport default withFluxFast({});\n'
+    );
     project = detectFluxProject(tmpDir);
     const plan = createInitPlan(project);
 

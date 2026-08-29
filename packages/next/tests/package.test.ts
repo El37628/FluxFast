@@ -12,6 +12,7 @@ describe("published package", () => {
 
     expect(manifest.bin.fluxfast).toBe("bin/fluxfast.js");
     expect(fs.statSync(cli).mode & 0o111).not.toBe(0);
+    expect(fs.readFileSync(cli, "utf8")).toContain('require("../dist/cli/index.js")');
     expect(fs.readFileSync(license, "utf8")).toContain("MIT License");
   });
 });
