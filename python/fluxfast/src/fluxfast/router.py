@@ -114,6 +114,9 @@ class FluxRouter(APIRouter):
                         cache=cache,
                         metrics=metrics,
                         client_supports_deferred=supports_deferred,
+                        debug=bool(
+                            getattr(request.app.state, "fluxfast_debug", False)
+                        ),
                     )
 
                     t_ser = time.perf_counter()
@@ -139,6 +142,7 @@ class FluxRouter(APIRouter):
                             if supports_deferred and resolution.deferred
                             else None
                         ),
+                        resourceErrors=(resolution.errors or None),
                     )
                     payload = envelope.model_dump(mode="json", exclude_none=True)
                     metrics.serialize_dur_ms = (time.perf_counter() - t_ser) * 1000.0
