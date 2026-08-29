@@ -365,6 +365,121 @@ describe("FluxRouter Core", () => {
     expect(router.resourceStore.getSnapshot("analytics")).toBeUndefined();
   });
 
+  it("keeps a mutation patch when an older resource load resolves later", async () => {
+    const transport = new MockTransport();
+    let resolveOlderLoad!: (value: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveOlderLoad = resolve; })
+    );
+    transport.mutateMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      mutation: {
+        patches: {
+          analytics: [
+            { op: "replace-resource", value: { revenue: 120_000 } },
+          ],
+        },
+      },
+    });
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+      initialResources: {
+        analytics: { version: "a1", value: { revenue: 95_000 } },
+      },
+    });
+
+    const olderLoad = router.loadResources(["analytics"], {
+      reason: "deferred",
+    });
+    await router.mutate("/analytics/recalculate");
+
+    expect(router.resourceStore.getStateSnapshot("analytics")).toMatchObject({
+      data: { revenue: 120_000 },
+      status: "ready",
+      stale: true,
+    });
+
+    resolveOlderLoad({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {
+        analytics: { version: "a-old", value: { revenue: 90_000 } },
+      },
+    });
+    await olderLoad;
+
+    expect(router.resourceStore.getStateSnapshot("analytics")).toMatchObject({
+      data: { revenue: 120_000 },
+      status: "ready",
+      stale: true,
+    });
+  });
+
+  it("supersedes a pending deferred load with mutation revalidation", async () => {
+    const transport = new MockTransport();
+    let resolveOlderLoad!: (value: PageEnvelope) => void;
+    let resolveRevalidation!: (value: PageEnvelope) => void;
+    transport.visitMock
+      .mockImplementationOnce(
+        () => new Promise(resolve => { resolveOlderLoad = resolve; })
+      )
+      .mockImplementationOnce(
+        () => new Promise(resolve => { resolveRevalidation = resolve; })
+      );
+    transport.mutateMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      mutation: { invalidate: ["analytics"] },
+    });
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+    });
+    const unsubscribe = router.resourceStore.subscribe("analytics", () => {});
+
+    const olderLoad = router.loadResources(["analytics"], {
+      reason: "deferred",
+    });
+    const mutation = router.mutate("/analytics/recalculate");
+
+    await vi.waitFor(() => {
+      expect(transport.visitMock).toHaveBeenCalledTimes(2);
+    });
+    expect(router.resourceStore.getStateSnapshot("analytics")).toEqual({
+      data: undefined,
+      status: "loading",
+      error: null,
+      stale: false,
+    });
+
+    resolveOlderLoad({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {
+        analytics: { version: "a-old", value: { revenue: 90_000 } },
+      },
+    });
+    await olderLoad;
+    expect(router.resourceStore.getStateSnapshot("analytics").status).toBe(
+      "loading"
+    );
+
+    resolveRevalidation({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {
+        analytics: { version: "a2", value: { revenue: 120_000 } },
+      },
+    });
+    await mutation;
+
+    expect(router.resourceStore.getRecord("analytics")).toMatchObject({
+      version: "a2",
+      value: { revenue: 120_000 },
+    });
+    unsubscribe();
+  });
+
   it("caches only an envelope's explicit resource manifest", async () => {
     const transport = new MockTransport();
     transport.visitMock.mockResolvedValueOnce({
@@ -606,28 +721,59 @@ describe("FluxRouter Core", () => {
 
   it("revalidates only invalidated resources with active subscribers", async () => {
     const transport = new MockTransport();
+    let resolveRevalidation!: (value: PageEnvelope) => void;
     const router = new FluxRouter({
       transport,
       initialPage: { component: "rooms/index", url: "/rooms" },
     });
     router.resourceStore.set({ key: "summary", version: "v1", value: { count: 1 } });
     const unsubscribe = router.resourceStore.subscribe("summary", () => {});
+    const loadResources = vi.spyOn(router, "loadResources");
+    const originalPage = router.pageStore.getSnapshot();
+    const push = vi.spyOn(router.history, "push");
+    const replace = vi.spyOn(router.history, "replace");
 
     transport.mutateMock.mockResolvedValueOnce({
       protocol: "fluxfast/1",
       mutation: { invalidate: ["summary"] },
     });
-    transport.visitMock.mockResolvedValueOnce({
-      protocol: "fluxfast/1",
-      page: { component: "rooms/index", url: "/rooms" },
-      resources: { summary: { version: "v2", value: { count: 2 } } },
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveRevalidation = resolve; })
+    );
+
+    const mutation = router.mutate("/rooms/refresh-summary");
+
+    await vi.waitFor(() => {
+      expect(transport.visitMock).toHaveBeenCalledTimes(1);
+    });
+    expect(loadResources).toHaveBeenCalledWith(["summary"], {
+      url: "/rooms",
+      reason: "mutation",
+    });
+    expect(transport.visitMock.mock.calls[0][0]).toMatchObject({
+      url: "/rooms",
+      only: ["summary"],
+      knownVersions: {},
+    });
+    expect(router.resourceStore.getStateSnapshot("summary")).toEqual({
+      data: { count: 1 },
+      status: "loading",
+      error: null,
+      stale: true,
     });
 
-    await router.mutate("/rooms/refresh-summary");
+    resolveRevalidation({
+      protocol: "fluxfast/1",
+      page: { component: "ignored/index", url: "/ignored" },
+      resources: { summary: { version: "v2", value: { count: 2 } } },
+    });
+    await mutation;
 
-    expect(transport.visitMock).toHaveBeenCalledTimes(1);
-    expect(transport.visitMock.mock.calls[0][0].only).toEqual(["summary"]);
     expect(router.resourceStore.getSnapshot("summary")).toEqual({ count: 2 });
+    expect(router.resourceStore.getStateSnapshot("summary").stale).toBe(false);
+    expect(router.pageStore.getSnapshot()).toBe(originalPage);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
     unsubscribe();
   });
 
