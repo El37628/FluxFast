@@ -6,6 +6,13 @@ export interface CachedPage {
   readonly component: string;
   readonly meta: Record<string, unknown>;
   readonly resources: Record<string, string>;
+  readonly resourceKeys: string[];
+  readonly pendingDeferred: string[];
+}
+
+export interface PageCacheManifest {
+  readonly resourceKeys: string[];
+  readonly pendingDeferred: string[];
 }
 
 /** Lightweight LRU page cache. Resource values remain in ResourceStore. */
@@ -18,12 +25,19 @@ export class PageCache {
     }
   }
 
-  set(page: PageDescriptor, resources: Record<string, string>): void {
+  set(
+    page: PageDescriptor,
+    resources: Record<string, string>,
+    manifest?: PageCacheManifest
+  ): void {
+    const resourceKeys = manifest?.resourceKeys ?? Object.keys(resources);
     const entry: CachedPage = {
       url: page.url,
       component: page.component,
       meta: { ...(page.meta ?? {}) },
       resources: { ...resources },
+      resourceKeys: [...resourceKeys],
+      pendingDeferred: [...(manifest?.pendingDeferred ?? [])],
     };
     this.entries.delete(page.url);
     this.entries.set(page.url, entry);
@@ -39,9 +53,21 @@ export class PageCache {
     const entry = this.entries.get(url);
     if (!entry) return undefined;
 
-    for (const [key, version] of Object.entries(entry.resources)) {
-      const record = resources.getRecord(key);
-      if (!record || record.version !== version || resources.isStale(key)) {
+    const pending = new Set(entry.pendingDeferred);
+    for (const key of entry.resourceKeys) {
+      if (pending.has(key)) continue;
+
+      const version = entry.resources[key];
+      if (version !== undefined) {
+        const record = resources.getRecord(key);
+        if (record && record.version === version && !resources.isStale(key)) {
+          continue;
+        }
+        this.entries.delete(url);
+        return undefined;
+      }
+
+      if (resources.getStateSnapshot(key).status !== "error") {
         this.entries.delete(url);
         return undefined;
       }
@@ -50,6 +76,47 @@ export class PageCache {
     this.entries.delete(url);
     this.entries.set(url, entry);
     return entry;
+  }
+
+  /** Record resource-only settlement without replacing the cached page shell. */
+  settleResources(url: string, keys: string[], store: ResourceStore): void {
+    const entry = this.entries.get(url);
+    if (!entry) return;
+
+    const ownedKeys = new Set(entry.resourceKeys);
+    const pending = new Set(entry.pendingDeferred);
+    const versions = { ...entry.resources };
+
+    for (const key of keys) {
+      if (!ownedKeys.has(key)) continue;
+
+      const state = store.getStateSnapshot(key);
+      const record = store.getRecord(key);
+      if (record && state.status === "ready" && !store.isStale(key)) {
+        versions[key] = record.version;
+        pending.delete(key);
+        continue;
+      }
+      if (state.status === "error") {
+        delete versions[key];
+        pending.delete(key);
+        continue;
+      }
+      if (state.status === "pending" || state.status === "loading") {
+        continue;
+      }
+
+      this.entries.delete(url);
+      return;
+    }
+
+    const updated: CachedPage = {
+      ...entry,
+      resources: versions,
+      pendingDeferred: entry.resourceKeys.filter(key => pending.has(key)),
+    };
+    this.entries.delete(url);
+    this.entries.set(url, updated);
   }
 
   clear(): void {
