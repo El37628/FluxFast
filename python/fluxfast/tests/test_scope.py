@@ -78,11 +78,11 @@ async def test_same_wire_key_never_reuses_another_users_cached_value():
     )
     result_b = await ResourceEngine.resolve_page_resources(
         user_b,
-        {"auth": result_a["auth"].version},
+        {"auth": result_a.resources["auth"].version},
         None,
         cache,
         TimingMetrics(),
     )
 
-    assert result_b["auth"].value == {"id": "b"}
-    assert result_b["auth"].version != result_a["auth"].version
+    assert result_b.resources["auth"].value == {"id": "b"}
+    assert result_b.resources["auth"].version != result_a.resources["auth"].version

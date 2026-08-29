@@ -38,7 +38,7 @@ async def test_concurrent_resource_resolution():
     metrics = TimingMetrics()
 
     t0 = time.perf_counter()
-    records = await ResourceEngine.resolve_page_resources(
+    resolution = await ResourceEngine.resolve_page_resources(
         page=page,
         known_versions={},
         only_keys=None,
@@ -47,12 +47,12 @@ async def test_concurrent_resource_resolution():
     )
     elapsed = time.perf_counter() - t0
 
-    assert "res_a" in records
-    assert "res_b" in records
-    assert "res_c" in records
-    assert records["res_a"].value == {"data": "A"}
-    assert records["res_b"].value == {"data": "B"}
-    assert records["res_c"].value == {"data": "C"}
+    assert "res_a" in resolution.resources
+    assert "res_b" in resolution.resources
+    assert "res_c" in resolution.resources
+    assert resolution.resources["res_a"].value == {"data": "A"}
+    assert resolution.resources["res_b"].value == {"data": "B"}
+    assert resolution.resources["res_c"].value == {"data": "C"}
 
     # Sequential would take >= 230ms (0.23s)
     # Concurrent should complete in roughly 100ms - 170ms with CI timing allowance
@@ -106,7 +106,7 @@ async def test_synchronous_loaders_do_not_block_each_other():
     )
 
     started = time.perf_counter()
-    records = await ResourceEngine.resolve_page_resources(
+    resolution = await ResourceEngine.resolve_page_resources(
         page=page,
         known_versions={},
         only_keys=None,
@@ -114,12 +114,12 @@ async def test_synchronous_loaders_do_not_block_each_other():
         metrics=TimingMetrics(),
     )
 
-    assert set(records) == {"a", "b", "c"}
+    assert set(resolution.resources) == {"a", "b", "c"}
     assert time.perf_counter() - started < 0.14
 
 
 @pytest.mark.anyio
-async def test_deferred_declaration_remains_blocking_before_runtime_support():
+async def test_deferred_declaration_remains_blocking_without_client_capability():
     calls = 0
 
     async def load_analytics():
@@ -132,7 +132,7 @@ async def test_deferred_declaration_remains_blocking_before_runtime_support():
         resources=[resource("analytics", load_analytics, defer=True)],
     )
 
-    records = await ResourceEngine.resolve_page_resources(
+    resolution = await ResourceEngine.resolve_page_resources(
         page=page,
         known_versions={},
         only_keys=None,
@@ -141,4 +141,4 @@ async def test_deferred_declaration_remains_blocking_before_runtime_support():
     )
 
     assert calls == 1
-    assert records["analytics"].value == {"visits": 42}
+    assert resolution.resources["analytics"].value == {"visits": 42}
