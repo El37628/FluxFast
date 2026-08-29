@@ -35,14 +35,13 @@ export function FluxProvider({
     }
 
     return new FluxRouter({
-      initialPage: initialEnvelope?.page,
-      initialResources: initialEnvelope?.resources,
+      initialEnvelope,
       transport: createFetchTransport(clientUrl),
       maxResources: cache?.maxResources,
       maxPages: cache?.maxPages,
       deferHistory: true,
     });
-  }, [customRouter, clientUrl, cache?.maxPages, cache?.maxResources]);
+  }, [customRouter, initialEnvelope, clientUrl, cache?.maxPages, cache?.maxResources]);
 
   const value = useMemo(
     () => ({ router, registry: registry ?? {} }),
@@ -52,6 +51,7 @@ export function FluxProvider({
   useEffect(() => {
     if (customRouter) return;
     router.startHistory();
+    void router.startInitialDeferred().catch(() => undefined);
     return () => router.stopHistory();
   }, [customRouter, router]);
 
