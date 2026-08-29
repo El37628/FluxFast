@@ -169,6 +169,201 @@ describe("FluxRouter Core", () => {
     }
   });
 
+  it("initializes deferred state without loading until idempotent startup", async () => {
+    const transport = new MockTransport();
+    let resolveDeferred!: (value: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveDeferred = resolve; })
+    );
+    const router = new FluxRouter({
+      transport,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["summary", "analytics"],
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        deferred: ["analytics"],
+      },
+    });
+
+    expect(transport.visitMock).not.toHaveBeenCalled();
+    expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("pending");
+
+    const first = router.startInitialDeferred();
+    const second = router.startInitialDeferred();
+    expect(second).toBe(first);
+    expect(transport.visitMock).toHaveBeenCalledTimes(1);
+    expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("loading");
+
+    resolveDeferred({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { analytics: { version: "a1", value: { revenue: 95_000 } } },
+    });
+    await first;
+    expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("ready");
+  });
+
+  it("finishes navigation before its deferred resource batch", async () => {
+    const transport = new MockTransport();
+    let resolveDeferred!: (value: PageEnvelope) => void;
+    transport.visitMock
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: {},
+        deferred: ["analytics", "activity"],
+      })
+      .mockImplementationOnce(
+        () => new Promise(resolve => { resolveDeferred = resolve; })
+      );
+    const router = new FluxRouter({ transport });
+
+    await router.visit("/dashboard");
+
+    expect(router.pageStore.getSnapshot().component).toBe("dashboard/index");
+    expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("loading");
+    expect(transport.visitMock.mock.calls[1][0].only).toEqual([
+      "analytics",
+      "activity",
+    ]);
+
+    resolveDeferred({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {
+        analytics: { version: "a1", value: { revenue: 95_000 } },
+        activity: { version: "ac1", value: [] },
+      },
+    });
+    await vi.waitFor(() => {
+      expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("ready");
+    });
+  });
+
+  it("keeps prefetch lightweight and starts deferred loading on actual visit", async () => {
+    const transport = new MockTransport();
+    transport.visitMock
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        deferred: ["analytics"],
+      })
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { analytics: { version: "a1", value: { revenue: 95_000 } } },
+      });
+    const router = new FluxRouter({ transport });
+
+    await router.prefetch("/dashboard");
+    expect(transport.visitMock).toHaveBeenCalledTimes(1);
+    expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("missing");
+
+    await router.visit("/dashboard");
+    expect(transport.visitMock).toHaveBeenCalledTimes(2);
+    expect(transport.visitMock.mock.calls[1][0].only).toEqual(["analytics"]);
+    await vi.waitFor(() => {
+      expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("ready");
+    });
+  });
+
+  it("lets the newest overlapping resource request win", async () => {
+    const transport = new MockTransport();
+    const resolvers: Array<(value: PageEnvelope) => void> = [];
+    transport.visitMock.mockImplementation(
+      () => new Promise(resolve => { resolvers.push(resolve); })
+    );
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+    });
+
+    const older = router.loadResources(["analytics"], { reason: "refresh" });
+    const newer = router.loadResources(["analytics"], { reason: "retry" });
+    resolvers[1]({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { analytics: { version: "v2", value: { value: 2 } } },
+    });
+    await newer;
+    resolvers[0]({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { analytics: { version: "v1", value: { value: 1 } } },
+    });
+    await older;
+
+    expect(router.resourceStore.getRecord("analytics")?.version).toBe("v2");
+  });
+
+  it("aborts the active deferred batch when navigation changes", async () => {
+    const transport = new MockTransport();
+    let resolveOldDeferred!: (value: PageEnvelope) => void;
+    transport.visitMock.mockImplementation(req => {
+      if (req.only) {
+        return new Promise(resolve => { resolveOldDeferred = resolve; });
+      }
+      if (req.url === "/dashboard") {
+        return Promise.resolve({
+          protocol: "fluxfast/1",
+          page: { component: "dashboard/index", url: "/dashboard" },
+          resources: {},
+          deferred: ["analytics"],
+        });
+      }
+      return Promise.resolve({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: {},
+      });
+    });
+    const router = new FluxRouter({ transport });
+
+    await router.visit("/dashboard");
+    const deferredSignal = transport.visitMock.mock.calls[1][0].signal;
+    await router.visit("/rooms");
+    expect(deferredSignal?.aborted).toBe(true);
+
+    resolveOldDeferred({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { analytics: { version: "old", value: { value: "old" } } },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(router.resourceStore.getSnapshot("analytics")).toBeUndefined();
+    expect(router.resourceStore.getStateSnapshot("analytics").status).toBe("missing");
+  });
+
+  it("prevents a pre-mutation resource response from becoming canonical", async () => {
+    const transport = new MockTransport();
+    let resolveResource!: (value: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveResource = resolve; })
+    );
+    transport.mutateMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      mutation: { invalidate: ["analytics"] },
+    });
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+    });
+
+    const loading = router.loadResources(["analytics"], { reason: "deferred" });
+    await router.mutate("/analytics/recalculate");
+    resolveResource({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { analytics: { version: "old", value: { value: "old" } } },
+    });
+    await loading;
+
+    expect(router.resourceStore.getSnapshot("analytics")).toBeUndefined();
+  });
+
   it("handles race condition: latest navigation wins (Section 27)", async () => {
     const transport = new MockTransport();
     const router = new FluxRouter({ transport });

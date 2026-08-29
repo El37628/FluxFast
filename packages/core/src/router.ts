@@ -43,6 +43,7 @@ export interface FluxRuntimeOptions {
   history?: HistoryManager;
   prefetchManager?: PrefetchManager;
   pageCache?: PageCache;
+  initialEnvelope?: PageEnvelope;
   initialPage?: PageDescriptor;
   initialResources?: PageEnvelope["resources"];
   maxResources?: number;
@@ -62,16 +63,24 @@ export class FluxRouter {
 
   private currentVisitId: string | null = null;
   private activeController: AbortController | null = null;
+  private activeDeferredController: AbortController | null = null;
+  private activeDeferredKeys: string[] = [];
+  private activeDeferredEpochs = new Map<string, number>();
   private visitCounter = 0;
   private resourceLoadCounter = 0;
+  private resourceEpochCounter = 0;
+  private readonly resourceEpochs = new Map<string, number>();
+  private initialDeferredBatch?: { keys: string[]; url: string };
+  private initialDeferredPromise?: Promise<void>;
   private readonly hardNavigate: (url: string) => void;
   private stopHistoryListener?: () => void;
 
   constructor(options: FluxRuntimeOptions = {}) {
+    const initialPage = options.initialEnvelope?.page ?? options.initialPage;
     this.resourceStore =
       options.resourceStore ??
       new ResourceStore({ maxResources: options.maxResources });
-    this.pageStore = options.pageStore ?? new PageStore(options.initialPage);
+    this.pageStore = options.pageStore ?? new PageStore(initialPage);
     this.transport = options.transport ?? createFetchTransport();
     this.events = new EventEmitter();
     this.history = options.history ?? new HistoryManager();
@@ -83,12 +92,27 @@ export class FluxRouter {
         if (typeof window !== "undefined") window.location.assign(url);
       });
 
-    if (options.initialResources) {
-      this.emitResourceUpdates(this.resourceStore.setMany(options.initialResources));
+    const initialResources =
+      options.initialEnvelope?.resources ?? options.initialResources;
+    if (initialResources) {
+      this.emitResourceUpdates(this.resourceStore.setMany(initialResources));
     }
-    if (options.initialPage) {
+    for (const [key, error] of Object.entries(
+      options.initialEnvelope?.resourceErrors ?? {}
+    )) {
+      this.resourceStore.setResourceError(key, error);
+    }
+    if (options.initialEnvelope?.deferred?.length) {
+      const keys = [...options.initialEnvelope.deferred];
+      this.resourceStore.markPending(keys);
+      this.initialDeferredBatch = {
+        keys,
+        url: options.initialEnvelope.page.url || "/",
+      };
+    }
+    if (initialPage) {
       this.pageCache.set(
-        options.initialPage,
+        initialPage,
         this.resourceStore.exportKnownVersions()
       );
     }
@@ -131,6 +155,7 @@ export class FluxRouter {
 
   async visit(url: string, options: VisitOptions = {}): Promise<void> {
     const visitId = `visit_${++this.visitCounter}_${Date.now().toString(36)}`;
+    this.abortActiveDeferred();
     this.abortActiveVisit();
     this.currentVisitId = visitId;
 
@@ -184,6 +209,7 @@ export class FluxRouter {
         url: envelope.page.url || url,
         component: envelope.page.component,
       });
+      this.startDeferredEnvelope(envelope);
     } catch (error) {
       if (
         (error instanceof Error && error.name === "AbortError") ||
@@ -216,6 +242,20 @@ export class FluxRouter {
     });
   }
 
+  /** Start initial deferred work after hydration. Repeated calls share one request. */
+  startInitialDeferred(): Promise<void> {
+    if (this.initialDeferredPromise) return this.initialDeferredPromise;
+    if (!this.initialDeferredBatch) {
+      this.initialDeferredPromise = Promise.resolve();
+      return this.initialDeferredPromise;
+    }
+
+    const batch = this.initialDeferredBatch;
+    this.initialDeferredBatch = undefined;
+    this.initialDeferredPromise = this.startDeferredBatch(batch.keys, batch.url);
+    return this.initialDeferredPromise;
+  }
+
   /** Load a resource batch without changing the current page or browser history. */
   async loadResources(
     keys: string[],
@@ -229,6 +269,10 @@ export class FluxRouter {
     const url = options.url ?? (this.pageStore.getSnapshot().url || "/");
     const knownVersions = this.resourceStore.exportKnownVersions();
     const loadId = `resource_${options.reason}_${++this.resourceLoadCounter}_${Date.now().toString(36)}`;
+    const capturedEpochs = new Map<string, number>();
+    for (const key of requestedKeys) {
+      capturedEpochs.set(key, this.bumpResourceEpoch(key));
+    }
     this.resourceStore.markLoading(requestedKeys);
 
     try {
@@ -240,17 +284,26 @@ export class FluxRouter {
         signal: options.signal,
         headers: options.headers,
       });
-      const updatedKeys = this.resourceStore.setMany(envelope.resources);
-      this.emitResourceUpdates(updatedKeys);
-
       const returnedKeys = new Set(Object.keys(envelope.resources));
       const errorKeys = new Set(Object.keys(envelope.resourceErrors ?? {}));
-      for (const [key, error] of Object.entries(envelope.resourceErrors ?? {})) {
-        this.resourceStore.setResourceError(key, error);
-      }
-
       for (const key of requestedKeys) {
-        if (returnedKeys.has(key) || errorKeys.has(key)) continue;
+        if (this.resourceEpochs.get(key) !== capturedEpochs.get(key)) continue;
+
+        if (returnedKeys.has(key)) {
+          const record = envelope.resources[key];
+          if (this.resourceStore.set({
+            key,
+            version: record.version,
+            value: record.value,
+          })) {
+            this.events.emit("resource:update", { key, version: record.version });
+          }
+          continue;
+        }
+        if (errorKeys.has(key)) {
+          this.resourceStore.setResourceError(key, envelope.resourceErrors![key]);
+          continue;
+        }
 
         const record = this.resourceStore.getRecord(key);
         if (record) {
@@ -270,6 +323,7 @@ export class FluxRouter {
         options.signal?.aborted ||
         (error instanceof Error && error.name === "AbortError");
       for (const key of requestedKeys) {
+        if (this.resourceEpochs.get(key) !== capturedEpochs.get(key)) continue;
         const record = this.resourceStore.getRecord(key);
         if (aborted) {
           if (record) {
@@ -303,6 +357,9 @@ export class FluxRouter {
       this.transport,
       knownVersions
     );
+    for (const key of Object.keys(envelope.resources)) {
+      this.bumpResourceEpoch(key);
+    }
     this.emitResourceUpdates(this.resourceStore.setMany(envelope.resources));
     this.pageCache.set(envelope.page, this.resourceStore.exportKnownVersions());
     this.events.emit("prefetch:success", { url });
@@ -327,14 +384,18 @@ export class FluxRouter {
       for (const [key, patches] of Object.entries(
         envelope.mutation.patches ?? {}
       )) {
+        this.bumpResourceEpoch(key);
         if (this.resourceStore.patch(key, patches)) {
           const version = this.resourceStore.getRecord(key)?.version ?? "";
           this.events.emit("resource:update", { key, version });
+        } else {
+          this.resourceStore.invalidate(key);
         }
       }
 
       const activeInvalidations: string[] = [];
       for (const key of envelope.mutation.invalidate ?? []) {
+        this.bumpResourceEpoch(key);
         if (this.resourceStore.hasSubscribers(key)) {
           this.resourceStore.markStale(key);
           activeInvalidations.push(key);
@@ -364,14 +425,17 @@ export class FluxRouter {
   }
 
   clear(): void {
+    this.abortActiveDeferred();
     this.abortActiveVisit();
     this.resourceStore.clear();
     this.pageStore.clear();
     this.pageCache.clear();
     this.prefetchManager.clear();
+    this.resourceEpochs.clear();
   }
 
   destroy(): void {
+    this.abortActiveDeferred();
     this.abortActiveVisit();
     this.stopHistory();
     this.history.destroy();
@@ -379,7 +443,18 @@ export class FluxRouter {
   }
 
   private applyPageEnvelope(envelope: PageEnvelope): void {
+    const envelopeKeys = new Set([
+      ...Object.keys(envelope.resources),
+      ...Object.keys(envelope.resourceErrors ?? {}),
+      ...(envelope.deferred ?? []),
+      ...(envelope.resourceKeys ?? []),
+    ]);
+    for (const key of envelopeKeys) this.bumpResourceEpoch(key);
     this.emitResourceUpdates(this.resourceStore.setMany(envelope.resources));
+    for (const [key, error] of Object.entries(envelope.resourceErrors ?? {})) {
+      this.resourceStore.setResourceError(key, error);
+    }
+    this.resourceStore.markPending(envelope.deferred ?? []);
     this.pageStore.setPage(envelope.page);
     this.pageCache.set(envelope.page, this.resourceStore.exportKnownVersions());
   }
@@ -397,6 +472,68 @@ export class FluxRouter {
       this.activeController = null;
     }
     this.currentVisitId = null;
+  }
+
+  private bumpResourceEpoch(key: string): number {
+    const epoch = ++this.resourceEpochCounter;
+    this.resourceEpochs.set(key, epoch);
+    return epoch;
+  }
+
+  private startDeferredEnvelope(envelope: PageEnvelope): void {
+    if (!envelope.deferred?.length) return;
+    void this.startDeferredBatch(
+      envelope.deferred,
+      envelope.page.url || "/"
+    ).catch(() => undefined);
+  }
+
+  private startDeferredBatch(keys: string[], url: string): Promise<void> {
+    this.abortActiveDeferred();
+    const controller = new AbortController();
+    this.activeDeferredController = controller;
+    this.activeDeferredKeys = [...keys];
+    const promise = this.loadResources(keys, {
+      url,
+      reason: "deferred",
+      signal: controller.signal,
+    });
+    this.activeDeferredEpochs = new Map(
+      keys.map(key => [key, this.resourceEpochs.get(key) ?? 0])
+    );
+    void promise.finally(() => {
+      if (this.activeDeferredController === controller) {
+        this.activeDeferredController = null;
+        this.activeDeferredKeys = [];
+        this.activeDeferredEpochs.clear();
+      }
+    }).catch(() => undefined);
+    return promise;
+  }
+
+  private abortActiveDeferred(): void {
+    if (!this.activeDeferredController) return;
+    for (const key of this.activeDeferredKeys) {
+      if (this.resourceEpochs.get(key) !== this.activeDeferredEpochs.get(key)) {
+        continue;
+      }
+      this.bumpResourceEpoch(key);
+      const record = this.resourceStore.getRecord(key);
+      if (record) {
+        this.resourceStore.set({
+          key,
+          version: record.version,
+          value: record.value,
+        });
+        this.resourceStore.markStale(key);
+      } else {
+        this.resourceStore.invalidate(key);
+      }
+    }
+    this.activeDeferredController.abort();
+    this.activeDeferredController = null;
+    this.activeDeferredKeys = [];
+    this.activeDeferredEpochs.clear();
   }
 }
 
