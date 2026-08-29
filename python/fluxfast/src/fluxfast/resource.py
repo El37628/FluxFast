@@ -20,6 +20,7 @@ class ResourceSpec:
     scope: CacheScope = field(default_factory=scope_builder.request)
     ttl: float = 0.0
     tags: tuple[str, ...] = ()
+    defer: bool = False
 
 
 def resource(
@@ -29,6 +30,7 @@ def resource(
     scope: CacheScope | None = None,
     ttl: float = 0.0,
     tags: Sequence[str] = (),
+    defer: bool = False,
 ) -> ResourceSpec:
     """Create a ResourceSpec for a page."""
     if not isinstance(key, str) or not key.strip() or len(key) > 128:
@@ -41,6 +43,8 @@ def resource(
         raise ValueError("resource ttl must be a finite, non-negative number")
     if any(not isinstance(tag, str) or not tag for tag in tags):
         raise ValueError("resource tags must be non-empty strings")
+    if not isinstance(defer, bool):
+        raise TypeError("resource defer must be a boolean")
 
     # Cache isolation must be intentional. A positive TTL without an explicit
     # scope remains request-scoped rather than silently becoming public data.
@@ -52,4 +56,5 @@ def resource(
         scope=resolved_scope,
         ttl=ttl,
         tags=tuple(tags),
+        defer=defer,
     )

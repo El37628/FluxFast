@@ -116,3 +116,29 @@ async def test_synchronous_loaders_do_not_block_each_other():
 
     assert set(records) == {"a", "b", "c"}
     assert time.perf_counter() - started < 0.14
+
+
+@pytest.mark.anyio
+async def test_deferred_declaration_remains_blocking_before_runtime_support():
+    calls = 0
+
+    async def load_analytics():
+        nonlocal calls
+        calls += 1
+        return {"visits": 42}
+
+    page = Page(
+        component="dashboard/index",
+        resources=[resource("analytics", load_analytics, defer=True)],
+    )
+
+    records = await ResourceEngine.resolve_page_resources(
+        page=page,
+        known_versions={},
+        only_keys=None,
+        cache=MemoryResourceCache(),
+        metrics=TimingMetrics(),
+    )
+
+    assert calls == 1
+    assert records["analytics"].value == {"visits": 42}
