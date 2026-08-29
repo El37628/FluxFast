@@ -34,9 +34,12 @@ handoff unless the user explicitly asks otherwise:
   staged diff, and commit with a concise Conventional Commit message.
 - Do not amend, rebase, reset, stash, tag, or otherwise rewrite history unless
   the user explicitly requests it.
-- Never push commits or branches. Leave remote mutation to the user and report
-  the branch name, commit hash, verification performed, remaining worktree
-  changes, and suggested `git push -u origin <branch>` command.
+- Never push commits or branches. Leave Git pushes to the user and report the
+  branch name, commit hash, verification performed, remaining worktree changes,
+  and suggested `git push -u origin <branch>` command.
+- After the user confirms the branch is pushed, open a pull request against the
+  default branch with a concise summary and verification notes. Leave merging
+  to the user unless they explicitly ask otherwise.
 
 ## Performance
 
