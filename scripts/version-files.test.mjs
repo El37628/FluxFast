@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  hasDatedReleaseSection,
   prepareChangelog,
   readVersionSnapshot,
   rewriteVersionFiles,
@@ -59,4 +60,20 @@ test("rejects prerelease and incomplete versions", () => {
   for (const version of ["v1.2.3", "1.2", "1.2.3-beta.1", ""]) {
     assert.throws(() => validateStableVersion(version), /MAJOR\.MINOR\.PATCH/);
   }
+});
+
+test("matches only an exact dated release heading", () => {
+  const changelog = [
+    "## [1.2.30] - 2026-08-28",
+    "## [1.2.3] - 2026-08-29",
+    "## [1x2x3] - 2026-08-30",
+  ].join("\n");
+
+  assert.equal(hasDatedReleaseSection(changelog, "1.2.3"), true);
+  assert.equal(hasDatedReleaseSection(changelog, "1.2.30"), true);
+  assert.equal(hasDatedReleaseSection(changelog, "1.2.4"), false);
+  assert.throws(
+    () => hasDatedReleaseSection(changelog, "1.2.3.*"),
+    /MAJOR\.MINOR\.PATCH/
+  );
 });

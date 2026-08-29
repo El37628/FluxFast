@@ -8,6 +8,19 @@ export interface GenerateOptions {
 
 const PAGE_EXTENSION = /\.(tsx|jsx)$/;
 const IGNORED_PAGE = /\.(test|spec|stories)\.(tsx|jsx)$/;
+const SAFE_PAGE_FILE =
+  /^[A-Za-z0-9_.@()\[\]-]+(?:\/[A-Za-z0-9_.@()\[\]-]+)*\.(?:tsx|jsx)$/;
+
+function assertSafePageFile(file: string): void {
+  const hasTraversalSegment = file
+    .split("/")
+    .some(segment => segment === "." || segment === "..");
+  if (!SAFE_PAGE_FILE.test(file) || hasTraversalSegment) {
+    throw new TypeError(
+      `[fluxfast] Page path contains unsupported characters: ${JSON.stringify(file)}`
+    );
+  }
+}
 
 export function generatePagesRegistry(options: GenerateOptions = {}): void {
   const rootDir = process.cwd();
@@ -33,6 +46,7 @@ export function generatePagesRegistry(options: GenerateOptions = {}): void {
         !IGNORED_PAGE.test(entry.name) &&
         !entry.name.startsWith("_")
       ) {
+        assertSafePageFile(relative);
         foundFiles.push(relative);
       }
     }

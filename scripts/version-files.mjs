@@ -17,6 +17,15 @@ export function validateStableVersion(version) {
   }
 }
 
+export function hasDatedReleaseSection(changelog, version) {
+  validateStableVersion(version);
+  const headingPrefix = `## [${version}] - `;
+  return changelog.split(/\r?\n/).some(line => {
+    if (!line.startsWith(headingPrefix)) return false;
+    return /^\d{4}-\d{2}-\d{2}$/.test(line.slice(headingPrefix.length));
+  });
+}
+
 function replaceExactlyOnce(contents, pattern, replacement, file) {
   const flags = pattern.flags.includes("g")
     ? pattern.flags

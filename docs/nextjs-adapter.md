@@ -18,6 +18,9 @@ export default withFluxFast({
 The generated file exports both `fluxPages` and a client-side
 `FluxApplication`. Tests, stories, and underscore-prefixed modules are ignored.
 `npx fluxfast generate` remains available for explicit regeneration.
+Page paths may use ASCII letters, digits, `_`, `.`, `@`, parentheses, brackets,
+and hyphens, with `/` between directories and a `.tsx` or `.jsx` extension.
+Generation rejects other characters before emitting import paths into source.
 
 ```ts
 import { defineFluxConfig } from "@fluxfast/next";

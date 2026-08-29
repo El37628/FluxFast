@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import {
+  hasDatedReleaseSection,
   VERSION_FILES,
   readVersionSnapshot,
   validateStableVersion,
@@ -35,8 +36,7 @@ for (const [file, version] of Object.entries(snapshot)) {
 }
 
 const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
-const escapedVersion = expectedVersion.replaceAll(".", "\\.");
-if (!new RegExp(`^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}$`, "m").test(changelog)) {
+if (!hasDatedReleaseSection(changelog, expectedVersion)) {
   mismatches.push(`CHANGELOG.md: missing dated ${expectedVersion} release section`);
 }
 
