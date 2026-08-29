@@ -5,13 +5,16 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-29
+
 ### Added
 
 - A safe, repeatable `fluxfast init` workflow that detects compatible Next.js
   App Router projects, creates the frontend scaffold, integrates `next.config`,
   migrates the standard starter page, and generates the component registry.
 - Read-only `fluxfast init --dry-run`, `fluxfast init --check`, and
-  `fluxfast doctor` diagnostics for previewing and validating frontend setup.
+  `fluxfast doctor` diagnostics for previewing and validating frontend setup,
+  plus an explicit `init --force` repair for invalid generated catch-all files.
 - Packed clean-consumer build and live same-origin integration coverage for the
   initialized frontend.
 
@@ -32,5 +35,6 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.2.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
+[0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0

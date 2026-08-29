@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../../src/cli/index";
+import { desiredCatchAllPath, renderCatchAll } from "../../src/cli/files";
 import { detectFluxProject } from "../../src/cli/project";
 import { createTestProject, writeTestFile } from "./helpers";
 
@@ -30,6 +31,7 @@ describe("FluxFast CLI", () => {
   it("prints help without a command", () => {
     expect(runCli([], io)).toBe(0);
     expect(stdout.join("\n")).toContain("fluxfast init");
+    expect(stdout.join("\n")).toContain("--force");
     expect(stdout.join("\n")).toContain("fluxfast generate");
   });
 
@@ -90,6 +92,23 @@ describe("FluxFast CLI", () => {
     expect(fs.existsSync(rootPage)).toBe(true);
     expect(stdout.join("\n")).toContain("Manual action required");
     expect(stdout.join("\n")).toContain("then remove");
+  });
+
+  it("repairs an invalid generated catch-all only when forced", () => {
+    createTestProject(tmpDir);
+    expect(runCli(["init"], io)).toBe(0);
+    const project = detectFluxProject(tmpDir);
+    const catchAllPath = desiredCatchAllPath(project);
+    fs.writeFileSync(catchAllPath, "export default null;\n", "utf8");
+
+    stdout = [];
+    expect(runCli(["init"], io)).toBe(1);
+    expect(fs.readFileSync(catchAllPath, "utf8")).toBe("export default null;\n");
+
+    stdout = [];
+    expect(runCli(["init", "--force"], io)).toBe(0);
+    expect(fs.readFileSync(catchAllPath, "utf8")).toBe(renderCatchAll(project));
+    expect(stdout.join("\n")).toContain("--force was used");
   });
 
   it("runs explicit registry generation using the detected root layout", () => {

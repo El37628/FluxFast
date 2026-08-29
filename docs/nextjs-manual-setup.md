@@ -113,6 +113,12 @@ npx fluxfast doctor
 npm run build
 ```
 
+If `doctor` reports that an existing catch-all is invalid, review the file and
+preview the repair with `npx fluxfast init --dry-run --force`, then replace it
+with the current template using `npx fluxfast init --force`. The flag changes
+only how an existing catch-all is handled; the rest of the normal initialization
+plan still applies.
+
 The registry is deterministic. Regenerate it whenever pages are added, removed,
 or renamed; `withFluxFast()` also generates it when Next loads the config.
 

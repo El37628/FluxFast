@@ -1,6 +1,6 @@
 {
   "name": "@fluxfast/next",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "Next.js App Router adapter for FluxFast",
   "repository": {
@@ -67,7 +67,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fluxfast/core": "^0.1.0"
+    "@fluxfast/core": "^0.2.0"
   },
   "peerDependencies": {
     "next": ">=16.3.0 <17.0.0",

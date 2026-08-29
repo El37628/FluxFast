@@ -75,22 +75,22 @@ the package manifests, Python runtime version, lockfile, and dated release
 section together:
 
 ```bash
-pnpm release:prepare 0.1.0
-pnpm release:check v0.1.0
+pnpm release:prepare 0.2.0
+pnpm release:check v0.2.0
 ```
 
 Commit and review the generated version changes before tagging. Do not edit or
 move a tag after publishing.
 
 After the version change has passed review and reached `main`, release it from
-an up-to-date checkout. For version `0.1.0`:
+an up-to-date checkout. For version `0.2.0`:
 
 ```bash
 git switch main
 git pull --ff-only
-pnpm release:check v0.1.0
-git tag -a v0.1.0 -m "FluxFast 0.1.0"
-git push origin v0.1.0
+pnpm release:check v0.2.0
+git tag -a v0.2.0 -m "FluxFast 0.2.0"
+git push origin v0.2.0
 ```
 
 Approve the `pypi` and `npm` deployment jobs in GitHub when prompted. Never

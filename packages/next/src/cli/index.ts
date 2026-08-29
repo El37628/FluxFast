@@ -28,7 +28,7 @@ const defaultIo: CliIo = {
 };
 
 const USAGE = `Usage:
-  fluxfast init [--dry-run] [--yes]
+  fluxfast init [--dry-run] [--yes] [--force]
   fluxfast init --check
   fluxfast generate
   fluxfast doctor
@@ -151,7 +151,7 @@ function runCheck(io: CliIo): number {
 }
 
 function runInit(args: string[], io: CliIo): number {
-  const supportedOptions = new Set(["--dry-run", "--yes", "--check"]);
+  const supportedOptions = new Set(["--dry-run", "--yes", "--check", "--force"]);
   const unknown = args.find(argument => !supportedOptions.has(argument));
   if (unknown) {
     io.stderr(`Unknown option: ${unknown}\n\n${USAGE}`);
@@ -166,7 +166,7 @@ function runInit(args: string[], io: CliIo): number {
   }
 
   const project = detectFluxProject(io.cwd);
-  const plan = createInitPlan(project);
+  const plan = createInitPlan(project, { force: args.includes("--force") });
   if (plan.errors.length > 0) {
     io.stderr("FluxFast Setup\n");
     for (const error of plan.errors) {

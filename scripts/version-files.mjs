@@ -4,6 +4,7 @@ export const VERSION_FILES = [
   "package.json",
   "packages/core/package.json",
   "packages/next/package.json",
+  "pnpm-lock.yaml",
   "python/fluxfast/pyproject.toml",
   "python/fluxfast/src/fluxfast/__init__.py",
   "python/fluxfast/uv.lock",
@@ -50,6 +51,14 @@ export function rewriteVersionFiles(files, version) {
     rewritten[file] = `${JSON.stringify(manifest, null, 2)}\n`;
   }
 
+  const pnpmLockFile = "pnpm-lock.yaml";
+  rewritten[pnpmLockFile] = replaceExactlyOnce(
+    files[pnpmLockFile],
+    /(\n  packages\/next:\n    dependencies:\n      '@fluxfast\/core':\n        specifier: )[^\n]+/,
+    `$1^${version}`,
+    pnpmLockFile
+  );
+
   const pyprojectFile = "python/fluxfast/pyproject.toml";
   const projectSection =
     /(\[project\][\s\S]*?\nversion\s*=\s*")[^"]+("(?:\n|$))/;
@@ -84,6 +93,11 @@ export function readVersionSnapshot(files) {
   for (const file of JSON_MANIFESTS) {
     snapshot[file] = JSON.parse(files[file]).version;
   }
+
+  const pnpmLockFile = "pnpm-lock.yaml";
+  snapshot[`${pnpmLockFile} @fluxfast/core`] = files[pnpmLockFile].match(
+    /\n  packages\/next:\n    dependencies:\n      '@fluxfast\/core':\n        specifier: ([^\n]+)/
+  )?.[1];
 
   const pyprojectFile = "python/fluxfast/pyproject.toml";
   const projectSection = files[pyprojectFile].match(

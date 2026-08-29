@@ -127,6 +127,35 @@ describe("FluxFast init planner", () => {
     expect(changedOperations(plan)).toEqual([]);
   });
 
+  it("preserves an invalid catch-all unless force explicitly repairs it", () => {
+    createTestProject(tmpDir);
+    const project = detectFluxProject(tmpDir);
+    const catchAllPath = desiredCatchAllPath(project);
+    const invalidContent = "export default function CustomRoute() { return null; }\n";
+    writeTestFile(
+      tmpDir,
+      path.relative(tmpDir, catchAllPath),
+      invalidContent
+    );
+
+    const safePlan = createInitPlan(detectFluxProject(tmpDir));
+    expect(safePlan.manualActions.join("\n")).toContain("init --force");
+    expect(safePlan.operations).toContainEqual(
+      expect.objectContaining({ type: "skip", path: catchAllPath })
+    );
+
+    const forcedPlan = createInitPlan(detectFluxProject(tmpDir), { force: true });
+    expect(forcedPlan.manualActions).toEqual([]);
+    expect(forcedPlan.warnings.join("\n")).toContain("--force was used");
+    expect(forcedPlan.operations).toContainEqual({
+      type: "modify",
+      path: catchAllPath,
+      before: invalidContent,
+      after: renderCatchAll(project),
+    });
+    expect(fs.readFileSync(catchAllPath, "utf8")).toBe(invalidContent);
+  });
+
   it("rejects unsupported Next versions before planning writes", () => {
     createTestProject(tmpDir, {
       dependencies: {
