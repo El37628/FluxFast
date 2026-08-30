@@ -14,7 +14,7 @@ X-FluxFast-Protocol: 1
 X-FluxFast-Visit: visit_123
 X-FluxFast-Known: <base64url JSON object>
 X-FluxFast-Only: rooms,summary
-X-FluxFast-Capabilities: deferred-resources
+X-FluxFast-Capabilities: deferred-resources,live-resources
 ```
 
 `X-FluxFast-Known` maps logical keys to opaque versions. Limits are 100 records,
@@ -27,12 +27,14 @@ client features and is independent of `fluxfast/1`. Capability tokens contain
 only lowercase ASCII letters, digits, and hyphens. Servers bound parsing to a
 2,048-byte header, 32 tokens, and 64 characters per token; malformed and unknown
 capabilities are ignored. A missing header preserves the behavior of older
-clients. FluxFast 0.3 clients advertise `deferred-resources` on initial SSR,
-navigation, refresh, prefetch, and mutation requests.
+clients. FluxFast 0.4 clients advertise `deferred-resources` and
+`live-resources` on initial SSR, navigation, refresh, prefetch, and mutation
+requests.
 
-`deferred-resources` is the only capability defined by FluxFast 0.3. Capability
-names are published only when their wire behavior ships; experimental or future
-features must not rely on undeclared tokens.
+`deferred-resources` was introduced in FluxFast 0.3. `live-resources` is the
+additive FluxFast 0.4 extension described below. Capability names are published
+only when their wire behavior ships; experimental or future features must not
+rely on undeclared tokens.
 
 An explicitly unsupported `X-FluxFast-Protocol` receives a 409 protocol error.
 
@@ -191,15 +193,13 @@ Clients validate envelope shape and protocol before applying state. Breaking
 wire semantics require a new protocol version; optional additive fields may
 remain v1 after compatibility review.
 
-## Draft: Live Resources extension (target FluxFast 0.4)
+## Live Resources
 
-This section reserves the additive v1 wire contract for Live Resources. It is a
-design draft and is not implemented by FluxFast 0.3. Clients and servers must
-not advertise `live-resources` until their corresponding runtime behavior
-ships. The architectural rationale is recorded in
-[ADR-0004](decisions/0004-live-resource-transport.md), and the staged delivery
-and release gates are tracked in the
-[0.4 implementation handoff](v0.4-live-resources-handoff.md).
+FluxFast 0.4 implements Live Resources as an additive v1 capability. The
+architectural rationale is recorded in
+[ADR-0004](decisions/0004-live-resource-transport.md). Package versions and the
+wire protocol remain independent: this feature does not change the
+`fluxfast/1` identifier.
 
 Live events are synchronization signals, not an authoritative event log. The
 canonical value continues to come from the resource loader through the existing

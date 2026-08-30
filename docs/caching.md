@@ -61,6 +61,65 @@ worker may miss a value cached by another; the scoped loader must produce the
 same authorized result. Deferral must not rely on cache affinity for
 correctness.
 
+## Live invalidation and canonical refresh
+
+Live synchronization preserves the same cache boundary:
+
+```text
+scoped mutation or manual invalidation
+          ↓
+delete the matching server resource-cache entry
+          ↓
+publish an opaque scoped live signal
+          ↓
+browser keeps its current value visible and marks it stale
+          ↓
+resource-only request reruns the authoritative FastAPI page
+          ↓
+loader produces and caches the canonical replacement
+```
+
+Deletion must happen before publication. Otherwise a connected browser can
+react immediately and receive the old cached value. Both automatic scoped
+mutation invalidations and `flux.live.invalidate()` follow this order.
+`flux.live.patch()` also deletes first: the patch is an optimistic rendering
+hint and the subsequent canonical refresh must not settle from stale cache.
+
+Live resources require an explicit reusable scope even when `ttl=0`. Scope is
+not only a cache-reuse decision; it is also the server-owned isolation identity
+used to derive an opaque broker topic. Request scope is therefore invalid for
+`live=True`. Browser requests never contain that scope or the internal cache
+key.
+
+A browser excludes stale versions from `X-FluxFast-Known`, coalesces nearby
+events, and requests only active invalidated keys. Duplicate events can cause
+another safe refresh but cannot make an older response authoritative because
+each key has a generation. Inactive keys are invalidated locally and load when
+a future page declares them again.
+
+### Multiple workers
+
+`MemoryResourceCache` and `MemoryLiveBroker` are separate process-local
+components. Process-local resource caching remains correct with multiple
+workers because a miss simply reruns the scoped loader. Process-local live
+publication does not reach streams attached to another worker, so production
+with more than one FastAPI process must configure `RedisLiveBroker` in every
+worker.
+
+Redis Pub/Sub shares only invalidation/patch signals; it is not a distributed
+resource cache. Each worker may still hold its own scoped resource entries. The
+worker handling a mutation deletes its local entry before publishing, but a
+different worker can retain an older positive-TTL entry. Therefore a
+multi-worker live resource must use `ttl=0` with `MemoryResourceCache`, or the
+application must provide a shared/cross-worker-invalidation-aware
+`ResourceCacheBackend`. `RedisLiveBroker` does not turn `MemoryResourceCache`
+into Redis storage, and a built-in Redis resource cache is outside v0.4.
+
+Broker messages are ephemeral. Redis interruption causes streams to reconnect
+and reload all active live resources rather than replaying an event history.
+Business mutation success is isolated from publication failure after canonical
+cache invalidation.
+
 ## Browser caches
 
 `ResourceStore` has a configurable LRU bound (128 by default in the Next
@@ -81,5 +140,6 @@ evicted, invalidated, or replaced. Prefetch may return a deferred cache hit, but
 it does not execute a deferred loader on a cache miss; the real visit schedules
 that pending work.
 
-Call `router.clear()` on logout. It clears resource, page, and prefetch state so
-authenticated values cannot survive a session transition.
+Call `router.clear()` on logout. It closes the live stream and clears resource,
+page, and prefetch state so authenticated values and subscriptions cannot
+survive a session transition.
