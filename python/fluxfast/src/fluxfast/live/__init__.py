@@ -13,6 +13,11 @@ from .events import (
     LiveResyncReason,
 )
 from .memory import DEFAULT_LIVE_QUEUE_SIZE, MemoryLiveBroker
+from .redis import (
+    DEFAULT_REDIS_CHANNEL_PREFIX,
+    DEFAULT_REDIS_MAX_MESSAGE_BYTES,
+    RedisLiveBroker,
+)
 from .stream import (
     DEFAULT_LIVE_HEARTBEAT_INTERVAL,
     DEFAULT_LIVE_MAX_CONNECTION_AGE,
@@ -25,6 +30,8 @@ __all__ = [
     "DEFAULT_LIVE_HEARTBEAT_INTERVAL",
     "DEFAULT_LIVE_MAX_CONNECTION_AGE",
     "DEFAULT_LIVE_QUEUE_SIZE",
+    "DEFAULT_REDIS_CHANNEL_PREFIX",
+    "DEFAULT_REDIS_MAX_MESSAGE_BYTES",
     "LIVE_EVENT_NAME",
     "LIVE_HEARTBEAT",
     "LIVE_RESYNC_REASONS",
@@ -38,6 +45,7 @@ __all__ = [
     "LiveResyncReason",
     "LiveSubscription",
     "MemoryLiveBroker",
+    "RedisLiveBroker",
     "derive_live_topic",
     "encode_sse_event",
     "iter_live_events",

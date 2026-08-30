@@ -33,7 +33,11 @@ class FluxFast:
         broker: LiveBroker | None = None,
         live_max_connection_age: float = DEFAULT_LIVE_MAX_CONNECTION_AGE,
         live_heartbeat_interval: float = DEFAULT_LIVE_HEARTBEAT_INTERVAL,
+        *,
+        live_broker: LiveBroker | None = None,
     ):
+        if broker is not None and live_broker is not None:
+            raise ValueError("Pass either broker or live_broker, not both")
         for name, value in (
             ("live_max_connection_age", live_max_connection_age),
             ("live_heartbeat_interval", live_heartbeat_interval),
@@ -47,10 +51,14 @@ class FluxFast:
                 raise ValueError(f"{name} must be a finite positive number")
         self.app = app
         self.cache = cache if cache is not None else MemoryResourceCache()
-        self.live = LiveCoordinator(
-            self.cache,
-            broker if broker is not None else MemoryLiveBroker(),
+        configured_broker = (
+            live_broker
+            if live_broker is not None
+            else broker
+            if broker is not None
+            else MemoryLiveBroker()
         )
+        self.live = LiveCoordinator(self.cache, configured_broker)
         self.debug = debug
         self.live_max_connection_age = float(live_max_connection_age)
         self.live_heartbeat_interval = float(live_heartbeat_interval)
@@ -61,6 +69,7 @@ class FluxFast:
         self.app.state.fluxfast_live = self.live
         self.app.state.fluxfast_live_max_connection_age = self.live_max_connection_age
         self.app.state.fluxfast_live_heartbeat_interval = self.live_heartbeat_interval
+        self.app.router.add_event_handler("shutdown", self.live.close)
 
         # Setup exception handlers
         self._setup_exception_handlers()
