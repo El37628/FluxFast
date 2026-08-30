@@ -96,6 +96,10 @@ export function useResourceState<T = unknown>(
 export interface DeferredResourceResult<T = unknown>
   extends ResourceStateSnapshot<T> {
   readonly retry: () => Promise<void>;
+  readonly isLoading: boolean;
+  readonly isError: boolean;
+  readonly isReady: boolean;
+  readonly isPending: boolean;
 }
 
 /** Read a deferred resource state and retry only that resource on demand. */
@@ -110,7 +114,14 @@ export function useDeferredResource<T = unknown>(
   );
 
   return useMemo(
-    () => ({ ...state, retry }),
+    () => ({
+      ...state,
+      retry,
+      isLoading: state.status === "loading",
+      isError: state.status === "error",
+      isReady: state.status === "ready",
+      isPending: state.status === "pending",
+    }),
     [state, retry]
   );
 }

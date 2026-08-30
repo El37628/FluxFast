@@ -75,6 +75,10 @@ describe("resource hooks", () => {
       status: "pending",
       error: null,
       stale: false,
+      isPending: true,
+      isLoading: false,
+      isReady: false,
+      isError: false,
     });
 
     const retry = pending.result.retry();
@@ -82,7 +86,10 @@ describe("resource hooks", () => {
       url: "/dashboard",
       only: ["analytics"],
     }));
-    expect(renderDeferred(router, "analytics").result.status).toBe("loading");
+    const loadingResult = renderDeferred(router, "analytics").result;
+    expect(loadingResult.status).toBe("loading");
+    expect(loadingResult.isLoading).toBe(true);
+    expect(loadingResult.isPending).toBe(false);
 
     resolveRetry({
       protocol: "fluxfast/1",
@@ -99,6 +106,10 @@ describe("resource hooks", () => {
         status: "ready",
         error: null,
         stale: false,
+        isReady: true,
+        isLoading: false,
+        isError: false,
+        isPending: false,
       });
   });
 
@@ -121,6 +132,10 @@ describe("resource hooks", () => {
     const failed = renderDeferred<unknown[]>(router, "activity").result;
     expect(failed).toMatchObject({
       status: "error",
+      isError: true,
+      isLoading: false,
+      isReady: false,
+      isPending: false,
       error: {
         type: "ResourceError",
         message: "A deferred resource could not be resolved",
