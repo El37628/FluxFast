@@ -39,6 +39,18 @@ export function usePage(): PageState {
 export function useResource<T = unknown>(key: string): T {
   const router = useRouter();
 
+  if (
+    typeof process !== "undefined" &&
+    process.env?.NODE_ENV !== "production"
+  ) {
+    const status = router.resourceStore.getStateSnapshot(key).status;
+    if (status === "pending") {
+      console.warn(
+        `[fluxfast] Resource "${key}" is deferred and has not resolved yet.\n\nUse useDeferredResource("${key}") for deferred resources.`
+      );
+    }
+  }
+
   const subscribe = useCallback(
     (callback: () => void) => router.resourceStore.subscribe(key, callback),
     [router, key]

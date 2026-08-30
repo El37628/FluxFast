@@ -152,4 +152,88 @@ describe("resource hooks", () => {
     );
     expect(html).toContain("42");
   });
+
+  it("warns in development when useResource is used for a pending deferred resource", () => {
+    const router = new FluxRouter({
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: {},
+        deferred: ["analytics"],
+      },
+    });
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      function PendingProbe() {
+        const analytics = useResource<{ revenue: number }>("analytics");
+        return <span>{analytics ? String(analytics.revenue) : "none"}</span>;
+      }
+
+      const html = renderToString(
+        <FluxProvider router={router}>
+          <PendingProbe />
+        </FluxProvider>
+      );
+      expect(html).toContain("none");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[fluxfast] Resource "analytics" is deferred')
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not warn when useResource is used on a ready resource or in production", () => {
+    const router = new FluxRouter({
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+      initialResources: {
+        summary: { version: "s1", value: { count: 10 } },
+      },
+    });
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      function ReadyProbe() {
+        const summary = useResource<{ count: number }>("summary");
+        return <span>{summary.count}</span>;
+      }
+
+      renderToString(
+        <FluxProvider router={router}>
+          <ReadyProbe />
+        </FluxProvider>
+      );
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      // In production mode
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      try {
+        const deferredRouter = new FluxRouter({
+          initialEnvelope: {
+            protocol: "fluxfast/1",
+            page: { component: "dashboard/index", url: "/dashboard" },
+            resources: {},
+            deferred: ["analytics"],
+          },
+        });
+        function ProdProbe() {
+          const analytics = useResource<{ revenue: number }>("analytics");
+          return <span>{analytics ? "loaded" : "pending"}</span>;
+        }
+        renderToString(
+          <FluxProvider router={deferredRouter}>
+            <ProdProbe />
+          </FluxProvider>
+        );
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+      }
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
+
