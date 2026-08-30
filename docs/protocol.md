@@ -132,6 +132,21 @@ header count and length limits.
 The negotiation therefore adds progressive resource loading while the protocol
 identifier remains `fluxfast/1`.
 
+## Response diagnostics
+
+Every page-envelope response includes count-only deferred diagnostics alongside
+the existing cache and resource headers:
+
+```http
+X-FluxFast-Deferred-Pending: 1
+X-FluxFast-Deferred-Errors: 0
+```
+
+`X-FluxFast-Deferred-Pending` counts keys left for a deferred follow-up in that
+response. `X-FluxFast-Deferred-Errors` counts isolated deferred loader failures
+returned in `resourceErrors`. Legacy/blocking responses report zero. The headers
+never expose cache scopes, tenant identifiers, or server cache keys.
+
 ## Mutation envelope
 
 ```json
