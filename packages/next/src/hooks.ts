@@ -39,6 +39,18 @@ export function usePage(): PageState {
 export function useResource<T = unknown>(key: string): T {
   const router = useRouter();
 
+  if (
+    typeof process !== "undefined" &&
+    process.env?.NODE_ENV !== "production"
+  ) {
+    const status = router.resourceStore.getStateSnapshot(key).status;
+    if (status === "pending") {
+      console.warn(
+        `[fluxfast] Resource "${key}" is deferred and has not resolved yet.\n\nUse useDeferredResource("${key}") for deferred resources.`
+      );
+    }
+  }
+
   const subscribe = useCallback(
     (callback: () => void) => router.resourceStore.subscribe(key, callback),
     [router, key]
@@ -84,6 +96,10 @@ export function useResourceState<T = unknown>(
 export interface DeferredResourceResult<T = unknown>
   extends ResourceStateSnapshot<T> {
   readonly retry: () => Promise<void>;
+  readonly isLoading: boolean;
+  readonly isError: boolean;
+  readonly isReady: boolean;
+  readonly isPending: boolean;
 }
 
 /** Read a deferred resource state and retry only that resource on demand. */
@@ -98,7 +114,14 @@ export function useDeferredResource<T = unknown>(
   );
 
   return useMemo(
-    () => ({ ...state, retry }),
+    () => ({
+      ...state,
+      retry,
+      isLoading: state.status === "loading",
+      isError: state.status === "error",
+      isReady: state.status === "ready",
+      isPending: state.status === "pending",
+    }),
     [state, retry]
   );
 }
