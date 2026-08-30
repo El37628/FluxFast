@@ -4,6 +4,7 @@ from starlette.requests import Request
 
 from fluxfast.capabilities import (
     CAPABILITY_DEFERRED_RESOURCES,
+    CAPABILITY_LIVE_RESOURCES,
     HEADER_CAPABILITIES,
     MAX_CAPABILITIES,
     MAX_CAPABILITIES_HEADER_BYTES,
@@ -24,6 +25,7 @@ def test_missing_and_empty_capabilities_are_unsupported():
     assert parse_capabilities_header("") == frozenset()
     assert parse_capabilities_header("   ") == frozenset()
     assert not client_supports(_request(), CAPABILITY_DEFERRED_RESOURCES)
+    assert not client_supports(_request(), CAPABILITY_LIVE_RESOURCES)
 
 
 def test_supported_capability_is_detected_among_unknown_and_duplicate_tokens():
@@ -31,11 +33,18 @@ def test_supported_capability_is_detected_among_unknown_and_duplicate_tokens():
         "unknown-feature, deferred-resources,deferred-resources,live-resources"
     )
 
-    assert parsed == frozenset({CAPABILITY_DEFERRED_RESOURCES})
+    assert parsed == frozenset(
+        {CAPABILITY_DEFERRED_RESOURCES, CAPABILITY_LIVE_RESOURCES}
+    )
     assert client_supports(
-        _request("unknown-feature,deferred-resources"),
+        _request("unknown-feature,deferred-resources,live-resources"),
         CAPABILITY_DEFERRED_RESOURCES,
     )
+    assert client_supports(
+        _request("unknown-feature,deferred-resources,live-resources"),
+        CAPABILITY_LIVE_RESOURCES,
+    )
+    assert not client_supports(_request("future-feature"), "future-feature")
 
 
 def test_invalid_capability_tokens_are_ignored():

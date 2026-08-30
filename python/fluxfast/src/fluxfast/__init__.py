@@ -2,7 +2,11 @@
 
 from .app import FluxFast
 from .cache import CachedResource, MemoryResourceCache, ResourceCacheBackend
-from .capabilities import CAPABILITY_DEFERRED_RESOURCES, client_supports
+from .capabilities import (
+    CAPABILITY_DEFERRED_RESOURCES,
+    CAPABILITY_LIVE_RESOURCES,
+    client_supports,
+)
 from .errors import (
     FluxFastError,
     FluxFastLiveScopeError,
@@ -47,6 +51,7 @@ __version__ = "0.3.0"
 
 __all__ = [
     "CAPABILITY_DEFERRED_RESOURCES",
+    "CAPABILITY_LIVE_RESOURCES",
     "HEADER_CAPABILITIES",
     "PROTOCOL_MEDIA_TYPE",
     "PROTOCOL_VERSION",
