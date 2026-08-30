@@ -62,12 +62,25 @@ class MemoryLiveBroker:
         self._lock = anyio.Lock()
         self._subscribers: set[_Subscriber] = set()
         self._closed = False
+        self._queue_overflow_count = 0
 
     @property
     def subscriber_count(self) -> int:
         """Return the current in-process subscriber count."""
 
         return len(self._subscribers)
+
+    @property
+    def pending_event_count(self) -> int:
+        """Return the aggregate number of events queued for slow subscribers."""
+
+        return sum(len(subscriber.events) for subscriber in self._subscribers)
+
+    @property
+    def queue_overflow_count(self) -> int:
+        """Return how often a full subscriber queue required recovery."""
+
+        return self._queue_overflow_count
 
     async def publish(self, topic: str, event: LiveEvent) -> None:
         """Fan out an event without allowing a slow subscriber to block."""
@@ -91,6 +104,7 @@ class MemoryLiveBroker:
                 if len(subscriber.events) < self.max_queue_size:
                     subscriber.events.append(event)
                 else:
+                    self._queue_overflow_count += 1
                     keys = _event_keys(event)
                     for queued_event in subscriber.events:
                         keys.update(_event_keys(queued_event))

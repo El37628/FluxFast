@@ -99,6 +99,8 @@ async def test_queue_overflow_coalesces_into_resync() -> None:
         reason="overflow",
     )
     assert broker.subscriber_count == 1
+    assert broker.pending_event_count == 0
+    assert broker.queue_overflow_count == 1
     await stream.aclose()
     assert broker.subscriber_count == 0
 
@@ -124,6 +126,22 @@ async def test_close_wakes_and_cleans_waiting_subscribers() -> None:
     await broker.close()
     with pytest.raises(RuntimeError, match="closed"):
         await broker.publish("shared", LiveReadyEvent(keys=[]))
+
+
+@pytest.mark.anyio
+async def test_repeated_subscriber_batches_return_to_baseline() -> None:
+    broker = MemoryLiveBroker()
+
+    for _ in range(50):
+        streams = [broker.subscribe({"shared"}) for _ in range(10)]
+        async with anyio.create_task_group() as tasks:
+            for stream in streams:
+                tasks.start_soon(_receive_one, stream, [])
+            await _wait_for_subscribers(broker, 10)
+            tasks.cancel_scope.cancel()
+
+        assert broker.subscriber_count == 0
+        assert broker.pending_event_count == 0
 
 
 @pytest.mark.anyio
