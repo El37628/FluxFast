@@ -140,8 +140,11 @@ cross-origin browser deployment requires explicit FastAPI CORS configuration.
 
 `Link` renders a normal anchor and intercepts only unmodified left clicks to
 same-origin destinations with `_self` targeting and no download attribute.
-`usePage`, `useResource`, `useForm`, `useRouter`, and `useFlux` consume the stable
-client runtime.
+`usePage`, `useResource`, `useResourceState`, `useDeferredResource`, `useForm`,
+`useRouter`, and `useFlux` consume the stable client runtime. Use
+`useDeferredResource` when a key may be pending or failed; its lifecycle and
+targeted retry behavior are documented in the [deferred resources
+guide](deferred-resources.md).
 
 ## Troubleshooting
 
