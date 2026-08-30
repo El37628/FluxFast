@@ -49,10 +49,16 @@ export function FluxProvider({
   );
 
   useEffect(() => {
-    if (customRouter) return;
-    router.startHistory();
-    void router.startInitialDeferred().catch(() => undefined);
-    return () => router.stopHistory();
+    if (!customRouter) {
+      router.startHistory();
+      void router.startInitialDeferred().catch(() => undefined);
+    }
+    router.startLive();
+
+    return () => {
+      router.stopLive();
+      if (!customRouter) router.stopHistory();
+    };
   }, [customRouter, router]);
 
   return (
