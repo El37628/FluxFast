@@ -1,5 +1,6 @@
 """FluxFast FastAPI application integration and lifecycle management."""
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -10,7 +11,13 @@ from fastapi.responses import JSONResponse
 from .cache import MemoryResourceCache, ResourceCacheBackend
 from .errors import FluxFastError, ProtocolError, ResourceError
 from .headers import HEADER_FLUXFAST, HEADER_PROTOCOL, is_fluxfast_request
-from .live import LiveBroker, LiveCoordinator, MemoryLiveBroker
+from .live import (
+    DEFAULT_LIVE_HEARTBEAT_INTERVAL,
+    DEFAULT_LIVE_MAX_CONNECTION_AGE,
+    LiveBroker,
+    LiveCoordinator,
+    MemoryLiveBroker,
+)
 from .protocol import PROTOCOL_MEDIA_TYPE, PROTOCOL_VERSION, ErrorDetail, ErrorEnvelope
 from .router import FluxRouter
 
@@ -24,7 +31,20 @@ class FluxFast:
         cache: ResourceCacheBackend | None = None,
         debug: bool = False,
         broker: LiveBroker | None = None,
+        live_max_connection_age: float = DEFAULT_LIVE_MAX_CONNECTION_AGE,
+        live_heartbeat_interval: float = DEFAULT_LIVE_HEARTBEAT_INTERVAL,
     ):
+        for name, value in (
+            ("live_max_connection_age", live_max_connection_age),
+            ("live_heartbeat_interval", live_heartbeat_interval),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
+                raise ValueError(f"{name} must be a finite positive number")
         self.app = app
         self.cache = cache if cache is not None else MemoryResourceCache()
         self.live = LiveCoordinator(
@@ -32,11 +52,15 @@ class FluxFast:
             broker if broker is not None else MemoryLiveBroker(),
         )
         self.debug = debug
+        self.live_max_connection_age = float(live_max_connection_age)
+        self.live_heartbeat_interval = float(live_heartbeat_interval)
 
         # Attach cache to FastAPI app state
         self.app.state.fluxfast_cache = self.cache
         self.app.state.fluxfast_debug = self.debug
         self.app.state.fluxfast_live = self.live
+        self.app.state.fluxfast_live_max_connection_age = self.live_max_connection_age
+        self.app.state.fluxfast_live_heartbeat_interval = self.live_heartbeat_interval
 
         # Setup exception handlers
         self._setup_exception_handlers()

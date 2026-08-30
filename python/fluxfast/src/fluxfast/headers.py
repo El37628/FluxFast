@@ -21,6 +21,9 @@ HEADER_CAPABILITIES = "X-FluxFast-Capabilities"
 HEADER_APP_VERSION = "X-FluxFast-App-Version"
 HEADER_DEFERRED_PENDING = "X-FluxFast-Deferred-Pending"
 HEADER_DEFERRED_ERRORS = "X-FluxFast-Deferred-Errors"
+HEADER_LIVE = "X-FluxFast-Live"
+HEADER_LIVE_KEYS = "X-FluxFast-Live-Keys"
+HEADER_CLIENT_ID = "X-FluxFast-Client-ID"
 HEADER_SERVER_TIMING = "Server-Timing"
 
 # Header safety limits
@@ -29,6 +32,9 @@ MAX_DECODED_BYTES = 16 * 1024  # 16 KiB
 MAX_KEY_LENGTH = 128
 MAX_VERSION_LENGTH = 128
 MAX_ENCODED_CHARS = ((MAX_DECODED_BYTES + 2) // 3) * 4 + 4
+MAX_LIVE_KEYS_HEADER_BYTES = 16 * 1024
+MAX_LIVE_KEYS = 100
+MAX_CLIENT_ID_LENGTH = 64
 
 
 def is_fluxfast_request(request: Request) -> bool:
@@ -37,6 +43,12 @@ def is_fluxfast_request(request: Request) -> bool:
         return True
     accept = request.headers.get("accept", "")
     return PROTOCOL_MEDIA_TYPE in accept.lower()
+
+
+def is_live_request(request: Request) -> bool:
+    """Determine whether a page request asks for a Live Resource stream."""
+
+    return request.headers.get(HEADER_LIVE) == "1"
 
 
 def validate_protocol_header(request: Request) -> None:
@@ -118,3 +130,52 @@ def parse_only_header(header_val: str | None) -> set[str] | None:
         if (key := raw_key.strip()) and len(key) <= MAX_KEY_LENGTH
     }
     return keys if keys else None
+
+
+def parse_live_keys_header(header_val: str | None) -> set[str]:
+    """Parse strictly bounded logical keys from a live subscription request."""
+
+    if header_val is None or not header_val.strip():
+        raise ProtocolError(f"{HEADER_LIVE_KEYS} is required for a live request")
+    if len(header_val.encode("utf-8")) > MAX_LIVE_KEYS_HEADER_BYTES:
+        raise ProtocolError(
+            f"{HEADER_LIVE_KEYS} exceeds {MAX_LIVE_KEYS_HEADER_BYTES} bytes"
+        )
+
+    raw_keys = header_val.split(",")
+    if len(raw_keys) > MAX_LIVE_KEYS:
+        raise ProtocolError(
+            f"{HEADER_LIVE_KEYS} may contain at most {MAX_LIVE_KEYS} keys"
+        )
+
+    keys: set[str] = set()
+    for raw_key in raw_keys:
+        key = raw_key.strip()
+        if (
+            not key
+            or len(key) > MAX_KEY_LENGTH
+            or any(ord(char) < 32 for char in key)
+        ):
+            raise ProtocolError(
+                f"{HEADER_LIVE_KEYS} contains an invalid resource key"
+            )
+        keys.add(key)
+    return keys
+
+
+def validate_live_client_id(header_val: str | None) -> str | None:
+    """Validate an optional opaque live client identifier."""
+
+    if header_val is None:
+        return None
+    if (
+        not header_val
+        or len(header_val) > MAX_CLIENT_ID_LENGTH
+        or not header_val.isascii()
+        or any(ord(char) < 33 or ord(char) > 126 for char in header_val)
+    ):
+        raise ProtocolError(
+            f"{HEADER_CLIENT_ID} must be printable ASCII of at most "
+            f"{MAX_CLIENT_ID_LENGTH} characters"
+        )
+    return header_val
