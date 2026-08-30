@@ -13,6 +13,8 @@ from .cache import MemoryResourceCache, ResourceCacheBackend
 from .capabilities import CAPABILITY_DEFERRED_RESOURCES, client_supports
 from .engine import ResourceEngine
 from .headers import (
+    HEADER_DEFERRED_ERRORS,
+    HEADER_DEFERRED_PENDING,
     HEADER_FLUXFAST,
     HEADER_KNOWN,
     HEADER_ONLY,
@@ -154,6 +156,8 @@ class FluxRouter(APIRouter):
                         "X-FluxFast-Cache-Hits": str(metrics.cache_hits),
                         "X-FluxFast-Cache-Misses": str(metrics.cache_misses),
                         "X-FluxFast-Resources-Sent": str(metrics.resources_sent),
+                        HEADER_DEFERRED_PENDING: str(len(resolution.deferred)),
+                        HEADER_DEFERRED_ERRORS: str(len(resolution.errors)),
                     }
 
                     return JSONResponse(

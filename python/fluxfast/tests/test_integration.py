@@ -16,6 +16,8 @@ from fluxfast import (
 )
 from fluxfast.headers import (
     HEADER_CAPABILITIES,
+    HEADER_DEFERRED_ERRORS,
+    HEADER_DEFERRED_PENDING,
     HEADER_FLUXFAST,
     HEADER_KNOWN,
     HEADER_ONLY,
@@ -270,6 +272,8 @@ def test_deferred_page_metadata_requires_capability_and_only_resolves_follow_up(
     assert set(legacy.json()["resources"]) == {"summary", "analytics"}
     assert "resourceKeys" not in legacy.json()
     assert "deferred" not in legacy.json()
+    assert legacy.headers[HEADER_DEFERRED_PENDING] == "0"
+    assert legacy.headers[HEADER_DEFERRED_ERRORS] == "0"
     assert loader_counts == {"summary": 1, "analytics": 1}
 
     capable_headers = {
@@ -282,6 +286,8 @@ def test_deferred_page_metadata_requires_capability_and_only_resolves_follow_up(
     assert initial.json()["resourceKeys"] == ["summary", "analytics"]
     assert initial.json()["deferred"] == ["analytics"]
     assert "resourceErrors" not in initial.json()
+    assert initial.headers[HEADER_DEFERRED_PENDING] == "1"
+    assert initial.headers[HEADER_DEFERRED_ERRORS] == "0"
     assert loader_counts == {"summary": 2, "analytics": 1}
 
     follow_up = client.get(
@@ -292,6 +298,8 @@ def test_deferred_page_metadata_requires_capability_and_only_resolves_follow_up(
     assert set(follow_up.json()["resources"]) == {"analytics"}
     assert follow_up.json()["resourceKeys"] == ["summary", "analytics"]
     assert "deferred" not in follow_up.json()
+    assert follow_up.headers[HEADER_DEFERRED_PENDING] == "0"
+    assert follow_up.headers[HEADER_DEFERRED_ERRORS] == "0"
     assert loader_counts == {"summary": 2, "analytics": 2}
 
 
@@ -424,6 +432,8 @@ def test_deferred_follow_up_returns_successes_and_sanitized_resource_errors():
             "message": "A deferred resource could not be resolved",
         }
     }
+    assert response.headers[HEADER_DEFERRED_PENDING] == "0"
+    assert response.headers[HEADER_DEFERRED_ERRORS] == "1"
 
 
 def test_user_parameter_named_request_does_not_replace_injected_request():

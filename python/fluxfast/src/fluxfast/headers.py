@@ -19,6 +19,8 @@ HEADER_KNOWN = "X-FluxFast-Known"
 HEADER_ONLY = "X-FluxFast-Only"
 HEADER_CAPABILITIES = "X-FluxFast-Capabilities"
 HEADER_APP_VERSION = "X-FluxFast-App-Version"
+HEADER_DEFERRED_PENDING = "X-FluxFast-Deferred-Pending"
+HEADER_DEFERRED_ERRORS = "X-FluxFast-Deferred-Errors"
 HEADER_SERVER_TIMING = "Server-Timing"
 
 # Header safety limits
