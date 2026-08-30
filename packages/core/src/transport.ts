@@ -95,7 +95,7 @@ export function assertPageEnvelope(data: unknown): asserts data is PageEnvelope 
       throw new ProtocolError(`Invalid PageEnvelope resource record for '${key}'`);
     }
   }
-  for (const field of ["resourceKeys", "deferred"] as const) {
+  for (const field of ["resourceKeys", "deferred", "live"] as const) {
     const value = data[field];
     if (
       value !== undefined &&

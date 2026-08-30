@@ -10,7 +10,11 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from .cache import MemoryResourceCache, ResourceCacheBackend
-from .capabilities import CAPABILITY_DEFERRED_RESOURCES, client_supports
+from .capabilities import (
+    CAPABILITY_DEFERRED_RESOURCES,
+    CAPABILITY_LIVE_RESOURCES,
+    client_supports,
+)
 from .engine import ResourceEngine
 from .headers import (
     HEADER_DEFERRED_ERRORS,
@@ -108,6 +112,12 @@ class FluxRouter(APIRouter):
                     supports_deferred = client_supports(
                         request, CAPABILITY_DEFERRED_RESOURCES
                     )
+                    supports_live = client_supports(request, CAPABILITY_LIVE_RESOURCES)
+                    live_keys = (
+                        [spec.key for spec in result.resources if spec.live]
+                        if supports_live
+                        else []
+                    )
 
                     resolution = await ResourceEngine.resolve_page_resources(
                         page=result,
@@ -144,6 +154,7 @@ class FluxRouter(APIRouter):
                             if supports_deferred and resolution.deferred
                             else None
                         ),
+                        live=(live_keys or None),
                         resourceErrors=(resolution.errors or None),
                     )
                     payload = envelope.model_dump(mode="json", exclude_none=True)

@@ -37,9 +37,10 @@ class PageEnvelope(BaseModel):
     resources: dict[str, ResourceWireRecord[Any]] = Field(default_factory=dict)
     resourceKeys: list[str] | None = None
     deferred: list[str] | None = None
+    live: list[str] | None = None
     resourceErrors: dict[str, ResourceErrorDetail] | None = None
 
-    @field_validator("resourceKeys", "deferred", mode="before")
+    @field_validator("resourceKeys", "deferred", "live", mode="before")
     @classmethod
     def validate_resource_key_list(cls, value: Any) -> Any:
         if value is None:

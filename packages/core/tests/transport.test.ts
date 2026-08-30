@@ -57,7 +57,7 @@ describe("FetchTransport", () => {
       .toThrowError(ProtocolError);
   });
 
-  it("accepts old and additive deferred-resource page envelopes", () => {
+  it("accepts old and additive resource metadata page envelopes", () => {
     expect(() => assertPageEnvelope({
       protocol: "fluxfast/1",
       page: { component: "rooms/index", url: "/rooms" },
@@ -70,6 +70,7 @@ describe("FetchTransport", () => {
       resourceKeys: ["rooms", "analytics", "activity"],
       resources: {},
       deferred: ["analytics"],
+      live: ["rooms", "analytics"],
       resourceErrors: {
         activity: {
           type: "ResourceError",
@@ -84,6 +85,8 @@ describe("FetchTransport", () => {
     ["resourceKeys", ["rooms", 1]],
     ["deferred", { analytics: true }],
     ["deferred", [null]],
+    ["live", "rooms"],
+    ["live", [null]],
     ["resourceErrors", []],
     ["resourceErrors", { activity: { type: "ResourceError" } }],
   ])("rejects malformed page envelope %s metadata", (field, value) => {
