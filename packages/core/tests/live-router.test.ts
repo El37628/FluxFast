@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HistoryManager } from "../src/history";
 import { LiveManager } from "../src/live/manager";
 import type { LiveEvent } from "../src/live/protocol";
 import type {
@@ -321,6 +322,109 @@ describe("FluxRouter live invalidation synchronization", () => {
       url: "/reports",
       keys: ["activity"],
     });
+  });
+
+  it("restores the cached live manifest across back and forward history", async () => {
+    const history = new HistoryManager();
+    let popState!: (url: string) => void;
+    vi.spyOn(history, "onPopState").mockImplementation(callback => {
+      popState = callback;
+      return () => undefined;
+    });
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    transport.visitMock
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["summary"],
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      })
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resourceKeys: ["rooms"],
+        resources: { rooms: { version: "r1", value: [{ id: 1 }] } },
+        live: ["rooms"],
+      });
+    const router = new FluxRouter({
+      transport,
+      history,
+      liveTransport,
+      deferHistory: true,
+    });
+    router.startHistory();
+    router.startLive();
+
+    await router.visit("/dashboard");
+    await router.visit("/rooms");
+    expect(liveTransport.connections[0].closeCount).toBe(1);
+    expect(liveTransport.requests.map(request => request.keys)).toEqual([
+      ["summary"],
+      ["rooms"],
+    ]);
+
+    popState("/dashboard");
+    expect(liveTransport.connections[1].closeCount).toBe(1);
+    expect(liveTransport.requests[2]).toMatchObject({
+      url: "/dashboard",
+      keys: ["summary"],
+    });
+    expect(router.pageStore.getSnapshot().component).toBe("dashboard/index");
+
+    liveTransport.connections[1].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: {
+        rooms: [{ op: "replace-resource", value: [{ id: 99 }] }],
+      },
+    });
+    await flushMicrotasks();
+    expect(router.resourceStore.getSnapshot("rooms")).toEqual([{ id: 1 }]);
+
+    popState("/rooms");
+    expect(liveTransport.connections[2].closeCount).toBe(1);
+    expect(liveTransport.requests[3]).toMatchObject({
+      url: "/rooms",
+      keys: ["rooms"],
+    });
+    expect(router.pageStore.getSnapshot().component).toBe("rooms/index");
+    expect(transport.visitMock).toHaveBeenCalledTimes(2);
+    router.destroy();
+  });
+
+  it("stores prefetched live keys without opening a stream until navigation", async () => {
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resourceKeys: ["summary"],
+      resources: { summary: { version: "s1", value: { count: 1 } } },
+      live: ["summary"],
+    });
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      deferHistory: true,
+    });
+    router.startLive();
+
+    await router.prefetch("/dashboard");
+    expect(liveTransport.connections).toHaveLength(0);
+    expect(router.pageCache.getValid("/dashboard", router.resourceStore))
+      .toMatchObject({ liveKeys: ["summary"] });
+
+    await router.visit("/dashboard");
+    expect(transport.visitMock).toHaveBeenCalledTimes(1);
+    expect(liveTransport.requests).toEqual([
+      expect.objectContaining({
+        url: "/dashboard",
+        keys: ["summary"],
+      }),
+    ]);
+    router.destroy();
   });
 
   it("does not connect old envelopes and clears live state on logout", () => {

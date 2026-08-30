@@ -8,11 +8,13 @@ export interface CachedPage {
   readonly resources: Record<string, string>;
   readonly resourceKeys: string[];
   readonly pendingDeferred: string[];
+  readonly liveKeys: string[];
 }
 
 export interface PageCacheManifest {
   readonly resourceKeys: string[];
   readonly pendingDeferred: string[];
+  readonly liveKeys?: string[];
 }
 
 /** Lightweight LRU page cache. Resource values remain in ResourceStore. */
@@ -38,6 +40,7 @@ export class PageCache {
       resources: { ...resources },
       resourceKeys: [...resourceKeys],
       pendingDeferred: [...(manifest?.pendingDeferred ?? [])],
+      liveKeys: [...new Set(manifest?.liveKeys ?? [])],
     };
     this.entries.delete(page.url);
     this.entries.set(page.url, entry);

@@ -163,12 +163,20 @@ export class FluxRouter {
     this.stopHistoryListener = this.history.onPopState(url => {
       const cached = this.pageCache.getValid(url, this.resourceStore);
       if (cached) {
-        if (this.liveStarted) this.liveManager.disconnect();
+        if (this.liveStarted) {
+          this.supersedeLiveWork();
+          this.liveManager.disconnect();
+        }
         this.cancelPendingLiveRefresh();
         this.abortActiveDeferred();
         this.abortActiveVisit();
         this.resourceStore.markPending(cached.pendingDeferred);
         this.pageStore.setPage(cached);
+        this.liveManager.updateManifest(
+          cached.url || url,
+          cached.liveKeys
+        );
+        if (this.liveStarted) this.liveManager.connect();
         this.events.emit("cache:hit", { key: url });
         if (cached.pendingDeferred.length > 0) {
           void this.startDeferredBatch(
@@ -583,8 +591,13 @@ export class FluxRouter {
 
   private cachePageEnvelope(envelope: PageEnvelope): void {
     const allKnownVersions = this.resourceStore.exportKnownVersions();
+    const liveKeys = Array.from(new Set(envelope.live ?? []));
     if (!envelope.resourceKeys) {
-      this.pageCache.set(envelope.page, allKnownVersions);
+      this.pageCache.set(envelope.page, allKnownVersions, {
+        resourceKeys: Object.keys(allKnownVersions),
+        pendingDeferred: [],
+        liveKeys,
+      });
       return;
     }
 
@@ -599,6 +612,7 @@ export class FluxRouter {
     this.pageCache.set(envelope.page, versions, {
       resourceKeys,
       pendingDeferred,
+      liveKeys,
     });
   }
 
