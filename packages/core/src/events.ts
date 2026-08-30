@@ -4,7 +4,13 @@
 
 import type { ResourceErrorDetail } from "./protocol";
 
-export type ResourceLoadReason = "deferred" | "refresh" | "mutation" | "retry";
+export type ResourceLoadReason =
+  | "deferred"
+  | "refresh"
+  | "mutation"
+  | "retry"
+  | "live"
+  | "live-reconnect";
 
 export interface ResourceLoadEvent {
   url: string;
