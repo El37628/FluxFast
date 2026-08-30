@@ -57,6 +57,7 @@ export class LiveManager {
   private readonly onError?: (error: Error) => void;
   private readonly now: () => number;
   private readonly subscribers = new Set<() => void>();
+  private readonly eventSubscribers = new Set<(event: LiveEvent) => void>();
   private snapshot: LiveStatusSnapshot = INITIAL_STATUS;
   private manifest?: LiveManifest;
   private identity?: string;
@@ -84,6 +85,11 @@ export class LiveManager {
   subscribe(listener: () => void): () => void {
     this.subscribers.add(listener);
     return () => this.subscribers.delete(listener);
+  }
+
+  subscribeEvents(listener: (event: LiveEvent) => void): () => void {
+    this.eventSubscribers.add(listener);
+    return () => this.eventSubscribers.delete(listener);
   }
 
   /** Replace the authoritative page URL and live-key manifest. */
@@ -147,6 +153,7 @@ export class LiveManager {
   destroy(): void {
     this.clear();
     this.subscribers.clear();
+    this.eventSubscribers.clear();
   }
 
   private normalizeManifest(url: string, keys: string[]): LiveManifest | undefined {
@@ -200,13 +207,7 @@ export class LiveManager {
           connected: event.type === "ready" ? true : this.snapshot.connected,
           lastEventAt: this.now(),
         });
-        if (this.onEvent) {
-          try {
-            this.onEvent(event);
-          } catch (error) {
-            this.reportError(normalizeError(error));
-          }
-        }
+        this.emitEvent(event);
       }
       if (generation !== this.generation) return;
       this.connection = undefined;
@@ -237,6 +238,20 @@ export class LiveManager {
       this.onError?.(error);
     } catch {
       // Application diagnostics must never destabilize live synchronization.
+    }
+  }
+
+  private emitEvent(event: LiveEvent): void {
+    const listeners = [
+      ...(this.onEvent ? [this.onEvent] : []),
+      ...this.eventSubscribers,
+    ];
+    for (const listener of listeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        this.reportError(normalizeError(error));
+      }
     }
   }
 

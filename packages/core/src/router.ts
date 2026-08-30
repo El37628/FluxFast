@@ -8,6 +8,9 @@ import {
   type ResourceLoadReason,
 } from "./events";
 import { HistoryManager } from "./history";
+import { LiveManager } from "./live/manager";
+import type { LiveEvent } from "./live/protocol";
+import type { LiveTransport } from "./live/transport";
 import { MutationEnvelope, PageDescriptor, PageEnvelope } from "./protocol";
 import { PrefetchManager } from "./prefetch";
 import { PageStore, ResourceStore } from "./store";
@@ -46,6 +49,9 @@ export interface FluxRuntimeOptions {
   history?: HistoryManager;
   prefetchManager?: PrefetchManager;
   pageCache?: PageCache;
+  liveManager?: LiveManager;
+  liveTransport?: LiveTransport;
+  liveBatchDelayMs?: number;
   initialEnvelope?: PageEnvelope;
   initialPage?: PageDescriptor;
   initialResources?: PageEnvelope["resources"];
@@ -63,6 +69,7 @@ export class FluxRouter {
   public readonly history: HistoryManager;
   public readonly prefetchManager: PrefetchManager;
   public readonly pageCache: PageCache;
+  public readonly liveManager: LiveManager;
 
   private currentVisitId: string | null = null;
   private activeController: AbortController | null = null;
@@ -77,6 +84,11 @@ export class FluxRouter {
   private initialDeferredPromise?: Promise<void>;
   private readonly hardNavigate: (url: string) => void;
   private stopHistoryListener?: () => void;
+  private stopLiveEventListener?: () => void;
+  private liveStarted = false;
+  private readonly liveBatchDelayMs: number;
+  private readonly pendingLiveRefreshKeys = new Set<string>();
+  private liveRefreshTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: FluxRuntimeOptions = {}) {
     const initialPage = options.initialEnvelope?.page ?? options.initialPage;
@@ -89,6 +101,16 @@ export class FluxRouter {
     this.history = options.history ?? new HistoryManager();
     this.prefetchManager = options.prefetchManager ?? new PrefetchManager();
     this.pageCache = options.pageCache ?? new PageCache(options.maxPages);
+    const liveBatchDelayMs = options.liveBatchDelayMs ?? 15;
+    if (!Number.isFinite(liveBatchDelayMs) || liveBatchDelayMs < 0) {
+      throw new RangeError("liveBatchDelayMs must be a finite non-negative number");
+    }
+    this.liveBatchDelayMs = liveBatchDelayMs;
+    this.liveManager =
+      options.liveManager ?? new LiveManager({ transport: options.liveTransport });
+    this.stopLiveEventListener = this.liveManager.subscribeEvents(event => {
+      this.handleLiveEvent(event);
+    });
     this.hardNavigate =
       options.hardNavigate ??
       (url => {
@@ -123,6 +145,12 @@ export class FluxRouter {
         );
       }
     }
+    if (options.initialEnvelope) {
+      this.liveManager.updateManifest(
+        options.initialEnvelope.page.url || "/",
+        options.initialEnvelope.live ?? []
+      );
+    }
 
     if (!options.deferHistory) this.startHistory();
   }
@@ -132,6 +160,8 @@ export class FluxRouter {
     this.stopHistoryListener = this.history.onPopState(url => {
       const cached = this.pageCache.getValid(url, this.resourceStore);
       if (cached) {
+        if (this.liveStarted) this.liveManager.disconnect();
+        this.cancelPendingLiveRefresh();
         this.abortActiveDeferred();
         this.abortActiveVisit();
         this.resourceStore.markPending(cached.pendingDeferred);
@@ -172,6 +202,8 @@ export class FluxRouter {
     const visitId = `visit_${++this.visitCounter}_${Date.now().toString(36)}`;
     this.abortActiveDeferred();
     this.abortActiveVisit();
+    if (this.liveStarted) this.liveManager.disconnect();
+    this.cancelPendingLiveRefresh();
     this.currentVisitId = visitId;
 
     const controller = new AbortController();
@@ -226,6 +258,9 @@ export class FluxRouter {
       });
       this.startDeferredEnvelope(envelope);
     } catch (error) {
+      if (this.currentVisitId === visitId && this.liveStarted) {
+        this.liveManager.connect();
+      }
       if (
         (error instanceof Error && error.name === "AbortError") ||
         controller.signal.aborted
@@ -269,6 +304,19 @@ export class FluxRouter {
     this.initialDeferredBatch = undefined;
     this.initialDeferredPromise = this.startDeferredBatch(batch.keys, batch.url);
     return this.initialDeferredPromise;
+  }
+
+  /** Start the current page's live stream after browser hydration. */
+  startLive(): void {
+    this.liveStarted = true;
+    this.liveManager.connect();
+  }
+
+  /** Stop live synchronization while retaining the current page manifest. */
+  stopLive(): void {
+    this.liveStarted = false;
+    this.cancelPendingLiveRefresh();
+    this.liveManager.disconnect();
   }
 
   /** Load a resource batch without changing the current page or browser history. */
@@ -478,6 +526,9 @@ export class FluxRouter {
   clear(): void {
     this.abortActiveDeferred();
     this.abortActiveVisit();
+    this.liveStarted = false;
+    this.cancelPendingLiveRefresh();
+    this.liveManager.clear();
     this.resourceStore.clear();
     this.pageStore.clear();
     this.pageCache.clear();
@@ -488,6 +539,11 @@ export class FluxRouter {
   destroy(): void {
     this.abortActiveDeferred();
     this.abortActiveVisit();
+    this.liveStarted = false;
+    this.cancelPendingLiveRefresh();
+    this.stopLiveEventListener?.();
+    this.stopLiveEventListener = undefined;
+    this.liveManager.destroy();
     this.stopHistory();
     this.history.destroy();
     this.events.removeAllListeners();
@@ -507,6 +563,11 @@ export class FluxRouter {
     }
     this.resourceStore.markPending(envelope.deferred ?? []);
     this.pageStore.setPage(envelope.page);
+    this.liveManager.updateManifest(
+      envelope.page.url || "/",
+      envelope.live ?? []
+    );
+    if (this.liveStarted) this.liveManager.connect();
     this.cachePageEnvelope(envelope);
   }
 
@@ -536,6 +597,42 @@ export class FluxRouter {
       const version = this.resourceStore.getRecord(key)?.version ?? "";
       this.events.emit("resource:update", { key, version });
     }
+  }
+
+  private handleLiveEvent(event: LiveEvent): void {
+    if (event.type !== "invalidate" && event.type !== "resync") return;
+    const activeKeys = new Set(this.liveManager.getManifest()?.keys ?? []);
+    const keys = event.keys.filter(key => activeKeys.has(key));
+    if (keys.length === 0) return;
+
+    for (const key of keys) {
+      this.resourceStore.markStale(key);
+      this.events.emit("resource:invalidate", { key });
+      this.pendingLiveRefreshKeys.add(key);
+    }
+    if (this.liveRefreshTimer !== undefined) return;
+    this.liveRefreshTimer = setTimeout(() => {
+      this.liveRefreshTimer = undefined;
+      const manifest = this.liveManager.getManifest();
+      const stillActive = new Set(manifest?.keys ?? []);
+      const pending = [...this.pendingLiveRefreshKeys]
+        .filter(key => stillActive.has(key))
+        .sort();
+      this.pendingLiveRefreshKeys.clear();
+      if (!manifest || pending.length === 0 || !this.liveStarted) return;
+      void this.loadResources(pending, {
+        url: manifest.url,
+        reason: "live",
+      }).catch(() => undefined);
+    }, this.liveBatchDelayMs);
+  }
+
+  private cancelPendingLiveRefresh(): void {
+    if (this.liveRefreshTimer !== undefined) {
+      clearTimeout(this.liveRefreshTimer);
+      this.liveRefreshTimer = undefined;
+    }
+    this.pendingLiveRefreshKeys.clear();
   }
 
   private abortActiveVisit(): void {
