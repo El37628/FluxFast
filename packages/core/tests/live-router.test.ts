@@ -97,6 +97,76 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("FluxRouter live invalidation synchronization", () => {
+  it("shares one client identity and suppresses only its own live events", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    const liveManager = new LiveManager({
+      transport: liveTransport,
+      clientId: "ff_current_tab",
+    });
+    transport.mutateMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      mutation: {},
+    });
+    const router = new FluxRouter({
+      transport,
+      liveManager,
+      liveBatchDelayMs: 15,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+
+    router.startLive();
+    await router.mutate("/summary/increment");
+    expect(router.clientId).toBe("ff_current_tab");
+    expect(liveTransport.requests[0].clientId).toBe(router.clientId);
+    expect(transport.mutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: router.clientId })
+    );
+
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "invalidate",
+      keys: ["summary"],
+      originClientId: router.clientId,
+    });
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: {
+        summary: [{ op: "replace-resource", value: { count: 2 } }],
+      },
+      originClientId: router.clientId,
+    });
+    await flushMicrotasks();
+    expect(router.resourceStore.getStateSnapshot("summary")).toMatchObject({
+      data: { count: 1 },
+      stale: false,
+    });
+    expect(transport.visitMock).not.toHaveBeenCalled();
+
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: {
+        summary: [{ op: "replace-resource", value: { count: 3 } }],
+      },
+      originClientId: "ff_other_tab",
+    });
+    await flushMicrotasks();
+    expect(router.resourceStore.getStateSnapshot("summary")).toMatchObject({
+      data: { count: 3 },
+      stale: true,
+    });
+    router.destroy();
+  });
+
   it("stays disconnected during SSR, then batches active invalidations", async () => {
     vi.useFakeTimers();
     const transport = new MockTransport();

@@ -6,14 +6,14 @@ import {
   assertLiveEvent,
   LIVE_EVENT_NAME,
   LiveEvent,
-  MAX_LIVE_CLIENT_ID_LENGTH,
   MAX_LIVE_EVENT_KEYS,
   MAX_LIVE_RESOURCE_KEY_LENGTH,
 } from "./protocol";
+import { assertClientId, HEADER_CLIENT_ID } from "./client-id";
 
 export const HEADER_LIVE = "X-FluxFast-Live";
 export const HEADER_LIVE_KEYS = "X-FluxFast-Live-Keys";
-export const HEADER_CLIENT_ID = "X-FluxFast-Client-ID";
+export { HEADER_CLIENT_ID } from "./client-id";
 export const MAX_LIVE_KEYS_HEADER_BYTES = 16 * 1024;
 export const MAX_LIVE_EVENT_BYTES = 1024 * 1024;
 
@@ -66,20 +66,6 @@ export function serializeLiveKeys(keys: string[]): string {
     );
   }
   return serialized;
-}
-
-function assertClientId(clientId: string | undefined): void {
-  if (clientId === undefined) return;
-  if (
-    typeof clientId !== "string" ||
-    clientId.length === 0 ||
-    clientId.length > MAX_LIVE_CLIENT_ID_LENGTH ||
-    !/^[\x21-\x7e]+$/.test(clientId)
-  ) {
-    throw new ProtocolError(
-      `Live client ID must be printable ASCII of at most ${MAX_LIVE_CLIENT_ID_LENGTH} characters`
-    );
-  }
 }
 
 function parseFrame(frame: string): LiveEvent | undefined {

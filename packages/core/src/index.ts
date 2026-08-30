@@ -5,6 +5,7 @@
 export * from "./protocol";
 export * from "./capabilities";
 export * from "./live/protocol";
+export { assertClientId, createClientId } from "./live/client-id";
 export * from "./live/transport";
 export * from "./live/manager";
 export * from "./errors";
