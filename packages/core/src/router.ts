@@ -89,6 +89,7 @@ export class FluxRouter {
   private liveStarted = false;
   private readonly liveBatchDelayMs: number;
   private readonly pendingLiveRefreshKeys = new Set<string>();
+  private pendingLiveRefreshReason: ResourceLoadReason = "live";
   private liveRefreshTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: FluxRuntimeOptions = {}) {
@@ -626,7 +627,7 @@ export class FluxRouter {
           this.events.emit("resource:update", { key, version });
         }
       }
-      this.queueLiveRefresh(keys);
+      this.queueLiveRefresh(keys, "live");
       return;
     }
     if (event.type !== "invalidate" && event.type !== "resync") return;
@@ -638,12 +639,21 @@ export class FluxRouter {
       this.resourceStore.markStale(key);
       this.events.emit("resource:invalidate", { key });
     }
-    this.queueLiveRefresh(keys);
+    this.queueLiveRefresh(
+      keys,
+      event.type === "resync" ? "live-reconnect" : "live"
+    );
   }
 
-  private queueLiveRefresh(keys: string[]): void {
+  private queueLiveRefresh(
+    keys: string[],
+    reason: "live" | "live-reconnect"
+  ): void {
     for (const key of keys) this.pendingLiveRefreshKeys.add(key);
     if (keys.length === 0) return;
+    if (reason === "live-reconnect") {
+      this.pendingLiveRefreshReason = reason;
+    }
     if (this.liveRefreshTimer !== undefined) return;
     this.liveRefreshTimer = setTimeout(() => {
       this.liveRefreshTimer = undefined;
@@ -652,11 +662,13 @@ export class FluxRouter {
       const pending = [...this.pendingLiveRefreshKeys]
         .filter(key => stillActive.has(key))
         .sort();
+      const pendingReason = this.pendingLiveRefreshReason;
       this.pendingLiveRefreshKeys.clear();
+      this.pendingLiveRefreshReason = "live";
       if (!manifest || pending.length === 0 || !this.liveStarted) return;
       void this.loadResources(pending, {
         url: manifest.url,
-        reason: "live",
+        reason: pendingReason,
       }).catch(() => undefined);
     }, this.liveBatchDelayMs);
   }
@@ -667,6 +679,7 @@ export class FluxRouter {
       this.liveRefreshTimer = undefined;
     }
     this.pendingLiveRefreshKeys.clear();
+    this.pendingLiveRefreshReason = "live";
   }
 
   private supersedeLiveWork(): void {

@@ -1,11 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LiveEvent } from "../src/live/protocol";
-import { LiveManager } from "../src/live/manager";
+import {
+  DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS,
+  LiveManager,
+  type LiveNetworkAdapter,
+} from "../src/live/manager";
 import type {
   LiveConnection,
   LiveConnectionOptions,
   LiveTransport,
 } from "../src/live/transport";
+
+afterEach(() => vi.useRealTimers());
 
 class ControlledConnection implements LiveConnection {
   private readonly controller = new AbortController();
@@ -77,11 +83,44 @@ class ControlledTransport implements LiveTransport {
   }
 }
 
+class ControlledNetwork implements LiveNetworkAdapter {
+  private online = true;
+  private onOnline?: () => void;
+  private onOffline?: () => void;
+  public subscribed = false;
+
+  isOnline(): boolean {
+    return this.online;
+  }
+
+  subscribe(onOnline: () => void, onOffline: () => void): () => void {
+    this.subscribed = true;
+    this.onOnline = onOnline;
+    this.onOffline = onOffline;
+    return () => {
+      this.subscribed = false;
+      this.onOnline = undefined;
+      this.onOffline = undefined;
+    };
+  }
+
+  setOnline(online: boolean): void {
+    if (online === this.online) return;
+    this.online = online;
+    if (online) this.onOnline?.();
+    else this.onOffline?.();
+  }
+}
+
 const ready = (keys: string[]): LiveEvent => ({
   protocol: "fluxfast/1",
   type: "ready",
   keys,
 });
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 10; index += 1) await Promise.resolve();
+}
 
 describe("LiveManager", () => {
   it("connects explicitly, reports ready status, and disconnects cleanly", async () => {
@@ -163,6 +202,17 @@ describe("LiveManager", () => {
     })).toThrowError(/client ID/);
   });
 
+  it("rejects unsafe reconnect configuration", () => {
+    expect(() => new LiveManager({ reconnectInitialDelayMs: 0 }))
+      .toThrowError(/reconnectInitialDelayMs/);
+    expect(() => new LiveManager({
+      reconnectInitialDelayMs: 1_000,
+      reconnectMaxDelayMs: 500,
+    })).toThrowError(/reconnectMaxDelayMs/);
+    expect(() => new LiveManager({ reconnectJitter: 1.1 }))
+      .toThrowError(/reconnectJitter/);
+  });
+
   it("disconnects and clears state when the manifest becomes empty", () => {
     const transport = new ControlledTransport();
     const manager = new LiveManager({ transport });
@@ -184,6 +234,8 @@ describe("LiveManager", () => {
   it("manually reconnects with an incremented attempt", async () => {
     const transport = new ControlledTransport();
     const manager = new LiveManager({ transport, now: () => 456 });
+    const events: LiveEvent[] = [];
+    manager.subscribeEvents(event => events.push(event));
     manager.updateManifest("/dashboard", ["summary"]);
     manager.connect();
     transport.connections[0].emit(ready(["summary"]));
@@ -201,23 +253,169 @@ describe("LiveManager", () => {
     expect(transport.connections).toHaveLength(2);
     transport.connections[1].emit(ready(["summary"]));
     await vi.waitFor(() => expect(manager.getSnapshot().connected).toBe(true));
+    expect(manager.getSnapshot().reconnectAttempt).toBe(0);
+    expect(events.slice(-2)).toEqual([
+      ready(["summary"]),
+      {
+        protocol: "fluxfast/1",
+        type: "resync",
+        keys: ["summary"],
+        reason: "reconnect",
+      },
+    ]);
   });
 
-  it("moves natural completion to idle and transport failures to error", async () => {
+  it("does not resync an old reconnect after a ready listener changes manifest", async () => {
+    const transport = new ControlledTransport();
+    const manager = new LiveManager({ transport });
+    const events: LiveEvent[] = [];
+    manager.subscribeEvents(event => {
+      events.push(event);
+      if (event.type === "ready" && transport.connections.length === 2) {
+        manager.updateManifest("/reports", ["activity"]);
+      }
+    });
+    manager.updateManifest("/dashboard", ["summary"]);
+    manager.connect();
+    transport.connections[0].emit(ready(["summary"]));
+    await flushMicrotasks();
+
+    manager.reconnect();
+    transport.connections[1].emit(ready(["summary"]));
+    await flushMicrotasks();
+
+    expect(transport.connections).toHaveLength(3);
+    expect(transport.requests[2]).toMatchObject({
+      url: "/reports",
+      keys: ["activity"],
+    });
+    expect(events.filter(event => event.type === "resync")).toEqual([]);
+    manager.destroy();
+  });
+
+  it("reconnects completion and failures with capped exponential backoff", async () => {
+    vi.useFakeTimers();
     const transport = new ControlledTransport();
     const errors: Error[] = [];
-    const manager = new LiveManager({ transport, onError: error => errors.push(error) });
+    const manager = new LiveManager({
+      transport,
+      onError: error => errors.push(error),
+      reconnectJitter: 0,
+      reconnectMaxDelayMs: 1_000,
+    });
     manager.updateManifest("/dashboard", ["summary"]);
     manager.connect();
     transport.connections[0].finish();
-    await vi.waitFor(() => expect(manager.getSnapshot().status).toBe("idle"));
+    await flushMicrotasks();
+    expect(manager.getSnapshot()).toMatchObject({
+      status: "reconnecting",
+      reconnectAttempt: 1,
+    });
+    await vi.advanceTimersByTimeAsync(499);
+    expect(transport.connections).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(transport.connections).toHaveLength(2);
 
-    manager.connect();
     const failure = new Error("stream failed");
     transport.connections[1].fail(failure);
-
-    await vi.waitFor(() => expect(manager.getSnapshot().status).toBe("error"));
+    await flushMicrotasks();
+    expect(manager.getSnapshot()).toMatchObject({
+      status: "error",
+      reconnectAttempt: 2,
+    });
     expect(errors.at(-1)).toBe(failure);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(transport.connections).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(transport.connections).toHaveLength(3);
+
+    transport.connections[2].fail(new Error("still failing"));
+    await flushMicrotasks();
+    expect(manager.getSnapshot().reconnectAttempt).toBe(3);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(transport.connections).toHaveLength(4);
+    expect(DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS).toBe(10_000);
+    manager.destroy();
+  });
+
+  it("pauses offline and retries immediately when the browser returns online", async () => {
+    vi.useFakeTimers();
+    const transport = new ControlledTransport();
+    const network = new ControlledNetwork();
+    const events: LiveEvent[] = [];
+    const manager = new LiveManager({ transport, network, reconnectJitter: 0 });
+    manager.subscribeEvents(event => events.push(event));
+    manager.updateManifest("/dashboard", ["summary"]);
+    manager.connect();
+    transport.connections[0].emit(ready(["summary"]));
+    await flushMicrotasks();
+
+    network.setOnline(false);
+    expect(transport.connections[0].closeCount).toBe(1);
+    expect(manager.getSnapshot()).toMatchObject({
+      status: "offline",
+      connected: false,
+      reconnectAttempt: 1,
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(transport.connections).toHaveLength(1);
+
+    network.setOnline(true);
+    expect(transport.connections).toHaveLength(2);
+    expect(manager.getSnapshot().status).toBe("reconnecting");
+    transport.connections[1].emit(ready(["summary"]));
+    await flushMicrotasks();
+    expect(manager.getSnapshot()).toMatchObject({
+      status: "connected",
+      reconnectAttempt: 0,
+    });
+    expect(events.at(-1)).toMatchObject({
+      type: "resync",
+      reason: "reconnect",
+      keys: ["summary"],
+    });
+
+    manager.disconnect();
+    expect(network.subscribed).toBe(false);
+  });
+
+  it("honors lifecycle changes made by error callbacks", async () => {
+    vi.useFakeTimers();
+    const transport = new ControlledTransport();
+    let manager!: LiveManager;
+    manager = new LiveManager({
+      transport,
+      reconnectJitter: 0,
+      onError: () => manager.disconnect(),
+    });
+    manager.updateManifest("/dashboard", ["summary"]);
+    manager.connect();
+    transport.connections[0].fail(new Error("stop live"));
+    await flushMicrotasks();
+
+    expect(manager.getSnapshot()).toMatchObject({
+      status: "idle",
+      connected: false,
+      reconnectAttempt: 0,
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(transport.connections).toHaveLength(1);
+  });
+
+  it("does not open a connection after a status listener disconnects", () => {
+    const transport = new ControlledTransport();
+    const manager = new LiveManager({ transport });
+    manager.updateManifest("/dashboard", ["summary"]);
+    manager.subscribe(() => {
+      if (manager.getSnapshot().status === "connecting") {
+        manager.disconnect();
+      }
+    });
+
+    manager.connect();
+
+    expect(transport.connections).toHaveLength(0);
+    expect(manager.getSnapshot().status).toBe("idle");
   });
 
   it("isolates event callback errors and destroys subscriptions", async () => {

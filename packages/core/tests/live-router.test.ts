@@ -225,6 +225,64 @@ describe("FluxRouter live invalidation synchronization", () => {
     );
   });
 
+  it("canonically reloads all active keys after reconnect readiness", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {
+        activity: { version: "a2", value: ["new"] },
+        summary: { version: "s2", value: { count: 2 } },
+      },
+    });
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 5,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: {
+          activity: { version: "a1", value: ["old"] },
+          summary: { version: "s1", value: { count: 1 } },
+        },
+        live: ["summary", "activity"],
+      },
+    });
+    const resourceStarts = vi.fn();
+    router.on("resource:load:start", resourceStarts);
+    router.startLive();
+    liveTransport.connections[0].emit(ready(["activity", "summary"]));
+    await flushMicrotasks();
+
+    router.liveManager.reconnect();
+    liveTransport.connections[1].emit(ready(["activity", "summary"]));
+    await flushMicrotasks();
+    expect(router.resourceStore.isStale("activity")).toBe(true);
+    expect(router.resourceStore.isStale("summary")).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5);
+    await flushMicrotasks();
+    expect(transport.visitMock).toHaveBeenCalledWith(expect.objectContaining({
+      url: "/dashboard",
+      only: ["activity", "summary"],
+    }));
+    expect(transport.visitMock.mock.calls[0][0]).toMatchObject({
+      knownVersions: {},
+    });
+    expect(resourceStarts).toHaveBeenCalledWith({
+      url: "/dashboard",
+      keys: ["activity", "summary"],
+      reason: "live-reconnect",
+    });
+    expect(router.resourceStore.getSnapshot("activity")).toEqual(["new"]);
+    expect(router.resourceStore.getSnapshot("summary")).toEqual({ count: 2 });
+    router.destroy();
+  });
+
   it("aborts the old stream during navigation and starts the new manifest", async () => {
     const transport = new MockTransport();
     const liveTransport = new ControlledLiveTransport();
