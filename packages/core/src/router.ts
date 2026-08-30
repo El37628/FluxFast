@@ -1,7 +1,12 @@
 /** Core navigation engine and coordinator. It has no UI-framework imports. */
 
 import { PageCache } from "./cache";
-import { EventEmitter, FluxEventListener, FluxEventName } from "./events";
+import {
+  EventEmitter,
+  FluxEventListener,
+  FluxEventName,
+  type ResourceLoadReason,
+} from "./events";
 import { HistoryManager } from "./history";
 import { MutationEnvelope, PageDescriptor, PageEnvelope } from "./protocol";
 import { PrefetchManager } from "./prefetch";
@@ -20,8 +25,6 @@ export interface VisitOptions {
 export interface RefreshOptions {
   only?: string[];
 }
-
-export type ResourceLoadReason = "deferred" | "refresh" | "mutation" | "retry";
 
 export interface LoadResourcesOptions {
   url?: string;
@@ -286,6 +289,12 @@ export class FluxRouter {
       capturedEpochs.set(key, this.bumpResourceEpoch(key));
     }
     this.resourceStore.markLoading(requestedKeys);
+    const loadEvent = {
+      url,
+      keys: [...requestedKeys],
+      reason: options.reason,
+    };
+    this.events.emit("resource:load:start", loadEvent);
 
     try {
       const envelope = await this.transport.visit({
@@ -315,7 +324,13 @@ export class FluxRouter {
           continue;
         }
         if (errorKeys.has(key)) {
-          this.resourceStore.setResourceError(key, envelope.resourceErrors![key]);
+          const resourceError = envelope.resourceErrors![key];
+          this.resourceStore.setResourceError(key, resourceError);
+          this.events.emit("resource:error", {
+            ...loadEvent,
+            key,
+            error: resourceError,
+          });
           settledKeys.push(key);
           continue;
         }
@@ -335,10 +350,14 @@ export class FluxRouter {
         settledKeys.push(key);
       }
       this.pageCache.settleResources(url, settledKeys, this.resourceStore);
+      this.events.emit("resource:load:success", loadEvent);
     } catch (error) {
       const aborted =
         options.signal?.aborted ||
         (error instanceof Error && error.name === "AbortError");
+      const normalized = error instanceof Error
+        ? error
+        : new Error(String(error));
       const settledKeys: string[] = [];
       for (const key of requestedKeys) {
         if (this.resourceEpochs.get(key) !== capturedEpochs.get(key)) continue;
@@ -354,12 +373,15 @@ export class FluxRouter {
             this.resourceStore.invalidate(key);
           }
         } else {
-          const normalized = error instanceof Error
-            ? error
-            : new Error(String(error));
-          this.resourceStore.setResourceError(key, {
+          const resourceError = {
             type: normalized.name || "ResourceError",
             message: normalized.message,
+          };
+          this.resourceStore.setResourceError(key, resourceError);
+          this.events.emit("resource:error", {
+            ...loadEvent,
+            key,
+            error: resourceError,
           });
           settledKeys.push(key);
         }
@@ -367,6 +389,10 @@ export class FluxRouter {
       if (!aborted) {
         this.pageCache.settleResources(url, settledKeys, this.resourceStore);
       }
+      this.events.emit("resource:load:error", {
+        ...loadEvent,
+        error: normalized,
+      });
       throw error;
     }
   }
