@@ -16,7 +16,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   pending/loading/ready/error state, stale data, isolated per-resource errors,
   targeted retry, and convenience status booleans (`isLoading`, `isError`, `isReady`, `isPending`).
 - Helpful development-only warnings when `useResource` is used on pending deferred resources.
-- `X-FluxFast-Deferred-Loaded` diagnostic headers and client-side resource lifecycle events.
+- `X-FluxFast-Deferred-Pending` and `X-FluxFast-Deferred-Errors` diagnostic
+  headers and client-side resource lifecycle events.
 - Cancellation and per-key generation protection for deferred navigation,
   retry, refresh, and mutation races.
 - Deferred browser coverage for SSR skeletons, cache restoration, isolated

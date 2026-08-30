@@ -10,6 +10,12 @@ a clean temporary consumer. That consumer runs `fluxfast init`, builds a
 production Next application, launches its own FastAPI backend from the isolated
 wheel environment, and proves deferred skeleton-to-resource behavior in a real
 browser through one origin.
+After PyPI publication, the workflow also installs the new Python package from
+PyPI with the previously published `@fluxfast/core@0.2.0` and
+`@fluxfast/next@0.2.0` packages from npm. It runs their real application pairing
+and requires `defer=True` to remain blocking when the old client sends no
+capability header. The GitHub release is created only after this registry-backed
+mixed-version check passes.
 
 ## One-time registry setup
 
