@@ -16,6 +16,7 @@ describe("PageCache resource manifests", () => {
       {
         resourceKeys: ["summary", "analytics"],
         pendingDeferred: ["analytics"],
+        liveKeys: ["summary", "analytics", "summary"],
       }
     );
     resources.invalidate("rooms");
@@ -27,6 +28,7 @@ describe("PageCache resource manifests", () => {
       resources: { summary: "s1" },
       resourceKeys: ["summary", "analytics"],
       pendingDeferred: ["analytics"],
+      liveKeys: ["summary", "analytics"],
     });
   });
 
@@ -41,6 +43,7 @@ describe("PageCache resource manifests", () => {
       {
         resourceKeys: ["summary", "analytics"],
         pendingDeferred: ["analytics"],
+        liveKeys: ["analytics"],
       }
     );
 
@@ -57,6 +60,7 @@ describe("PageCache resource manifests", () => {
     expect(cache.getValid("/dashboard", resources)).toMatchObject({
       resources: { summary: "s1", analytics: "an1" },
       pendingDeferred: [],
+      liveKeys: ["analytics"],
     });
   });
 
