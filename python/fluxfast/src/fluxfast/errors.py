@@ -31,3 +31,6 @@ class PageNotFoundError(FluxFastError):
 class ScopeError(FluxFastError):
     """Raised on invalid cache scope usage."""
 
+
+class FluxFastLiveScopeError(ScopeError):
+    """Raised when a live resource has no stable reusable scope."""
