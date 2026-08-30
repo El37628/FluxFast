@@ -55,6 +55,65 @@ from .timing import TimingMetrics
 _DEFAULT_CACHE = MemoryResourceCache()
 
 
+def _get_live_coordinator(
+    request: Request,
+    cache: ResourceCacheBackend,
+) -> LiveCoordinator:
+    live: LiveCoordinator | None = getattr(
+        request.app.state,
+        "fluxfast_live",
+        None,
+    )
+    if live is None:
+        live = LiveCoordinator(cache, MemoryLiveBroker())
+        request.app.state.fluxfast_live = live
+    return live
+
+
+async def _render_mutation_result(
+    request: Request,
+    result: MutationResult,
+    *,
+    origin_client_id: str | None,
+) -> JSONResponse:
+    cache: ResourceCacheBackend = getattr(
+        request.app.state,
+        "fluxfast_cache",
+        _DEFAULT_CACHE,
+    )
+    live = _get_live_coordinator(request, cache)
+    for invalidation in result.invalidate or ():
+        if not isinstance(invalidation, InvalidateResource):
+            continue
+        resource_scope = invalidation.scope
+        if resource_scope is None:
+            continue
+        if resource_scope.is_cacheable:
+            await live.invalidate(
+                invalidation.key,
+                scope=resource_scope,
+                origin_client_id=origin_client_id,
+            )
+        else:
+            await cache.delete(
+                f"{resource_scope.fingerprint()}::{invalidation.key}"
+            )
+
+    envelope = result.to_envelope()
+    headers = {
+        HEADER_FLUXFAST: "1",
+        HEADER_PROTOCOL: "1",
+    }
+    if result.external_redirect:
+        headers["X-FluxFast-External-Redirect"] = result.external_redirect
+
+    return JSONResponse(
+        content=envelope.model_dump(mode="json", exclude_none=True),
+        media_type=PROTOCOL_MEDIA_TYPE,
+        headers=headers,
+    )
+
+
 class FluxRouter(APIRouter):
     """FastAPI APIRouter subclass adding FluxFast page routing capabilities."""
 
@@ -105,6 +164,9 @@ class FluxRouter(APIRouter):
                 t0 = time.perf_counter()
                 assert request is not None, "Request must be present for FluxFast page rendering"
                 validate_protocol_header(request)
+                origin_client_id = validate_live_client_id(
+                    request.headers.get(HEADER_CLIENT_ID)
+                )
 
                 # Execute route function (handles dependencies and page construction)
                 if inspect.iscoroutinefunction(func):
@@ -129,15 +191,7 @@ class FluxRouter(APIRouter):
                         requested_live_keys = parse_live_keys_header(
                             request.headers.get(HEADER_LIVE_KEYS)
                         )
-                        validate_live_client_id(
-                            request.headers.get(HEADER_CLIENT_ID)
-                        )
-                        live: LiveCoordinator | None = getattr(
-                            request.app.state, "fluxfast_live", None
-                        )
-                        if live is None:
-                            live = LiveCoordinator(cache, MemoryLiveBroker())
-                            request.app.state.fluxfast_live = live
+                        live = _get_live_coordinator(request, cache)
                         subscription = live.resolve_subscription(
                             result,
                             requested_live_keys,
@@ -247,25 +301,10 @@ class FluxRouter(APIRouter):
 
                 elif isinstance(result, MutationResult):
                     assert request is not None
-                    cache = getattr(request.app.state, "fluxfast_cache", _DEFAULT_CACHE)
-                    if result.invalidate:
-                        for inv in result.invalidate:
-                            if isinstance(inv, InvalidateResource) and inv.scope is not None:
-                                key = f"{inv.scope.fingerprint()}::{inv.key}"
-                                await cache.delete(key)
-
-                    envelope = result.to_envelope()
-                    headers = {
-                        HEADER_FLUXFAST: "1",
-                        HEADER_PROTOCOL: "1",
-                    }
-                    if result.external_redirect:
-                        headers["X-FluxFast-External-Redirect"] = result.external_redirect
-
-                    return JSONResponse(
-                        content=envelope.model_dump(mode="json", exclude_none=True),
-                        media_type=PROTOCOL_MEDIA_TYPE,
-                        headers=headers,
+                    return await _render_mutation_result(
+                        request,
+                        result,
+                        origin_client_id=origin_client_id,
                     )
 
                 return result
@@ -326,6 +365,9 @@ class FluxRouter(APIRouter):
 
                 assert request is not None, "Request must be present for FluxFast mutation rendering"
                 validate_protocol_header(request)
+                origin_client_id = validate_live_client_id(
+                    request.headers.get(HEADER_CLIENT_ID)
+                )
 
                 if inspect.iscoroutinefunction(func):
                     result = await func(*fn_args, **call_kwargs)
@@ -335,25 +377,10 @@ class FluxRouter(APIRouter):
                         result = await result
 
                 if isinstance(result, MutationResult):
-                    cache = getattr(request.app.state, "fluxfast_cache", _DEFAULT_CACHE)
-                    if result.invalidate:
-                        for inv in result.invalidate:
-                            if isinstance(inv, InvalidateResource) and inv.scope is not None:
-                                key = f"{inv.scope.fingerprint()}::{inv.key}"
-                                await cache.delete(key)
-
-                    envelope = result.to_envelope()
-                    headers = {
-                        HEADER_FLUXFAST: "1",
-                        HEADER_PROTOCOL: "1",
-                    }
-                    if result.external_redirect:
-                        headers["X-FluxFast-External-Redirect"] = result.external_redirect
-
-                    return JSONResponse(
-                        content=envelope.model_dump(mode="json", exclude_none=True),
-                        media_type=PROTOCOL_MEDIA_TYPE,
-                        headers=headers,
+                    return await _render_mutation_result(
+                        request,
+                        result,
+                        origin_client_id=origin_client_id,
                     )
                 return result
 

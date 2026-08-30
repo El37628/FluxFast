@@ -6,7 +6,9 @@ from fastapi.testclient import TestClient
 
 from fluxfast import (
     FluxFast,
+    LiveInvalidateEvent,
     append_item,
+    derive_live_topic,
     flux_external_redirect,
     flux_redirect,
     invalidate_resource,
@@ -17,6 +19,23 @@ from fluxfast import (
     replace_resource,
     scope,
 )
+from fluxfast.headers import HEADER_CLIENT_ID, HEADER_FLUXFAST
+
+
+class RecordingCache:
+    def __init__(self):
+        self.deleted: list[str] = []
+
+    async def delete(self, key: str) -> None:
+        self.deleted.append(key)
+
+
+class RecordingBroker:
+    def __init__(self):
+        self.published: list[tuple[str, LiveInvalidateEvent]] = []
+
+    async def publish(self, topic: str, event: LiveInvalidateEvent) -> None:
+        self.published.append((topic, event))
 
 
 def test_mutation_envelope_building():
@@ -104,3 +123,93 @@ def test_mutation_response_omits_unset_optional_wire_fields():
             "rooms": [{"op": "append-item", "value": {"id": 2}}],
         }
     }
+
+
+def test_scoped_mutation_invalidations_publish_with_origin_metadata():
+    app = FastAPI()
+    cache = RecordingCache()
+    broker = RecordingBroker()
+    flux = FluxFast(app, cache=cache, broker=broker)
+    tenant_scope = scope.tenant("hotel-1")
+    user_scope = scope.user("alice")
+    request_scope = scope.request()
+
+    @flux.mutation("/rooms/checkout")
+    async def checkout_room():
+        return mutation(
+            invalidates=[
+                invalidate_resource("summary", scope=tenant_scope),
+                "local-only",
+                invalidate_resource("volatile", scope=request_scope),
+                invalidate_resource("notifications", scope=user_scope),
+            ]
+        )
+
+    response = TestClient(app).post(
+        "/rooms/checkout",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_CLIENT_ID: "ff_current_tab",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mutation"]["invalidate"] == [
+        "summary",
+        "local-only",
+        "volatile",
+        "notifications",
+    ]
+    assert cache.deleted == [
+        f"{tenant_scope.fingerprint()}::summary",
+        f"{request_scope.fingerprint()}::volatile",
+        f"{user_scope.fingerprint()}::notifications",
+    ]
+    assert broker.published == [
+        (
+            derive_live_topic(tenant_scope, "summary"),
+            LiveInvalidateEvent(
+                keys=["summary"],
+                originClientId="ff_current_tab",
+            ),
+        ),
+        (
+            derive_live_topic(user_scope, "notifications"),
+            LiveInvalidateEvent(
+                keys=["notifications"],
+                originClientId="ff_current_tab",
+            ),
+        ),
+    ]
+
+
+def test_invalid_mutation_client_identity_is_rejected_before_handler():
+    app = FastAPI()
+    cache = RecordingCache()
+    broker = RecordingBroker()
+    flux = FluxFast(app, cache=cache, broker=broker)
+    calls = 0
+
+    @flux.mutation("/rooms")
+    async def update_rooms():
+        nonlocal calls
+        calls += 1
+        return mutation(
+            invalidates=[
+                invalidate_resource("rooms", scope=scope.public()),
+            ]
+        )
+
+    response = TestClient(app).post(
+        "/rooms",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_CLIENT_ID: "contains space",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["type"] == "ProtocolError"
+    assert calls == 0
+    assert cache.deleted == []
+    assert broker.published == []
