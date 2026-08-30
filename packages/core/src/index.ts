@@ -5,6 +5,7 @@
 export * from "./protocol";
 export * from "./capabilities";
 export * from "./live/protocol";
+export * from "./live/transport";
 export * from "./errors";
 export * from "./events";
 export * from "./mutation";
