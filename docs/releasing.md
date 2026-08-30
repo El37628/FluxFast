@@ -5,6 +5,11 @@ Stable releases publish the same version to PyPI, `@fluxfast/core`, and
 `.github/workflows/release.yml`. The workflow validates versions, runs all
 tests, builds and smoke-tests the distributions, publishes through short-lived
 OIDC credentials, and creates a GitHub release containing those distributions.
+Before publication, the built wheel and npm tarballs are installed together in
+a clean temporary consumer. That consumer runs `fluxfast init`, builds a
+production Next application, launches its own FastAPI backend from the isolated
+wheel environment, and proves deferred skeleton-to-resource behavior in a real
+browser through one origin.
 
 ## One-time registry setup
 

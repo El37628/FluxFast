@@ -15,8 +15,12 @@ const artifactRoot = configuredArtifactRoot
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const localPython = path.join(repositoryRoot, ".venv", "bin", "python");
+const pythonCommand = process.env.FLUXFAST_E2E_PYTHON ?? (
+  fs.existsSync(localPython) ? localPython : "python"
+);
 
-function run(command, args, cwd = repositoryRoot) {
+function run(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
   const childEnvironment = { ...process.env };
   for (const key of Object.keys(childEnvironment)) {
     const normalized = key.toLowerCase();
@@ -33,6 +37,7 @@ function run(command, args, cwd = repositoryRoot) {
     env: {
       ...childEnvironment,
       NEXT_TELEMETRY_DISABLED: "1",
+      ...extraEnvironment,
     },
     stdio: "inherit",
   });
@@ -40,6 +45,61 @@ function run(command, args, cwd = repositoryRoot) {
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} exited with status ${result.status}`);
   }
+}
+
+function findPythonArtifact() {
+  const matches = fs
+    .readdirSync(artifactRoot)
+    .filter(file => file.startsWith("fluxfast-") && file.endsWith(".whl"));
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected exactly one fluxfast-*.whl artifact in ${artifactRoot}; found ${matches.length}.`
+    );
+  }
+  return path.join(artifactRoot, matches[0]);
+}
+
+function prepareIsolatedPython() {
+  fs.mkdirSync(artifactRoot, { recursive: true });
+  const environmentRoot = path.join(temporaryRoot, "python-environment");
+  run(pythonCommand, ["-m", "venv", environmentRoot]);
+  const isolatedPython = process.platform === "win32"
+    ? path.join(environmentRoot, "Scripts", "python.exe")
+    : path.join(environmentRoot, "bin", "python");
+  run(isolatedPython, ["-m", "ensurepip", "--upgrade"]);
+
+  const existingWheels = fs
+    .readdirSync(artifactRoot)
+    .filter(file => file.startsWith("fluxfast-") && file.endsWith(".whl"));
+  if (existingWheels.length === 0) {
+    run(isolatedPython, [
+      "-m",
+      "pip",
+      "wheel",
+      "--no-deps",
+      "--wheel-dir",
+      artifactRoot,
+      path.join(repositoryRoot, "python", "fluxfast"),
+    ]);
+  }
+
+  run(
+    isolatedPython,
+    ["-m", "pip", "install", findPythonArtifact()],
+    consumerRoot,
+    { PYTHONPATH: "" }
+  );
+  run(
+    isolatedPython,
+    [
+      "-c",
+      "import sys; from pathlib import Path; import fluxfast; "
+        + "assert Path(fluxfast.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())",
+    ],
+    consumerRoot,
+    { PYTHONPATH: "" }
+  );
+  return isolatedPython;
 }
 
 function findArtifact(packageName) {
@@ -102,16 +162,22 @@ try {
   run(npmCommand, ["run", "verify:dry-run"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
   run(npmCommand, ["run", "verify:init"], consumerRoot);
+  fs.copyFileSync(
+    path.join(consumerRoot, "fixtures", "deferred-home.tsx"),
+    path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx")
+  );
   run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "doctor"], consumerRoot);
   run(npmCommand, ["run", "typecheck"], consumerRoot);
   run(npmCommand, ["run", "build"], consumerRoot);
   if (process.env.FLUXFAST_RUN_LIVE === "1") {
+    const isolatedPython = prepareIsolatedPython();
     run(
       process.execPath,
       [path.join(repositoryRoot, "scripts", "test-next-init-live.mjs"), consumerRoot],
-      repositoryRoot
+      repositoryRoot,
+      { FLUXFAST_E2E_PYTHON: isolatedPython, PYTHONPATH: "" }
     );
   }
 
