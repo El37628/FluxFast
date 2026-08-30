@@ -16,10 +16,8 @@ const localPython = path.join(repositoryRoot, ".venv", "bin", "python");
 const python =
   process.env.FLUXFAST_E2E_PYTHON ??
   (fs.existsSync(localPython) ? localPython : "python");
-const requireFromBrowserFixture = createRequire(
-  path.join(repositoryRoot, "tests", "browser", "frontend", "package.json")
-);
-const { chromium } = requireFromBrowserFixture("@playwright/test");
+const requireFromConsumer = createRequire(path.join(consumerRoot, "package.json"));
+const { chromium } = requireFromConsumer("@playwright/test");
 
 function delay(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -108,7 +106,7 @@ try {
       if (response.ok) {
         html = await response.text();
         if (
-          html.includes("Clean deferred consumer") &&
+          html.includes("Clean live consumer") &&
           html.includes("Loading analytics")
         ) {
           break;
@@ -121,62 +119,94 @@ try {
   }
 
   assert.equal(typeof html, "string", `Frontend did not become ready.\n${output}`);
-  assert.match(html, /Clean deferred consumer/);
+  assert.match(html, /Clean live consumer/);
   assert.match(html, /Loading analytics/);
 
   const protocolResponse = await fetch(frontendUrl, {
     headers: {
       "x-fluxfast": "1",
       "x-fluxfast-protocol": "1",
-      "x-fluxfast-capabilities": "deferred-resources",
+      "x-fluxfast-capabilities": "deferred-resources,live-resources",
     },
   });
   assert.equal(protocolResponse.ok, true);
   const envelope = await protocolResponse.json();
   assert.equal(envelope.page.component, "home/index");
-  assert.deepEqual(envelope.resourceKeys, ["analytics"]);
-  assert.deepEqual(envelope.deferred, ["analytics"]);
-  assert.deepEqual(envelope.resources, {});
+  assert.deepEqual(
+    [...envelope.resourceKeys].sort(),
+    ["analytics", "live-counter", "live-report"]
+  );
+  assert.deepEqual([...envelope.deferred].sort(), ["analytics", "live-report"]);
+  assert.deepEqual(envelope.live, ["live-counter", "live-report"]);
+  assert.deepEqual(envelope.resources["live-counter"].value, { value: 0 });
   assert.equal(new URL(protocolResponse.url).origin, new URL(frontendUrl).origin);
 
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const firstContext = await browser.newContext();
+  const secondContext = await browser.newContext();
+  const first = await firstContext.newPage();
+  const second = await secondContext.newPage();
   const browserErrors = [];
   const resourceBatches = [];
   const protocolOrigins = [];
   let documentRequests = 0;
-  page.on("pageerror", error => browserErrors.push(error.message));
-  page.on("console", message => {
-    if (message.type() === "error") browserErrors.push(message.text());
-  });
-  page.on("request", request => {
+  for (const page of [first, second]) {
+    page.on("pageerror", error => browserErrors.push(error.message));
+    page.on("console", message => {
+      if (message.type() === "error") browserErrors.push(message.text());
+    });
+  }
+  second.on("request", request => {
     if (request.resourceType() === "document") documentRequests += 1;
     const headers = request.headers();
-    if (headers["x-fluxfast"] === "1") {
-      protocolOrigins.push(new URL(request.url()).origin);
-    }
+    if (headers["x-fluxfast"] === "1") protocolOrigins.push(new URL(request.url()).origin);
     if (headers["x-fluxfast-only"]) {
       resourceBatches.push(headers["x-fluxfast-only"].split(",").sort());
     }
   });
 
-  await page.goto(frontendUrl);
-  await page.locator("[data-testid=analytics-loading]").waitFor();
+  await Promise.all([first.goto(frontendUrl), second.goto(frontendUrl)]);
+  await second.locator("[data-testid=analytics-loading]").waitFor();
   assert.equal(
-    await page.getByRole("heading", { name: "Clean deferred consumer" }).isVisible(),
+    await second.getByRole("heading", { name: "Clean live consumer" }).isVisible(),
     true
   );
-  const analytics = page.locator("[data-testid=analytics-value]");
+  const analytics = second.locator("[data-testid=analytics-value]");
   await analytics.waitFor({ timeout: 10_000 });
-  assert.match(await analytics.textContent(), /Revenue 120000 from loader 1/);
-  assert.deepEqual(resourceBatches, [["analytics"]]);
+  assert.match(await analytics.textContent(), /Revenue 120000 from loader [12]/);
+  await Promise.all([
+    first.locator("[data-testid=live-status]").waitFor(),
+    second.locator("[data-testid=live-status]").waitFor(),
+  ]);
+  await Promise.all([
+    first.locator("[data-testid=live-report-value]").waitFor(),
+    second.locator("[data-testid=live-report-value]").waitFor(),
+  ]);
+  assert.equal(await first.locator("[data-testid=live-status]").textContent(), "connected");
+  assert.equal(await second.locator("[data-testid=live-status]").textContent(), "connected");
+  assert.equal(await second.locator("[data-testid=live-counter-value]").textContent(), "0");
+  assert.equal(await second.locator("[data-testid=live-report-value]").textContent(), "0");
+
+  resourceBatches.length = 0;
+  await first.getByRole("button", { name: "Increment live resources" }).click();
+  await second.locator("[data-testid=live-counter-value]").filter({ hasText: "1" }).waitFor();
+  await second.locator("[data-testid=live-report-value]").filter({ hasText: "1" }).waitFor();
+  assert.equal(await second.locator("[data-testid=live-report-stale]").count(), 0);
+  assert.equal(
+    resourceBatches.some(keys => keys.includes("live-counter")),
+    true
+  );
+  assert.equal(
+    resourceBatches.some(keys => keys.includes("live-report")),
+    true
+  );
   assert.equal(documentRequests, 1);
-  assert.equal(protocolOrigins.length, 1);
-  assert.equal(protocolOrigins[0], new URL(frontendUrl).origin);
+  assert.equal(protocolOrigins.length > 0, true);
+  assert.deepEqual([...new Set(protocolOrigins)], [new URL(frontendUrl).origin]);
   assert.deepEqual(browserErrors, []);
 
   console.log(
-    `Initialized packed consumer rendered deferred FastAPI resource analytics at ${frontendUrl}.`
+    `Initialized packed consumer synchronized live resources across two clients at ${frontendUrl}.`
   );
 } finally {
   await browser?.close();

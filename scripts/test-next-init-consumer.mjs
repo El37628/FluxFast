@@ -115,6 +115,15 @@ function findArtifact(packageName) {
   return path.join(artifactRoot, matches[0]);
 }
 
+function assertIsolatedNpmPackage(packageName) {
+  const packageRoot = fs.realpathSync(
+    path.join(consumerRoot, "node_modules", ...packageName.split("/"))
+  );
+  if (!packageRoot.startsWith(`${consumerRoot}${path.sep}`)) {
+    throw new Error(`${packageName} resolved outside the isolated consumer: ${packageRoot}`);
+  }
+}
+
 try {
   if (!configuredArtifactRoot) {
     if (process.env.FLUXFAST_SKIP_BUILD !== "1") {
@@ -156,6 +165,8 @@ try {
     ],
     consumerRoot
   );
+  assertIsolatedNpmPackage("@fluxfast/core");
+  assertIsolatedNpmPackage("@fluxfast/next");
 
   run(npxCommand, ["--no-install", "fluxfast", "--help"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "init", "--dry-run"], consumerRoot);
