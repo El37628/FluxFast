@@ -61,7 +61,7 @@ jobs:
           npm pack ./packages/core --pack-destination release/npm
           npm pack ./packages/next --pack-destination release/npm
           python -m twine check release/python/*
-      - name: Verify combined artifacts in a clean deferred consumer
+      - name: Verify combined artifacts in a clean live consumer
         env:
           FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-deferred-consumer/artifacts
           FLUXFAST_E2E_PYTHON: python
