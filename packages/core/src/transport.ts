@@ -15,6 +15,7 @@ import {
   VersionMismatchError,
 } from "./errors";
 import { HEADER_CAPABILITIES, serializeCapabilities } from "./capabilities";
+import { assertClientId, HEADER_CLIENT_ID } from "./live/client-id";
 
 const MAX_KNOWN_RESOURCES = 100;
 const MAX_KNOWN_BYTES = 16 * 1024;
@@ -34,6 +35,7 @@ export interface MutationTransportRequest {
   url: string;
   method?: string;
   data?: unknown;
+  clientId?: string;
   signal?: AbortSignal;
   headers?: Record<string, string>;
 }
@@ -221,6 +223,7 @@ export class FetchTransport implements FluxTransport {
   }
 
   async mutate(request: MutationTransportRequest): Promise<MutationEnvelope> {
+    assertClientId(request.clientId);
     const headers: Record<string, string> = {
       ...(request.headers ?? {}),
       Accept: PROTOCOL_MEDIA_TYPE,
@@ -229,6 +232,7 @@ export class FetchTransport implements FluxTransport {
       "X-FluxFast-Protocol": "1",
       [HEADER_CAPABILITIES]: serializeCapabilities(),
     };
+    if (request.clientId) headers[HEADER_CLIENT_ID] = request.clientId;
     const response = await fetch(this.resolveUrl(request.url), {
       method: request.method ?? "POST",
       headers,

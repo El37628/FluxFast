@@ -1,6 +1,7 @@
 /** Framework-neutral lifecycle manager for one logical Live Resource connection. */
 
 import type { LiveEvent } from "./protocol";
+import { assertClientId, createClientId } from "./client-id";
 import {
   createFetchSseLiveTransport,
   type LiveConnection,
@@ -50,8 +51,8 @@ function normalizeError(error: unknown): Error {
 
 export class LiveManager {
   public readonly transport: LiveTransport;
+  public readonly clientId: string;
 
-  private readonly clientId?: string;
   private readonly headers?: Record<string, string>;
   private readonly onEvent?: (event: LiveEvent) => void;
   private readonly onError?: (error: Error) => void;
@@ -67,7 +68,8 @@ export class LiveManager {
 
   constructor(options: LiveManagerOptions = {}) {
     this.transport = options.transport ?? createFetchSseLiveTransport();
-    this.clientId = options.clientId;
+    assertClientId(options.clientId);
+    this.clientId = options.clientId ?? createClientId();
     this.headers = options.headers ? { ...options.headers } : undefined;
     this.onEvent = options.onEvent;
     this.onError = options.onError;

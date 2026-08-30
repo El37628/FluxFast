@@ -70,6 +70,7 @@ export class FluxRouter {
   public readonly prefetchManager: PrefetchManager;
   public readonly pageCache: PageCache;
   public readonly liveManager: LiveManager;
+  public readonly clientId: string;
 
   private currentVisitId: string | null = null;
   private activeController: AbortController | null = null;
@@ -108,6 +109,7 @@ export class FluxRouter {
     this.liveBatchDelayMs = liveBatchDelayMs;
     this.liveManager =
       options.liveManager ?? new LiveManager({ transport: options.liveTransport });
+    this.clientId = this.liveManager.clientId;
     this.stopLiveEventListener = this.liveManager.subscribeEvents(event => {
       this.handleLiveEvent(event);
     });
@@ -479,6 +481,7 @@ export class FluxRouter {
         data,
         method: options.method ?? "POST",
         headers: options.headers,
+        clientId: this.clientId,
       });
 
       for (const [key, patches] of Object.entries(
@@ -606,6 +609,13 @@ export class FluxRouter {
   }
 
   private handleLiveEvent(event: LiveEvent): void {
+    if (
+      (event.type === "invalidate" || event.type === "patch") &&
+      event.originClientId === this.clientId
+    ) {
+      return;
+    }
+
     const activeKeys = new Set(this.liveManager.getManifest()?.keys ?? []);
     if (event.type === "patch") {
       const keys = Object.keys(event.patches).filter(key => activeKeys.has(key));

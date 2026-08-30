@@ -133,6 +133,7 @@ describe("LiveManager", () => {
   it("keeps one connection for an identical manifest and restarts changes", () => {
     const transport = new ControlledTransport();
     const manager = new LiveManager({ transport });
+    expect(manager.clientId).toMatch(/^ff_[0-9a-f]{32}$/);
     manager.updateManifest("/dashboard", ["summary"]);
     manager.connect();
 
@@ -148,6 +149,18 @@ describe("LiveManager", () => {
     manager.updateManifest("/reports", ["activity", "summary"]);
     expect(transport.connections[1].closeCount).toBe(1);
     expect(transport.connections).toHaveLength(3);
+    expect(transport.requests.map(request => request.clientId)).toEqual([
+      manager.clientId,
+      manager.clientId,
+      manager.clientId,
+    ]);
+  });
+
+  it("rejects invalid configured client identities", () => {
+    expect(() => new LiveManager({
+      transport: new ControlledTransport(),
+      clientId: "contains space",
+    })).toThrowError(/client ID/);
   });
 
   it("disconnects and clears state when the manifest becomes empty", () => {

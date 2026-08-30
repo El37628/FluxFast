@@ -7,6 +7,7 @@ import {
 } from "../src/transport";
 import { MutationError, ProtocolError, ValidationError } from "../src/errors";
 import { HEADER_CAPABILITIES, serializeCapabilities } from "../src/capabilities";
+import { HEADER_CLIENT_ID } from "../src/live/transport";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -26,13 +27,27 @@ describe("FetchTransport", () => {
     const transport = new FetchTransport();
 
     await transport.visit({ url: "/rooms", visitId: "visit_1" });
-    await transport.mutate({ url: "/rooms", data: {} });
+    await transport.mutate({ url: "/rooms", data: {}, clientId: "ff_tab" });
 
     for (const call of fetchMock.mock.calls) {
       expect(call[1]?.headers).toMatchObject({
         [HEADER_CAPABILITIES]: serializeCapabilities(),
       });
     }
+    expect(fetchMock.mock.calls[1][1]?.headers).toMatchObject({
+      [HEADER_CLIENT_ID]: "ff_tab",
+    });
+  });
+
+  it("rejects invalid mutation client identities before fetching", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new FetchTransport().mutate({
+      url: "/rooms",
+      clientId: "contains space",
+    })).rejects.toThrowError(/client ID/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("encodes unicode known-resource metadata as base64url", () => {
