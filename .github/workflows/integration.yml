@@ -18,6 +18,7 @@ jobs:
       - run: pytest -q python/fluxfast/tests/test_integration.py
       - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_cross_page.py
       - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_deferred.py --samples 1
+      - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_live.py --samples 3 --flood-events 1000 --cleanup-connections 100
 
   redis:
     name: Redis multi-worker

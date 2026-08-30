@@ -21,7 +21,7 @@ complete-props endpoint and the FluxFast routes. Run it on the target machine:
 pnpm benchmark
 ```
 
-The command runs both controlled scenarios. The cross-page script reports
+The command runs all controlled scenarios. The cross-page script reports
 observed duration and bytes for the initial dashboard, complete rooms props,
 and the resource delta. It also asserts that the four shared values are absent
 and their loaders executed only once.
@@ -67,3 +67,43 @@ Wall-clock results vary by machine. Run `pnpm benchmark` on the target system
 and use its output instead of treating this reference run as a guarantee.
 Browser rendering, retry, navigation-race, and mutation behavior are covered by
 the separate Playwright integration suite.
+
+## Live Resource Scenario
+
+The live benchmark exercises the in-process `MemoryLiveBroker` and an actual
+FluxFast resource-only request. It measures connection creation at 1, 10, 100,
+and 500 subscribers, publish-to-receive latency, and invalidation-to-canonical-
+refresh convergence. It then floods one subscriber without consuming from it
+and repeatedly connects and disconnects subscribers.
+
+Timing is diagnostic output, not a CI threshold. The correctness gates require:
+
+- the canonical resource-only response to contain each newly invalidated value;
+- the slow subscriber's pending count to remain at or below its configured
+  queue size;
+- queue overflow recovery to occur during the flood; and
+- pending events and active subscribers to return to zero after cleanup.
+
+### Observed Live Reference Run
+
+On 2026-08-31, the initial controlled baseline on Linux WSL2 x86_64, an AMD
+Ryzen 5 3600, and Python 3.13.14 produced:
+
+| Measurement | Result |
+| --- | ---: |
+| 1 connection | 0.331 ms |
+| 10 connections | 1.006 ms |
+| 100 connections | 5.286 ms |
+| 500 connections | 30.281 ms |
+| Publish to receive | 0.083 ms median, 0.138 ms p95 |
+| Invalidation to canonical refresh | 0.979 ms median, 1.422 ms p95 |
+| 10,000-event slow-client flood | 16/64 pending, 156 overflows |
+| Flood memory | 140,005 peak traced bytes, 568 retained traced bytes |
+| 500 repeated connections | 50.851 ms, 0 active afterward |
+
+The queue deliberately trades intermediate event delivery for a bounded resync
+signal when a client falls behind. That is the intended safety behavior:
+canonical refresh restores current state without letting memory grow with the
+number of published events. Traced-memory figures cover this controlled Python
+workload, not total process RSS. Run `pnpm benchmark` on the deployment target
+for locally meaningful timings.
