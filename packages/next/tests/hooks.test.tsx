@@ -17,10 +17,11 @@ import {
 import { FluxProvider } from "../src/provider";
 
 class MockTransport implements FluxTransport {
-  readonly visitMock = vi.fn<[VisitTransportRequest], Promise<PageEnvelope>>();
+  readonly visitMock = vi.fn<
+    (request: VisitTransportRequest) => Promise<PageEnvelope>
+  >();
   readonly mutateMock = vi.fn<
-    [MutationTransportRequest],
-    Promise<MutationEnvelope>
+    (request: MutationTransportRequest) => Promise<MutationEnvelope>
   >();
 
   visit(request: VisitTransportRequest): Promise<PageEnvelope> {
@@ -222,8 +223,7 @@ describe("resource hooks", () => {
       expect(warnSpy).not.toHaveBeenCalled();
 
       // In production mode
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = "production";
+      vi.stubEnv("NODE_ENV", "production");
       try {
         const deferredRouter = new FluxRouter({
           initialEnvelope: {
@@ -244,7 +244,7 @@ describe("resource hooks", () => {
         );
         expect(warnSpy).not.toHaveBeenCalled();
       } finally {
-        process.env.NODE_ENV = originalEnv;
+        vi.unstubAllEnvs();
       }
     } finally {
       warnSpy.mockRestore();

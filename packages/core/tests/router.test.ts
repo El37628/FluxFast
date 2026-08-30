@@ -5,8 +5,12 @@ import { PageEnvelope, MutationEnvelope } from "../src/protocol";
 import { HistoryManager } from "../src/history";
 
 class MockTransport implements FluxTransport {
-  public visitMock = vi.fn<[VisitTransportRequest], Promise<PageEnvelope>>();
-  public mutateMock = vi.fn<[MutationTransportRequest], Promise<MutationEnvelope>>();
+  public visitMock = vi.fn<
+    (req: VisitTransportRequest) => Promise<PageEnvelope>
+  >();
+  public mutateMock = vi.fn<
+    (req: MutationTransportRequest) => Promise<MutationEnvelope>
+  >();
 
   async visit(req: VisitTransportRequest): Promise<PageEnvelope> {
     return this.visitMock(req);
