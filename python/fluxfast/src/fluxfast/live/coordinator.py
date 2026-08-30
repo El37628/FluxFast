@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
@@ -22,6 +23,7 @@ from .events import (
 
 _TOPIC_PERSONALIZATION: Final = b"fluxfast-live-v1"
 _TOPIC_PREFIX: Final = "fluxfast.live."
+_LOGGER = logging.getLogger("fluxfast.live")
 _REUSABLE_SCOPE_TYPES: Final = frozenset(
     {ScopeType.PUBLIC, ScopeType.USER, ScopeType.TENANT, ScopeType.CUSTOM}
 )
@@ -123,7 +125,7 @@ class LiveCoordinator:
             originClientId=origin_client_id,
         )
         await self.cache.delete(self._cache_key(scope, resource_key))
-        await self.broker.publish(topic, event)
+        await self._publish(topic, event)
 
     async def patch(
         self,
@@ -141,12 +143,21 @@ class LiveCoordinator:
             originClientId=origin_client_id,
         )
         await self.cache.delete(self._cache_key(scope, resource_key))
-        await self.broker.publish(topic, event)
+        await self._publish(topic, event)
 
     async def close(self) -> None:
         """Close the configured broker and all its subscriptions."""
 
         await self.broker.close()
+
+    async def _publish(self, topic: str, event: LiveEvent) -> None:
+        try:
+            await self.broker.publish(topic, event)
+        except Exception:
+            _LOGGER.exception(
+                "Live Resource publication failed; canonical cache state was invalidated",
+                extra={"fluxfast_live_event_type": event.type},
+            )
 
     @staticmethod
     def _cache_key(scope: CacheScope, resource_key: str) -> str:

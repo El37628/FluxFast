@@ -28,6 +28,9 @@ Issues = "https://github.com/El37628/FluxFast/issues"
 fluxfast = "fluxfast.cli:main"
 
 [project.optional-dependencies]
+redis = [
+    "redis>=5.0.0,<8.0.0",
+]
 dev = [
     "httpx2>=2.0.0,<3.0.0",
     "pytest>=8.0.0",

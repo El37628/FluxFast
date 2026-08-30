@@ -19,6 +19,37 @@ jobs:
       - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_cross_page.py
       - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_deferred.py --samples 1
 
+  redis:
+    name: Redis multi-worker
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: python -m pip install -e 'python/fluxfast[dev,redis]'
+      - name: Resolve Redis service container
+        run: |
+          redis_container_id=$(docker ps --filter publish=6379 --format '{{.ID}}')
+          test -n "$redis_container_id"
+          echo "FLUXFAST_TEST_REDIS_CONTAINER=$redis_container_id" >> "$GITHUB_ENV"
+      - run: pytest -q python/fluxfast/tests/test_live_redis.py python/fluxfast/tests/test_live_redis_integration.py
+        env:
+          FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+
   browser:
     name: Same-origin browser flow
     runs-on: ubuntu-latest

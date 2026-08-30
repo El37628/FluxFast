@@ -1,5 +1,6 @@
 """Tests for scoped Live Resource coordination."""
 
+import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -200,3 +201,45 @@ def test_fluxfast_wires_default_or_custom_live_broker() -> None:
 
     positional_debug = FluxFast(FastAPI(), None, True)
     assert positional_debug.debug is True
+
+    named_broker = MemoryLiveBroker()
+    named_flux = FluxFast(FastAPI(), live_broker=named_broker)
+    assert named_flux.live.broker is named_broker
+
+    with pytest.raises(ValueError, match="either broker or live_broker"):
+        FluxFast(
+            FastAPI(),
+            broker=MemoryLiveBroker(),
+            live_broker=MemoryLiveBroker(),
+        )
+
+
+@pytest.mark.anyio
+async def test_publish_failure_keeps_invalidated_canonical_state(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingBroker:
+        async def publish(self, topic: str, event: LiveEvent) -> None:
+            raise ConnectionError("broker unavailable")
+
+        async def subscribe(self, topics: set[str]) -> AsyncIterator[LiveEvent]:
+            yield LiveInvalidateEvent(keys=[])
+
+        async def close(self) -> None:
+            pass
+
+    cache = MemoryResourceCache()
+    coordinator = LiveCoordinator(cache, FailingBroker())
+    resource_scope = scope.tenant("hotel-1")
+    cache_key = f"{resource_scope.fingerprint()}::summary"
+    await cache.set(
+        cache_key,
+        CachedResource("v1", {"count": 1}, time.monotonic() + 60),
+        60,
+    )
+
+    with caplog.at_level(logging.ERROR, logger="fluxfast.live"):
+        await coordinator.invalidate("summary", scope=resource_scope)
+
+    assert await cache.get(cache_key) is None
+    assert "publication failed" in caplog.text

@@ -38,6 +38,11 @@ class RecordingBroker:
         self.published.append((topic, event))
 
 
+class FailingBroker(RecordingBroker):
+    async def publish(self, topic: str, event: LiveInvalidateEvent) -> None:
+        raise ConnectionError("Redis unavailable")
+
+
 def test_mutation_envelope_building():
     res = mutation(
         patch={
@@ -213,3 +218,25 @@ def test_invalid_mutation_client_identity_is_rejected_before_handler():
     assert calls == 0
     assert cache.deleted == []
     assert broker.published == []
+
+
+def test_successful_mutation_does_not_fail_when_live_publication_fails():
+    app = FastAPI()
+    cache = RecordingCache()
+    flux = FluxFast(app, cache=cache, live_broker=FailingBroker())
+    tenant_scope = scope.tenant("hotel-1")
+
+    @flux.mutation("/rooms")
+    async def update_rooms():
+        return mutation(
+            invalidates=[invalidate_resource("rooms", scope=tenant_scope)]
+        )
+
+    response = TestClient(app).post(
+        "/rooms",
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mutation"]["invalidate"] == ["rooms"]
+    assert cache.deleted == [f"{tenant_scope.fingerprint()}::rooms"]
