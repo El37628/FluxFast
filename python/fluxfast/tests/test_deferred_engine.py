@@ -186,3 +186,39 @@ async def test_deferred_loader_failure_without_capability_remains_fatal():
             metrics=TimingMetrics(),
             client_supports_deferred=False,
         )
+
+
+@pytest.mark.anyio
+async def test_timing_metrics_records_deferred_counters():
+    metrics = TimingMetrics()
+    cache = MemoryResourceCache()
+
+    async def load_analytics():
+        return {"visits": 10}
+
+    page = Page(
+        "dashboard",
+        [resource("analytics", load_analytics, scope=scope.public(), ttl=60, defer=True)],
+    )
+
+    # 1. Miss deferred
+    res1 = await ResourceEngine.resolve_page_resources(
+        page, {}, None, cache, metrics, client_supports_deferred=True
+    )
+    assert res1.deferred == ["analytics"]
+    assert metrics.resources_deferred == 1
+
+    # 2. Resolve follow-up
+    res2 = await ResourceEngine.resolve_page_resources(
+        page, {}, {"analytics"}, cache, metrics, client_supports_deferred=True
+    )
+    assert res2.resources["analytics"].value == {"visits": 10}
+    assert metrics.deferred_resolved == 1
+
+    # 3. Hit cached
+    res3 = await ResourceEngine.resolve_page_resources(
+        page, {}, None, cache, metrics, client_supports_deferred=True
+    )
+    assert res3.resources["analytics"].value == {"visits": 10}
+    assert metrics.deferred_cache_hits == 1
+

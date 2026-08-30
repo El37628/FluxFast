@@ -898,4 +898,35 @@ describe("FluxRouter Core", () => {
     await router.mutate("/logout");
     expect(hardNavigate).toHaveBeenCalledWith("https://example.com/login");
   });
+
+  it("handles mixed-version responses from a 0.2 backend without deferred metadata", async () => {
+    const transport = new MockTransport();
+    const router = new FluxRouter({ transport });
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {
+        summary: { version: "s1", value: { total: 10 } },
+        analytics: { version: "a1", value: { visits: 42 } },
+      },
+    });
+
+    await router.visit("/dashboard");
+
+    expect(router.pageStore.getSnapshot().component).toBe("dashboard/index");
+    expect(router.resourceStore.getSnapshot("summary")).toEqual({ total: 10 });
+    expect(router.resourceStore.getSnapshot("analytics")).toEqual({ visits: 42 });
+    expect(router.resourceStore.getStateSnapshot("summary")).toEqual({
+      data: { total: 10 },
+      status: "ready",
+      error: null,
+      stale: false,
+    });
+    expect(router.resourceStore.getStateSnapshot("analytics")).toEqual({
+      data: { visits: 42 },
+      status: "ready",
+      error: null,
+      stale: false,
+    });
+  });
 });

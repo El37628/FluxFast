@@ -62,6 +62,8 @@ class ResourceEngine:
                 cached = await cache.get(cache_key)
                 if cached is not None:
                     metrics.cache_hits += 1
+                    if spec.defer:
+                        metrics.deferred_cache_hits += 1
                     # Compare with client-known version
                     client_ver = known_versions.get(spec.key)
                     if client_ver == cached.version:
@@ -80,6 +82,7 @@ class ResourceEngine:
             metrics.cache_misses += 1
             if spec.defer and client_supports_deferred and only_keys is None:
                 deferred_keys.append(spec.key)
+                metrics.resources_deferred += 1
                 continue
             pending_misses.append(spec)
 
@@ -102,6 +105,8 @@ class ResourceEngine:
 
                     wire_value = to_jsonable(val)
                     ver = compute_version(wire_value)
+                    if spec.defer and only_keys is not None:
+                        metrics.deferred_resolved += 1
                     miss_results[spec.key] = (ver, wire_value, spec)
                 except Exception as e:
                     if (
@@ -109,6 +114,7 @@ class ResourceEngine:
                         and client_supports_deferred
                         and only_keys is not None
                     ):
+                        metrics.deferred_errors += 1
                         message = "A deferred resource could not be resolved"
                         if debug:
                             message = (

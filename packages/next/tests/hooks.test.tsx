@@ -250,5 +250,40 @@ describe("resource hooks", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("handles Next 0.3 client paired with a Python 0.2 backend (blocking-only envelope)", async () => {
+    const transport = new MockTransport();
+    const router = new FluxRouter({
+      transport,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: {
+          summary: { version: "s1", value: { count: 10 } },
+          analytics: { version: "a1", value: { revenue: 50_000 } },
+        },
+      },
+    });
+
+    function LegacyApp() {
+      const summary = useResource<{ count: number }>("summary");
+      const analytics = useResource<{ revenue: number }>("analytics");
+      return (
+        <div>
+          <span>Summary: {summary.count}</span>
+          <span>Revenue: {analytics.revenue}</span>
+        </div>
+      );
+    }
+
+    const html = renderToString(
+      <FluxProvider router={router}>
+        <LegacyApp />
+      </FluxProvider>
+    );
+
+    expect(html).toContain("10");
+    expect(html).toContain("50000");
+  });
 });
 
