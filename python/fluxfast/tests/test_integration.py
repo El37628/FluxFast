@@ -466,3 +466,48 @@ def test_explicit_request_parameter_can_use_a_nonstandard_name():
     )
     assert response.status_code == 200
     assert response.json()["page"]["meta"]["path"] == "/explicit-request"
+
+
+def test_python_0_3_with_next_0_2_mixed_version_compatibility():
+    """Verify Section 156: Python 0.3 backend treats defer=True as blocking for Next 0.2 clients."""
+    app = FastAPI()
+    flux = FluxFast(app)
+
+    calls = {"summary": 0, "analytics": 0}
+
+    async def load_summary():
+        calls["summary"] += 1
+        return {"total": 10}
+
+    async def load_analytics():
+        calls["analytics"] += 1
+        return {"visits": 42}
+
+    @flux.page("/mixed-version")
+    async def mixed_page():
+        return Page(
+            component="dashboard/index",
+            resources=[
+                resource("summary", load_summary),
+                resource("analytics", load_analytics, defer=True),
+            ],
+        )
+
+    # Next 0.2 client: sends X-FluxFast: 1 without X-FluxFast-Capabilities
+    client = TestClient(app)
+    response = client.get(
+        "/mixed-version",
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert calls == {"summary": 1, "analytics": 1}
+    assert "summary" in data["resources"]
+    assert data["resources"]["summary"]["value"] == {"total": 10}
+    assert "analytics" in data["resources"]
+    assert data["resources"]["analytics"]["value"] == {"visits": 42}
+    assert "deferred" not in data
+    assert "resourceKeys" not in data
+    assert "resourceErrors" not in data
+

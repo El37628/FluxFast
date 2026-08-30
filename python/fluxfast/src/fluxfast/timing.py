@@ -15,6 +15,10 @@ class TimingMetrics:
     cache_misses: int = 0
     resources_sent: int = 0
     resources_omitted: int = 0
+    resources_deferred: int = 0
+    deferred_cache_hits: int = 0
+    deferred_resolved: int = 0
+    deferred_errors: int = 0
     _start_time: float = field(default_factory=time.perf_counter)
 
     def to_server_timing_header(self) -> str:
