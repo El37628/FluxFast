@@ -2,11 +2,34 @@
  * Framework-neutral event emitter for FluxFast runtime events.
  */
 
+import type { ResourceErrorDetail } from "./protocol";
+
+export type ResourceLoadReason = "deferred" | "refresh" | "mutation" | "retry";
+
+export interface ResourceLoadEvent {
+  url: string;
+  keys: string[];
+  reason: ResourceLoadReason;
+}
+
+export interface ResourceLoadErrorEvent extends ResourceLoadEvent {
+  error: Error;
+}
+
+export interface ResourceErrorEvent extends ResourceLoadEvent {
+  key: string;
+  error: ResourceErrorDetail;
+}
+
 export type FluxEventName =
   | "visit:start"
   | "visit:success"
   | "visit:error"
   | "visit:cancel"
+  | "resource:load:start"
+  | "resource:load:success"
+  | "resource:load:error"
+  | "resource:error"
   | "resource:update"
   | "resource:invalidate"
   | "cache:hit"
@@ -22,6 +45,10 @@ export interface FluxEventPayloads {
   "visit:success": { visitId: string; url: string; component: string };
   "visit:error": { visitId: string; url: string; error: Error };
   "visit:cancel": { visitId: string; url: string };
+  "resource:load:start": ResourceLoadEvent;
+  "resource:load:success": ResourceLoadEvent;
+  "resource:load:error": ResourceLoadErrorEvent;
+  "resource:error": ResourceErrorEvent;
   "resource:update": { key: string; version: string };
   "resource:invalidate": { key: string };
   "cache:hit": { key: string };
@@ -87,4 +114,3 @@ export class EventEmitter {
     this.listeners.clear();
   }
 }
-

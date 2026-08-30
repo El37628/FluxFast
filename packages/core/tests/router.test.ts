@@ -133,6 +133,90 @@ describe("FluxRouter Core", () => {
     });
   });
 
+  it("emits generic resource load lifecycle and isolated error events", async () => {
+    const transport = new MockTransport();
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+    });
+    const started = vi.fn();
+    const succeeded = vi.fn();
+    const failed = vi.fn();
+    const resourceFailed = vi.fn();
+    router.on("resource:load:start", started);
+    router.on("resource:load:success", succeeded);
+    router.on("resource:load:error", failed);
+    router.on("resource:error", resourceFailed);
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {
+        analytics: { version: "a1", value: { revenue: 95_000 } },
+      },
+      resourceErrors: {
+        activity: { type: "ResourceError", message: "Activity unavailable" },
+      },
+    });
+
+    await router.loadResources(["analytics", "activity"], {
+      reason: "deferred",
+    });
+
+    const batch = {
+      url: "/dashboard",
+      keys: ["analytics", "activity"],
+      reason: "deferred",
+    };
+    expect(started).toHaveBeenCalledOnce();
+    expect(started).toHaveBeenCalledWith(batch);
+    expect(succeeded).toHaveBeenCalledOnce();
+    expect(succeeded).toHaveBeenCalledWith(batch);
+    expect(failed).not.toHaveBeenCalled();
+    expect(resourceFailed).toHaveBeenCalledOnce();
+    expect(resourceFailed).toHaveBeenCalledWith({
+      ...batch,
+      key: "activity",
+      error: { type: "ResourceError", message: "Activity unavailable" },
+    });
+  });
+
+  it("emits batch and per-resource error events for transport failures", async () => {
+    const transport = new MockTransport();
+    const router = new FluxRouter({
+      transport,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+    });
+    const started = vi.fn();
+    const succeeded = vi.fn();
+    const failed = vi.fn();
+    const resourceFailed = vi.fn();
+    router.on("resource:load:start", started);
+    router.on("resource:load:success", succeeded);
+    router.on("resource:load:error", failed);
+    router.on("resource:error", resourceFailed);
+    const networkError = new Error("network unavailable");
+    transport.visitMock.mockRejectedValueOnce(networkError);
+
+    await expect(router.loadResources(["analytics"], {
+      url: "/reports",
+      reason: "retry",
+    })).rejects.toBe(networkError);
+
+    const batch = {
+      url: "/reports",
+      keys: ["analytics"],
+      reason: "retry",
+    };
+    expect(started).toHaveBeenCalledWith(batch);
+    expect(succeeded).not.toHaveBeenCalled();
+    expect(failed).toHaveBeenCalledWith({ ...batch, error: networkError });
+    expect(resourceFailed).toHaveBeenCalledWith({
+      ...batch,
+      key: "analytics",
+      error: { type: "Error", message: "network unavailable" },
+    });
+  });
+
   it("routes selective refresh through resource-only loading", async () => {
     const router = new FluxRouter({
       transport: new MockTransport(),

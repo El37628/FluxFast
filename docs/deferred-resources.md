@@ -186,6 +186,25 @@ If a consumer mounts for an inactive key before another page envelope declares
 it, the hook reports `missing`; call `retry()` when that UI should load the key
 immediately.
 
+## Runtime events
+
+`FluxRouter.on()` exposes the same resource lifecycle for deferred batches,
+partial refreshes, mutation revalidation, and retries:
+
+```ts
+const stop = router.on("resource:load:start", ({ url, keys, reason }) => {
+  console.log(reason, url, keys);
+});
+```
+
+The batch events are `resource:load:start`, `resource:load:success`, and
+`resource:load:error`; each reports `url`, `keys`, and a reason of `deferred`,
+`refresh`, `mutation`, or `retry`. Error events also include the transport
+`Error`. `resource:error` fires per failed key with the sanitized protocol error
+detail. A successfully delivered batch may therefore emit `resource:error` for
+one key and still finish with `resource:load:success` for its successful
+siblings. Call the returned function to unsubscribe.
+
 ## What to defer
 
 Good candidates are secondary work that can appear after the page structure:
