@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from fluxfast import (
     CAPABILITY_DEFERRED_RESOURCES,
+    CAPABILITY_LIVE_RESOURCES,
     FluxFast,
     FluxRouter,
     Page,
@@ -303,6 +304,109 @@ def test_deferred_page_metadata_requires_capability_and_only_resolves_follow_up(
     assert loader_counts == {"summary": 2, "analytics": 2}
 
 
+def test_live_page_manifest_is_complete_and_capability_gated():
+    app = FastAPI()
+    flux = FluxFast(app)
+    loader_counts = {"summary": 0, "activity": 0, "settings": 0}
+
+    def load_summary():
+        loader_counts["summary"] += 1
+        return {"occupied": 42}
+
+    def load_activity():
+        loader_counts["activity"] += 1
+        return [{"id": 1}]
+
+    def load_settings():
+        loader_counts["settings"] += 1
+        return {"currency": "MYR"}
+
+    @flux.page("/live-manifest")
+    async def live_manifest_page():
+        return Page(
+            component="dashboard/index",
+            resources=[
+                resource(
+                    "summary",
+                    load_summary,
+                    scope=scope.public(),
+                    ttl=60,
+                    live=True,
+                ),
+                resource(
+                    "activity",
+                    load_activity,
+                    scope=scope.tenant("hotel-1"),
+                    defer=True,
+                    live=True,
+                ),
+                resource("settings", load_settings),
+            ],
+        )
+
+    client = TestClient(app)
+
+    legacy = client.get("/live-manifest", headers={HEADER_FLUXFAST: "1"})
+    assert legacy.status_code == 200
+    assert set(legacy.json()["resources"]) == {"summary", "activity", "settings"}
+    assert "live" not in legacy.json()
+    assert "deferred" not in legacy.json()
+
+    deferred_only = client.get(
+        "/live-manifest",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_CAPABILITIES: CAPABILITY_DEFERRED_RESOURCES,
+        },
+    )
+    assert deferred_only.status_code == 200
+    assert deferred_only.json()["deferred"] == ["activity"]
+    assert "live" not in deferred_only.json()
+
+    live_only = client.get(
+        "/live-manifest",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_CAPABILITIES: CAPABILITY_LIVE_RESOURCES,
+        },
+    )
+    assert live_only.status_code == 200
+    assert set(live_only.json()["resources"]) == {"summary", "activity", "settings"}
+    assert live_only.json()["live"] == ["summary", "activity"]
+    assert "resourceKeys" not in live_only.json()
+    assert "deferred" not in live_only.json()
+
+    both = client.get(
+        "/live-manifest",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_CAPABILITIES: (
+                f"{CAPABILITY_DEFERRED_RESOURCES},{CAPABILITY_LIVE_RESOURCES}"
+            ),
+        },
+    )
+    assert both.status_code == 200
+    assert both.json()["resourceKeys"] == ["summary", "activity", "settings"]
+    assert both.json()["deferred"] == ["activity"]
+    assert both.json()["live"] == ["summary", "activity"]
+
+    summary_version = live_only.json()["resources"]["summary"]["version"]
+    known = client.get(
+        "/live-manifest",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_CAPABILITIES: (
+                f"{CAPABILITY_DEFERRED_RESOURCES},{CAPABILITY_LIVE_RESOURCES}"
+            ),
+            HEADER_KNOWN: encode_known_header({"summary": summary_version}),
+        },
+    )
+    assert known.status_code == 200
+    assert "summary" not in known.json()["resources"]
+    assert known.json()["live"] == ["summary", "activity"]
+    assert loader_counts == {"summary": 1, "activity": 2, "settings": 5}
+
+
 def test_mutation_and_cache_invalidation():
     app, loader_counts = create_test_app()
     client = TestClient(app)
@@ -510,4 +614,3 @@ def test_python_0_3_with_next_0_2_mixed_version_compatibility():
     assert "deferred" not in data
     assert "resourceKeys" not in data
     assert "resourceErrors" not in data
-

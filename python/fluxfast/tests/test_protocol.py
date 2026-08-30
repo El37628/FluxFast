@@ -95,6 +95,7 @@ def test_page_envelope_accepts_optional_resource_metadata():
         resources={},
         resourceKeys=["auth", "analytics"],
         deferred=["analytics"],
+        live=["auth", "analytics"],
         resourceErrors={
             "activity": ResourceErrorDetail(
                 type="ResourceError",
@@ -106,6 +107,7 @@ def test_page_envelope_accepts_optional_resource_metadata():
     dumped = envelope.model_dump(mode="json", exclude_none=True)
     assert dumped["resourceKeys"] == ["auth", "analytics"]
     assert dumped["deferred"] == ["analytics"]
+    assert dumped["live"] == ["auth", "analytics"]
     assert dumped["resourceErrors"] == {
         "activity": {
             "type": "ResourceError",
@@ -125,6 +127,7 @@ def test_page_envelope_keeps_resource_metadata_optional():
 
     assert envelope.resourceKeys is None
     assert envelope.deferred is None
+    assert envelope.live is None
     assert envelope.resourceErrors is None
 
 
@@ -135,6 +138,8 @@ def test_page_envelope_keeps_resource_metadata_optional():
         ("resourceKeys", ["auth", 1]),
         ("deferred", {"analytics": True}),
         ("deferred", [None]),
+        ("live", "auth"),
+        ("live", [1]),
         ("resourceErrors", []),
         ("resourceErrors", {"activity": {"type": "ResourceError"}}),
     ],

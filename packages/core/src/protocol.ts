@@ -31,6 +31,7 @@ export interface PageEnvelope {
   resources: Record<string, ResourceWireRecord>;
   resourceKeys?: string[];
   deferred?: string[];
+  live?: string[];
   resourceErrors?: Record<string, ResourceErrorDetail>;
   appVersion?: string;
 }
