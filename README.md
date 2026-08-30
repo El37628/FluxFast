@@ -139,6 +139,23 @@ browser history. See the [deferred resources guide](docs/deferred-resources.md)
 for loading/error/retry states, caching, SSR, prefetch, mutations, and guidance
 on which data must remain blocking.
 
+A resource can remain synchronized after hydration:
+
+```python
+resource(
+    "notifications",
+    load_notifications,
+    scope=scope.user(user.id),
+    live=True,
+)
+```
+
+When another request invalidates this scoped resource, connected clients
+automatically refresh it from the canonical loader. The frontend continues to
+use the ordinary `useResource("notifications")` hook. See [Live
+Resources](docs/live-resources.md) for mutations, patches, reconnect, Redis,
+security, and deployment requirements.
+
 ## Packages
 
 - `python/fluxfast`: FastAPI routes, resource engine, scoped server cache, and
@@ -161,8 +178,9 @@ pnpm benchmark
 
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
 [caching](docs/caching.md), [deferred resources](docs/deferred-resources.md),
-[Next.js integration](docs/nextjs-adapter.md), and [mutations](docs/mutations.md)
-before extending a wire or cache boundary. The [compatibility and versioning
+[Live Resources](docs/live-resources.md), [Next.js
+integration](docs/nextjs-adapter.md), and [mutations](docs/mutations.md) before
+extending a wire or cache boundary. The [compatibility and versioning
 policy](docs/versioning.md) lists supported runtimes and the deprecation policy.
 Maintainers can find the registry and tag procedure in the [release
 guide](docs/releasing.md).

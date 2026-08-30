@@ -21,6 +21,55 @@ the browser what became stale. If that key has active subscribers, the last
 value remains visible while FluxFast requests only the invalidated active keys.
 Inactive keys are removed without a request.
 
+## Live propagation to other clients
+
+When an invalidation descriptor has an explicit reusable scope, FluxFast also
+publishes it through the configured live broker:
+
+```text
+Browser A mutation
+      ↓
+FastAPI updates authoritative data
+      ↓
+scoped server cache entry is deleted
+      ↓
+live invalidation is published
+      ↓
+Browser B in the same scope marks its value stale
+      ↓
+Browser B performs one canonical resource-only refresh
+```
+
+This is automatic for `invalidate_resource(...)`; no separate realtime endpoint
+or frontend handler is needed. A string-only invalidation has no server scope,
+so it updates the mutation response for the originating browser but cannot
+delete a scoped cache entry or broadcast safely:
+
+```python
+# Local response hint only:
+mutation(invalidate=["summary"])
+
+# Server cache invalidation plus scoped live broadcast:
+mutation(
+    invalidates=[
+        invalidate_resource("summary", scope=scope.tenant(hotel.id))
+    ]
+)
+```
+
+The router sends one opaque per-tab `X-FluxFast-Client-ID` with the mutation.
+The server echoes it only as `originClientId` on the live signal. The matching
+tab ignores that echo because its mutation envelope already handles the
+invalidation; other tabs remain eligible and refresh. Client IDs are not user
+or tenant identities and are never used for authorization.
+
+Publication failure is isolated from the business transaction. Cache deletion
+happens first; a broker error is logged and the successful mutation response is
+still returned. Reconnect and later canonical refresh recover current state.
+With multiple FastAPI workers, configure `RedisLiveBroker`; also follow the
+[multi-worker resource-cache rules](caching.md#multiple-workers) so a canonical
+refresh cannot read an old process-local positive-TTL entry.
+
 ## Deferred resource invalidation
 
 The same invalidation contract applies at every deferred lifecycle state:
@@ -48,6 +97,12 @@ from replacing an optimistic value. A browser patch cannot assign an
 authoritative server version, so the patched record remains stale. Pair the
 patch with a scoped invalidation when active consumers should immediately load
 the canonical representation.
+
+Manual server code may publish the same semantics with
+`await flux.live.invalidate(...)` or `await flux.live.patch(...)`. Both require
+an explicit reusable scope and delete its cache entry before publication. Live
+patches reuse the five mutation patch operations, render immediately when
+valid, and always revalidate canonical loader state afterward.
 
 Internal or external redirects take precedence over resource-only mutation
 revalidation. The destination visit is responsible for applying its own page

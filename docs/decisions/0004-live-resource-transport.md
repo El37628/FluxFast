@@ -42,7 +42,9 @@ client converges through the existing resource-only HTTP loader path.
 - The server must send heartbeats, bound subscriber queues, and force canonical
   resynchronization after reconnect or overflow.
 - The default in-memory broker supports only one process. Multi-worker
-  deployments require the optional Redis broker.
+  deployments require the optional Redis broker. The broker does not make the
+  resource cache distributed; process-local caches require `ttl=0` for live
+  resources or an application-provided cross-worker-aware cache backend.
 - WebSockets may be added behind the transport abstraction in a future release,
   without changing the resource model or introducing another frontend store.
 
