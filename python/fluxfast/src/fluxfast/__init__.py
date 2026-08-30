@@ -18,8 +18,11 @@ from .errors import (
 )
 from .headers import HEADER_CAPABILITIES
 from .live import (
+    DEFAULT_LIVE_HEARTBEAT_INTERVAL,
+    DEFAULT_LIVE_MAX_CONNECTION_AGE,
     DEFAULT_LIVE_QUEUE_SIZE,
     LIVE_EVENT_NAME,
+    LIVE_HEARTBEAT,
     LIVE_RESYNC_REASONS,
     LiveBroker,
     LiveCoordinator,
@@ -32,6 +35,8 @@ from .live import (
     LiveSubscription,
     MemoryLiveBroker,
     derive_live_topic,
+    encode_sse_event,
+    iter_live_events,
 )
 from .mutation import (
     InvalidateResource,
@@ -68,9 +73,12 @@ __version__ = "0.3.0"
 __all__ = [
     "CAPABILITY_DEFERRED_RESOURCES",
     "CAPABILITY_LIVE_RESOURCES",
+    "DEFAULT_LIVE_HEARTBEAT_INTERVAL",
+    "DEFAULT_LIVE_MAX_CONNECTION_AGE",
     "DEFAULT_LIVE_QUEUE_SIZE",
     "HEADER_CAPABILITIES",
     "LIVE_EVENT_NAME",
+    "LIVE_HEARTBEAT",
     "LIVE_RESYNC_REASONS",
     "PROTOCOL_MEDIA_TYPE",
     "PROTOCOL_VERSION",
@@ -114,9 +122,11 @@ __all__ = [
     "append_item",
     "client_supports",
     "derive_live_topic",
+    "encode_sse_event",
     "flux_external_redirect",
     "flux_redirect",
     "invalidate_resource",
+    "iter_live_events",
     "merge_object",
     "mutation",
     "remove_item",

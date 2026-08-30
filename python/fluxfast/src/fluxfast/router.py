@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
+from starlette.responses import StreamingResponse
 
 from .cache import MemoryResourceCache, ResourceCacheBackend
 from .capabilities import (
@@ -16,17 +17,30 @@ from .capabilities import (
     client_supports,
 )
 from .engine import ResourceEngine
+from .errors import ProtocolError
 from .headers import (
+    HEADER_CLIENT_ID,
     HEADER_DEFERRED_ERRORS,
     HEADER_DEFERRED_PENDING,
     HEADER_FLUXFAST,
     HEADER_KNOWN,
+    HEADER_LIVE_KEYS,
     HEADER_ONLY,
     HEADER_PROTOCOL,
     HEADER_SERVER_TIMING,
+    is_live_request,
     parse_known_header,
+    parse_live_keys_header,
     parse_only_header,
+    validate_live_client_id,
     validate_protocol_header,
+)
+from .live import (
+    DEFAULT_LIVE_HEARTBEAT_INTERVAL,
+    DEFAULT_LIVE_MAX_CONNECTION_AGE,
+    LiveCoordinator,
+    MemoryLiveBroker,
+    iter_live_events,
 )
 from .mutation import InvalidateResource, MutationResult
 from .page import Page
@@ -106,6 +120,60 @@ class FluxRouter(APIRouter):
                     cache: ResourceCacheBackend = getattr(
                         request.app.state, "fluxfast_cache", _DEFAULT_CACHE
                     )
+
+                    if is_live_request(request):
+                        if not client_supports(request, CAPABILITY_LIVE_RESOURCES):
+                            raise ProtocolError(
+                                "Live requests require the live-resources capability"
+                            )
+                        requested_live_keys = parse_live_keys_header(
+                            request.headers.get(HEADER_LIVE_KEYS)
+                        )
+                        validate_live_client_id(
+                            request.headers.get(HEADER_CLIENT_ID)
+                        )
+                        live: LiveCoordinator | None = getattr(
+                            request.app.state, "fluxfast_live", None
+                        )
+                        if live is None:
+                            live = LiveCoordinator(cache, MemoryLiveBroker())
+                            request.app.state.fluxfast_live = live
+                        subscription = live.resolve_subscription(
+                            result,
+                            requested_live_keys,
+                        )
+                        if not subscription.keys:
+                            raise ProtocolError(
+                                "No requested live resources are declared by this page"
+                            )
+                        stream = iter_live_events(
+                            live,
+                            subscription,
+                            heartbeat_interval=float(
+                                getattr(
+                                    request.app.state,
+                                    "fluxfast_live_heartbeat_interval",
+                                    DEFAULT_LIVE_HEARTBEAT_INTERVAL,
+                                )
+                            ),
+                            max_connection_age=float(
+                                getattr(
+                                    request.app.state,
+                                    "fluxfast_live_max_connection_age",
+                                    DEFAULT_LIVE_MAX_CONNECTION_AGE,
+                                )
+                            ),
+                        )
+                        return StreamingResponse(
+                            stream,
+                            media_type="text/event-stream",
+                            headers={
+                                "Cache-Control": "no-cache, no-transform",
+                                "X-Accel-Buffering": "no",
+                                HEADER_FLUXFAST: "1",
+                                HEADER_PROTOCOL: "1",
+                            },
+                        )
 
                     known_versions = parse_known_header(request.headers.get(HEADER_KNOWN))
                     only_keys = parse_only_header(request.headers.get(HEADER_ONLY))

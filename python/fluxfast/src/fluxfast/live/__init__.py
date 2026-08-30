@@ -13,10 +13,20 @@ from .events import (
     LiveResyncReason,
 )
 from .memory import DEFAULT_LIVE_QUEUE_SIZE, MemoryLiveBroker
+from .stream import (
+    DEFAULT_LIVE_HEARTBEAT_INTERVAL,
+    DEFAULT_LIVE_MAX_CONNECTION_AGE,
+    LIVE_HEARTBEAT,
+    encode_sse_event,
+    iter_live_events,
+)
 
 __all__ = [
+    "DEFAULT_LIVE_HEARTBEAT_INTERVAL",
+    "DEFAULT_LIVE_MAX_CONNECTION_AGE",
     "DEFAULT_LIVE_QUEUE_SIZE",
     "LIVE_EVENT_NAME",
+    "LIVE_HEARTBEAT",
     "LIVE_RESYNC_REASONS",
     "LiveBroker",
     "LiveCoordinator",
@@ -29,4 +39,6 @@ __all__ = [
     "LiveSubscription",
     "MemoryLiveBroker",
     "derive_live_topic",
+    "encode_sse_event",
+    "iter_live_events",
 ]
