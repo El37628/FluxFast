@@ -202,7 +202,10 @@ export class FluxRouter {
     const visitId = `visit_${++this.visitCounter}_${Date.now().toString(36)}`;
     this.abortActiveDeferred();
     this.abortActiveVisit();
-    if (this.liveStarted) this.liveManager.disconnect();
+    if (this.liveStarted) {
+      this.supersedeLiveWork();
+      this.liveManager.disconnect();
+    }
     this.cancelPendingLiveRefresh();
     this.currentVisitId = visitId;
 
@@ -315,6 +318,7 @@ export class FluxRouter {
   /** Stop live synchronization while retaining the current page manifest. */
   stopLive(): void {
     this.liveStarted = false;
+    this.supersedeLiveWork();
     this.cancelPendingLiveRefresh();
     this.liveManager.disconnect();
   }
@@ -527,6 +531,7 @@ export class FluxRouter {
     this.abortActiveDeferred();
     this.abortActiveVisit();
     this.liveStarted = false;
+    this.supersedeLiveWork();
     this.cancelPendingLiveRefresh();
     this.liveManager.clear();
     this.resourceStore.clear();
@@ -540,6 +545,7 @@ export class FluxRouter {
     this.abortActiveDeferred();
     this.abortActiveVisit();
     this.liveStarted = false;
+    this.supersedeLiveWork();
     this.cancelPendingLiveRefresh();
     this.stopLiveEventListener?.();
     this.stopLiveEventListener = undefined;
@@ -604,6 +610,7 @@ export class FluxRouter {
     if (event.type === "patch") {
       const keys = Object.keys(event.patches).filter(key => activeKeys.has(key));
       for (const key of keys) {
+        this.bumpResourceEpoch(key);
         if (this.resourceStore.patch(key, event.patches[key])) {
           const version = this.resourceStore.getRecord(key)?.version ?? "";
           this.events.emit("resource:update", { key, version });
@@ -617,6 +624,7 @@ export class FluxRouter {
     if (keys.length === 0) return;
 
     for (const key of keys) {
+      this.bumpResourceEpoch(key);
       this.resourceStore.markStale(key);
       this.events.emit("resource:invalidate", { key });
     }
@@ -649,6 +657,12 @@ export class FluxRouter {
       this.liveRefreshTimer = undefined;
     }
     this.pendingLiveRefreshKeys.clear();
+  }
+
+  private supersedeLiveWork(): void {
+    for (const key of this.liveManager.getManifest()?.keys ?? []) {
+      this.bumpResourceEpoch(key);
+    }
   }
 
   private abortActiveVisit(): void {

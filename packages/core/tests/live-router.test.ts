@@ -324,4 +324,299 @@ describe("FluxRouter live invalidation synchronization", () => {
       { url: "/dashboard", reason: "live" }
     );
   });
+
+  it("prevents an older deferred response from overwriting live work", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    const resolvers: Array<(envelope: PageEnvelope) => void> = [];
+    transport.visitMock.mockImplementation(
+      () => new Promise(resolve => { resolvers.push(resolve); })
+    );
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 10,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["activity"],
+        resources: {},
+        deferred: ["activity"],
+        live: ["activity"],
+      },
+    });
+    router.startLive();
+    const deferred = router.startInitialDeferred();
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "invalidate",
+      keys: ["activity"],
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(transport.visitMock).toHaveBeenCalledTimes(2);
+
+    resolvers[0]({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { activity: { version: "old", value: ["old"] } },
+    });
+    await deferred;
+    expect(router.resourceStore.getSnapshot("activity")).toBeUndefined();
+    expect(router.resourceStore.getStateSnapshot("activity").status).toBe("loading");
+
+    resolvers[1]({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { activity: { version: "new", value: ["new"] } },
+    });
+    await flushMicrotasks();
+    expect(router.resourceStore.getRecord("activity")).toMatchObject({
+      version: "new",
+      value: ["new"],
+    });
+  });
+
+  it("keeps a later mutation response over an older live refresh", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    let resolveLiveRefresh!: (envelope: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveLiveRefresh = resolve; })
+    );
+    transport.mutateMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      mutation: {
+        patches: {
+          summary: [{ op: "replace-resource", value: { count: 3 } }],
+        },
+      },
+    });
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 5,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+    router.startLive();
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "invalidate",
+      keys: ["summary"],
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(5);
+    await router.mutate("/summary/increment");
+
+    resolveLiveRefresh({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { summary: { version: "old-live", value: { count: 2 } } },
+    });
+    await flushMicrotasks();
+
+    expect(router.resourceStore.getStateSnapshot("summary")).toMatchObject({
+      data: { count: 3 },
+      stale: true,
+    });
+  });
+
+  it("lets a mutation response supersede a live event received mid-mutation", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    let resolveMutation!: (envelope: MutationEnvelope) => void;
+    transport.mutateMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveMutation = resolve; })
+    );
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 50,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+    router.startLive();
+    const mutation = router.mutate("/summary/increment");
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: {
+        summary: [{ op: "replace-resource", value: { count: 2 } }],
+      },
+    });
+    await flushMicrotasks();
+    expect(router.resourceStore.getSnapshot("summary")).toEqual({ count: 2 });
+
+    resolveMutation({
+      protocol: "fluxfast/1",
+      mutation: {
+        patches: {
+          summary: [{ op: "replace-resource", value: { count: 3 } }],
+        },
+      },
+    });
+    await mutation;
+
+    expect(router.resourceStore.getStateSnapshot("summary")).toMatchObject({
+      data: { count: 3 },
+      stale: true,
+    });
+    router.destroy();
+  });
+
+  it("keeps a live patch over an older retry response", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    let resolveRetry!: (envelope: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveRetry = resolve; })
+    );
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 50,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+    router.startLive();
+    const retry = router.loadResources(["summary"], { reason: "retry" });
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: {
+        summary: [{ op: "replace-resource", value: { count: 2 } }],
+      },
+    });
+    await flushMicrotasks();
+
+    resolveRetry({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { summary: { version: "old-retry", value: { count: 0 } } },
+    });
+    await retry;
+
+    expect(router.resourceStore.getStateSnapshot("summary")).toMatchObject({
+      data: { count: 2 },
+      status: "ready",
+      stale: true,
+    });
+    router.destroy();
+  });
+
+  it("keeps post-reconnect live work over an active older load", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    let resolveLoad!: (envelope: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveLoad = resolve; })
+    );
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 50,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+    router.startLive();
+    const olderLoad = router.loadResources(["summary"], { reason: "refresh" });
+    router.liveManager.reconnect();
+    expect(liveTransport.connections).toHaveLength(2);
+    liveTransport.connections[1].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: {
+        summary: [{ op: "replace-resource", value: { count: 4 } }],
+      },
+    });
+    await flushMicrotasks();
+
+    resolveLoad({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { summary: { version: "old", value: { count: 0 } } },
+    });
+    await olderLoad;
+
+    expect(router.resourceStore.getStateSnapshot("summary")).toMatchObject({
+      data: { count: 4 },
+      stale: true,
+    });
+    router.destroy();
+  });
+
+  it("prevents old live refreshes from settling after navigation", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    let resolveLiveRefresh!: (envelope: PageEnvelope) => void;
+    transport.visitMock
+      .mockImplementationOnce(
+        () => new Promise(resolve => { resolveLiveRefresh = resolve; })
+      )
+      .mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "reports/index", url: "/reports" },
+        resources: {},
+      });
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 5,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+    router.startLive();
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "invalidate",
+      keys: ["summary"],
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(5);
+    await router.visit("/reports");
+
+    resolveLiveRefresh({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { summary: { version: "late", value: { count: 99 } } },
+    });
+    await flushMicrotasks();
+
+    expect(router.pageStore.getSnapshot().url).toBe("/reports");
+    expect(router.resourceStore.getSnapshot("summary")).toEqual({ count: 1 });
+    expect(router.resourceStore.isStale("summary")).toBe(true);
+  });
 });
