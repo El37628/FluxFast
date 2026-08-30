@@ -5,6 +5,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-30
+
 ### Added
 
 - Capability-negotiated deferred resources for `fluxfast/1`, including
@@ -12,7 +14,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   resource-only loading, and blocking fallback for older clients.
 - `useDeferredResource` and `useResourceState` hooks with stable
   pending/loading/ready/error state, stale data, isolated per-resource errors,
-  and targeted retry.
+  targeted retry, and convenience status booleans (`isLoading`, `isError`, `isReady`, `isPending`).
+- Helpful development-only warnings when `useResource` is used on pending deferred resources.
+- `X-FluxFast-Deferred-Loaded` diagnostic headers and client-side resource lifecycle events.
 - Cancellation and per-key generation protection for deferred navigation,
   retry, refresh, and mutation races.
 - Deferred browser coverage for SSR skeletons, cache restoration, isolated
@@ -58,6 +62,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.3.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
+[0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
