@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from .cache import MemoryResourceCache, ResourceCacheBackend
 from .errors import FluxFastError, ProtocolError, ResourceError
 from .headers import HEADER_FLUXFAST, HEADER_PROTOCOL, is_fluxfast_request
+from .live import LiveBroker, LiveCoordinator, MemoryLiveBroker
 from .protocol import PROTOCOL_MEDIA_TYPE, PROTOCOL_VERSION, ErrorDetail, ErrorEnvelope
 from .router import FluxRouter
 
@@ -22,14 +23,20 @@ class FluxFast:
         app: FastAPI,
         cache: ResourceCacheBackend | None = None,
         debug: bool = False,
+        broker: LiveBroker | None = None,
     ):
         self.app = app
         self.cache = cache if cache is not None else MemoryResourceCache()
+        self.live = LiveCoordinator(
+            self.cache,
+            broker if broker is not None else MemoryLiveBroker(),
+        )
         self.debug = debug
 
         # Attach cache to FastAPI app state
         self.app.state.fluxfast_cache = self.cache
         self.app.state.fluxfast_debug = self.debug
+        self.app.state.fluxfast_live = self.live
 
         # Setup exception handlers
         self._setup_exception_handlers()

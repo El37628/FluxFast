@@ -1,6 +1,7 @@
 """Live Resource wire models and synchronization primitives."""
 
 from .broker import LiveBroker
+from .coordinator import LiveCoordinator, LiveSubscription, derive_live_topic
 from .events import (
     LIVE_EVENT_NAME,
     LIVE_RESYNC_REASONS,
@@ -18,11 +19,14 @@ __all__ = [
     "LIVE_EVENT_NAME",
     "LIVE_RESYNC_REASONS",
     "LiveBroker",
+    "LiveCoordinator",
     "LiveEvent",
     "LiveInvalidateEvent",
     "LivePatchEvent",
     "LiveReadyEvent",
     "LiveResyncEvent",
     "LiveResyncReason",
+    "LiveSubscription",
     "MemoryLiveBroker",
+    "derive_live_topic",
 ]
