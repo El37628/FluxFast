@@ -226,6 +226,93 @@ describe("FluxRouter live invalidation synchronization", () => {
     );
   });
 
+  it("keeps initial deferred work through a Strict Mode live restart", async () => {
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    let resolveDeferred!: (envelope: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveDeferred = resolve; })
+    );
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["activity"],
+        resources: {},
+        deferred: ["activity"],
+        live: ["activity"],
+      },
+    });
+
+    const deferred = router.startInitialDeferred();
+    router.startLive();
+    router.stopLive();
+    router.startLive();
+    resolveDeferred({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { activity: { version: "a1", value: ["ready"] } },
+    });
+    await deferred;
+
+    expect(router.resourceStore.getStateSnapshot("activity")).toMatchObject({
+      data: ["ready"],
+      status: "ready",
+      stale: false,
+    });
+    expect(liveTransport.connections).toHaveLength(2);
+    router.destroy();
+  });
+
+  it("supersedes only an active live refresh when live synchronization stops", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    let resolveLiveRefresh!: (envelope: PageEnvelope) => void;
+    transport.visitMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveLiveRefresh = resolve; })
+    );
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 5,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+
+    router.startLive();
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "invalidate",
+      keys: ["summary"],
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(5);
+    router.stopLive();
+    expect(router.resourceStore.getStateSnapshot("summary")).toMatchObject({
+      data: { count: 1 },
+      status: "ready",
+      stale: true,
+    });
+
+    resolveLiveRefresh({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { summary: { version: "late", value: { count: 99 } } },
+    });
+    await flushMicrotasks();
+    expect(router.resourceStore.getSnapshot("summary")).toEqual({ count: 1 });
+    router.destroy();
+  });
+
   it("canonically reloads all active keys after reconnect readiness", async () => {
     vi.useFakeTimers();
     const transport = new MockTransport();

@@ -76,3 +76,6 @@ jobs:
       - run: pnpm test:e2e
         env:
           FLUXFAST_E2E_PYTHON: python
+      - run: pnpm test:e2e:production
+        env:
+          FLUXFAST_E2E_PYTHON: python

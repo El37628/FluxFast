@@ -89,6 +89,10 @@ export class FluxRouter {
   private liveStarted = false;
   private readonly liveBatchDelayMs: number;
   private readonly pendingLiveRefreshKeys = new Set<string>();
+  private readonly activeLiveLoadEpochs = new Map<
+    string,
+    Map<string, number>
+  >();
   private pendingLiveRefreshReason: ResourceLoadReason = "live";
   private liveRefreshTimer?: ReturnType<typeof setTimeout>;
 
@@ -351,6 +355,9 @@ export class FluxRouter {
     for (const key of requestedKeys) {
       capturedEpochs.set(key, this.bumpResourceEpoch(key));
     }
+    if (options.reason === "live" || options.reason === "live-reconnect") {
+      this.activeLiveLoadEpochs.set(loadId, capturedEpochs);
+    }
     this.resourceStore.markLoading(requestedKeys);
     const loadEvent = {
       url,
@@ -457,6 +464,8 @@ export class FluxRouter {
         error: normalized,
       });
       throw error;
+    } finally {
+      this.activeLiveLoadEpochs.delete(loadId);
     }
   }
 
@@ -697,9 +706,25 @@ export class FluxRouter {
   }
 
   private supersedeLiveWork(): void {
-    for (const key of this.liveManager.getManifest()?.keys ?? []) {
-      this.bumpResourceEpoch(key);
+    for (const epochs of this.activeLiveLoadEpochs.values()) {
+      for (const [key, epoch] of epochs) {
+        if (this.resourceEpochs.get(key) === epoch) {
+          this.bumpResourceEpoch(key);
+          const record = this.resourceStore.getRecord(key);
+          if (record) {
+            this.resourceStore.set({
+              key,
+              version: record.version,
+              value: record.value,
+            });
+            this.resourceStore.markStale(key);
+          } else {
+            this.resourceStore.invalidate(key);
+          }
+        }
+      }
     }
+    this.activeLiveLoadEpochs.clear();
   }
 
   private abortActiveVisit(): void {
