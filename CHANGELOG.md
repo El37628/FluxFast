@@ -5,6 +5,29 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+### Added
+
+- Capability-negotiated deferred resources for `fluxfast/1`, including
+  `ResourceSpec(defer=True)`, cache-first pending metadata, automatic batched
+  resource-only loading, and blocking fallback for older clients.
+- `useDeferredResource` and `useResourceState` hooks with stable
+  pending/loading/ready/error state, stale data, isolated per-resource errors,
+  and targeted retry.
+- Cancellation and per-key generation protection for deferred navigation,
+  retry, refresh, and mutation races.
+- Deferred browser coverage for SSR skeletons, cache restoration, isolated
+  failure/retry, navigation cancellation, and mutation stale-while-revalidate,
+  plus a controlled blocking-versus-deferred benchmark.
+
+### Changed
+
+- Page envelopes may include additive `resourceKeys`, `deferred`, and
+  `resourceErrors` fields when the client advertises `deferred-resources`.
+- PageCache tracks complete resource manifests and pending deferred keys so
+  Back/Forward restoration remains coherent after settlement or eviction.
+- Active mutation invalidations revalidate only subscribed resource keys while
+  preserving stale data and leaving the current page and history untouched.
+
 ## [0.2.0] - 2026-08-29
 
 ### Added

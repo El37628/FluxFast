@@ -32,6 +32,33 @@ Immediate removal remains possible for security vulnerabilities, behavior that
 was never part of the documented public API, or changes required to preserve
 protocol correctness.
 
+## Capability negotiation
+
+Capabilities negotiate optional additive behavior independently from package
+and wire-protocol versions. A client lists supported tokens in
+`X-FluxFast-Capabilities`; the server uses only recognized, shipped tokens and
+ignores malformed or unknown input within bounded parsing limits.
+
+FluxFast 0.3 defines one capability: `deferred-resources`. With it, a server may
+add the optional `resourceKeys`, `deferred`, and `resourceErrors` fields to a
+`fluxfast/1` page envelope. Compatibility works in both directions:
+
+- a new client can consume an old server's ordinary v1 envelope;
+- a new server keeps `defer=True` resources blocking for a client that does not
+  advertise the capability; and
+- an old server ignores the new client's unknown request header.
+
+This permits progressive optional behavior without incrementing the protocol
+identifier merely because packages gained a feature. It does not permit
+changing required v1 fields or their existing semantics. A change that cannot
+provide a safe no-capability fallback, requires clients to understand new
+behavior, or reinterprets an existing field still requires a new wire protocol.
+
+Capability names are public compatibility surface once shipped. Do not publish
+or depend on names for planned features until their request, response, fallback,
+and security behavior are implemented and documented. See
+[`protocol.md`](protocol.md) for the current token and field contract.
+
 ## Preparing a release
 
 Add user-facing entries beneath `Unreleased`, then run:

@@ -21,6 +21,40 @@ FastAPI is authoritative for URLs, authentication, authorization, validation,
 mutations, and the component identifier. The frontend registry is authoritative
 for mapping that identifier to an allowlisted UI module.
 
+## Blocking and deferred resource flow
+
+A page may divide its resource graph without changing ownership:
+
+```text
+FastAPI Page
+├── blocking ResourceSpecs ──→ cache probe / loader ──→ initial resources
+└── deferred ResourceSpecs ──→ cache probe
+                               ├── hit ───────────────→ initial resources
+                               └── miss ──────────────→ pending manifest
+
+browser receives renderable page shell
+          ↓
+pending keys are batched into X-FluxFast-Only
+          ↓
+same FastAPI page + dependencies reconstruct the allowed graph
+          ↓
+deferred loaders resolve concurrently
+          ↓
+ResourceStore updates without PageStore/history navigation
+```
+
+This is capability-negotiated progressive loading, not server response
+streaming. `defer=True` postpones only the resource loader; FastAPI route work,
+dependencies, authentication, validation, and authorization still run before
+each envelope. Clients without the `deferred-resources` capability resolve the
+same declarations as blocking resources.
+
+The Next server seeds pending resource snapshots into the initial render. After
+hydration, the provider starts the batch idempotently. Resource-only completion
+does not notify page subscribers or push history. A navigation aborts the active
+deferred batch, while per-key generations reject late results that lose a race
+with navigation, retry, refresh, or mutation.
+
 ## Stores
 
 `ResourceStore` owns immutable versioned records and key-level subscriptions.
@@ -29,8 +63,11 @@ revalidation is in flight, but their versions are excluded from
 `X-FluxFast-Known`.
 
 `PageStore` owns only component, URL, and small metadata. `PageCache` stores page
-descriptors plus resource versions, never duplicate resource values. A valid
-entry allows browser back/forward restoration without a network request.
+descriptors, the complete `resourceKeys` manifest, resolved versions, and which
+deferred keys are still pending—never duplicate resource values. A valid entry
+allows browser back/forward restoration without a network request. Pending
+entries restart their resource batch; a missing, stale, or evicted resolved
+resource invalidates the page entry.
 
 ## Navigation
 

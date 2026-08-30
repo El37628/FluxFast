@@ -115,6 +115,30 @@ export default function RoomsPage() {
 }
 ```
 
+Secondary resources can load after the page shell:
+
+```python
+resource(
+    "analytics",
+    load_analytics,
+    scope=scope.tenant(user.hotel_id),
+    ttl=60,
+    defer=True,
+)
+```
+
+```tsx
+const analytics = useDeferredResource<Analytics>("analytics");
+
+if (!analytics.data) return <AnalyticsSkeleton />;
+return <AnalyticsChart value={analytics.data} />;
+```
+
+Deferred cache misses are fetched after hydration without changing the page or
+browser history. See the [deferred resources guide](docs/deferred-resources.md)
+for loading/error/retry states, caching, SSR, prefetch, mutations, and guidance
+on which data must remain blocking.
+
 ## Packages
 
 - `python/fluxfast`: FastAPI routes, resource engine, scoped server cache, and
@@ -136,10 +160,11 @@ pnpm benchmark
 ```
 
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
-[caching](docs/caching.md), [Next.js integration](docs/nextjs-adapter.md), and
-[mutations](docs/mutations.md) before extending a wire or cache boundary. The
-[compatibility and versioning policy](docs/versioning.md) lists supported
-runtimes and the deprecation policy. Maintainers can find the registry and tag
-procedure in the [release guide](docs/releasing.md).
+[caching](docs/caching.md), [deferred resources](docs/deferred-resources.md),
+[Next.js integration](docs/nextjs-adapter.md), and [mutations](docs/mutations.md)
+before extending a wire or cache boundary. The [compatibility and versioning
+policy](docs/versioning.md) lists supported runtimes and the deprecation policy.
+Maintainers can find the registry and tag procedure in the [release
+guide](docs/releasing.md).
 
 FluxFast is not an Inertia wrapper and does not implement the Inertia protocol.
