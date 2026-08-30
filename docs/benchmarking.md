@@ -91,15 +91,15 @@ Ryzen 5 3600, and Python 3.13.14 produced:
 
 | Measurement | Result |
 | --- | ---: |
-| 1 connection | 0.331 ms |
-| 10 connections | 1.006 ms |
-| 100 connections | 5.286 ms |
-| 500 connections | 30.281 ms |
-| Publish to receive | 0.083 ms median, 0.138 ms p95 |
-| Invalidation to canonical refresh | 0.979 ms median, 1.422 ms p95 |
+| 1 connection | 0.133 ms |
+| 10 connections | 0.509 ms |
+| 100 connections | 5.411 ms |
+| 500 connections | 27.909 ms |
+| Publish to receive | 0.082 ms median, 0.118 ms p95 |
+| Invalidation to canonical refresh | 3.303 ms median, 3.812 ms p95 |
 | 10,000-event slow-client flood | 16/64 pending, 156 overflows |
 | Flood memory | 140,005 peak traced bytes, 568 retained traced bytes |
-| 500 repeated connections | 50.851 ms, 0 active afterward |
+| 500 repeated connections | 50.572 ms, 0 active afterward |
 
 The queue deliberately trades intermediate event delivery for a bounded resync
 signal when a client falls behind. That is the intended safety behavior:

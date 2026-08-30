@@ -12,8 +12,8 @@ from collections.abc import AsyncIterator
 
 import anyio
 import anyio.lowlevel
-import httpx
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from fluxfast import (
     CAPABILITY_LIVE_RESOURCES,
     FluxFast,
@@ -116,12 +116,9 @@ async def benchmark_invalidation_convergence(samples: int) -> list[float]:
         HEADER_FLUXFAST: "1",
         HEADER_CAPABILITIES: CAPABILITY_LIVE_RESOURCES,
     }
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://benchmark.local",
-    ) as client:
-        initial = await client.get("/live-benchmark", headers=headers)
+    client = TestClient(app)
+    try:
+        initial = client.get("/live-benchmark", headers=headers)
         initial.raise_for_status()
         assert initial.json()["resources"]["summary"]["value"] == {"value": 0}
 
@@ -140,7 +137,7 @@ async def benchmark_invalidation_convergence(samples: int) -> list[float]:
             await flux.live.invalidate("summary", scope=resource_scope)
             event = await pending
             assert event == LiveInvalidateEvent(keys=["summary"])
-            refreshed = await client.get(
+            refreshed = client.get(
                 "/live-benchmark",
                 headers={**headers, HEADER_ONLY: "summary"},
             )
@@ -152,6 +149,8 @@ async def benchmark_invalidation_convergence(samples: int) -> list[float]:
         await stream.aclose()
         assert broker.subscriber_count == 0
         assert state["loader_calls"] == samples + 1
+    finally:
+        client.close()
 
     await flux.live.close()
     return results
