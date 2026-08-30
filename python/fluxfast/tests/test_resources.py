@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import pytest
 
-from fluxfast import Page, resource, scope
+from fluxfast import FluxFastLiveScopeError, Page, resource, scope
 from fluxfast.scope import ScopeType
 
 
@@ -41,6 +41,62 @@ def test_resource_defer_flag_defaults_false_and_is_retained():
     assert asdict(deferred)["defer"] is True
 
 
+def test_resource_live_flag_defaults_false_and_is_retained():
+    ordinary = resource("summary", lambda: 1)
+    live = resource("notifications", lambda: 2, scope=scope.user(123), live=True)
+
+    assert ordinary.live is False
+    assert live.live is True
+    assert asdict(live)["live"] is True
+
+
+@pytest.mark.parametrize(
+    "reusable_scope",
+    [
+        scope.public(),
+        scope.user("user-1"),
+        scope.tenant("tenant-1"),
+        scope.custom("organization", "org-1"),
+    ],
+)
+def test_live_resource_accepts_every_reusable_scope(reusable_scope):
+    spec = resource("activity", list, scope=reusable_scope, live=True)
+
+    assert spec.live is True
+    assert spec.scope == reusable_scope
+
+
+@pytest.mark.parametrize("resource_scope", [None, scope.request()])
+def test_live_resource_requires_explicit_reusable_scope(resource_scope):
+    with pytest.raises(
+        FluxFastLiveScopeError,
+        match=(
+            'Live resource "activity" requires an explicit reusable scope\\. '
+            r"Use scope\.public\(\), scope\.user\(\), scope\.tenant\(\), or "
+            r"scope\.custom\(\)\."
+        ),
+    ):
+        resource("activity", list, scope=resource_scope, live=True)
+
+
+@pytest.mark.parametrize(
+    ("defer", "live"),
+    [(False, False), (True, False), (False, True), (True, True)],
+)
+def test_resource_supports_every_defer_live_combination(defer, live):
+    declared_scope = scope.public() if live else None
+    spec = resource(
+        "activity",
+        list,
+        scope=declared_scope,
+        defer=defer,
+        live=live,
+    )
+
+    assert spec.defer is defer
+    assert spec.live is live
+
+
 def test_resource_validates_public_inputs():
     with pytest.raises(ValueError, match="resource key"):
         resource("", lambda: 1)
@@ -52,6 +108,8 @@ def test_resource_validates_public_inputs():
         resource("bad", 1)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="defer"):
         resource("bad", lambda: 1, defer=1)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="live"):
+        resource("bad", lambda: 1, live=1)  # type: ignore[arg-type]
 
 
 def test_page_rejects_duplicate_resource_keys():

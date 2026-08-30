@@ -5,7 +5,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from .scope import CacheScope
+from .errors import FluxFastLiveScopeError
+from .scope import CacheScope, ScopeType
 from .scope import scope as scope_builder
 
 ResourceLoader = Callable[[], Awaitable[Any]] | Callable[[], Any]
@@ -21,6 +22,7 @@ class ResourceSpec:
     ttl: float = 0.0
     tags: tuple[str, ...] = ()
     defer: bool = False
+    live: bool = False
 
 
 def resource(
@@ -31,6 +33,7 @@ def resource(
     ttl: float = 0.0,
     tags: Sequence[str] = (),
     defer: bool = False,
+    live: bool = False,
 ) -> ResourceSpec:
     """Create a ResourceSpec for a page."""
     if not isinstance(key, str) or not key.strip() or len(key) > 128:
@@ -45,10 +48,17 @@ def resource(
         raise ValueError("resource tags must be non-empty strings")
     if not isinstance(defer, bool):
         raise TypeError("resource defer must be a boolean")
+    if not isinstance(live, bool):
+        raise TypeError("resource live must be a boolean")
 
     # Cache isolation must be intentional. A positive TTL without an explicit
     # scope remains request-scoped rather than silently becoming public data.
     resolved_scope = scope if scope is not None else scope_builder.request()
+    if live and (scope is None or resolved_scope.scope_type == ScopeType.REQUEST):
+        raise FluxFastLiveScopeError(
+            f'Live resource "{key}" requires an explicit reusable scope. '
+            "Use scope.public(), scope.user(), scope.tenant(), or scope.custom()."
+        )
 
     return ResourceSpec(
         key=key,
@@ -57,4 +67,5 @@ def resource(
         ttl=ttl,
         tags=tuple(tags),
         defer=defer,
+        live=live,
     )

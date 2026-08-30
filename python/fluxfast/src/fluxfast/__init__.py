@@ -5,6 +5,7 @@ from .cache import CachedResource, MemoryResourceCache, ResourceCacheBackend
 from .capabilities import CAPABILITY_DEFERRED_RESOURCES, client_supports
 from .errors import (
     FluxFastError,
+    FluxFastLiveScopeError,
     PageNotFoundError,
     ProtocolError,
     ResourceError,
@@ -55,6 +56,7 @@ __all__ = [
     "ErrorEnvelope",
     "FluxFast",
     "FluxFastError",
+    "FluxFastLiveScopeError",
     "FluxRouter",
     "InvalidateResource",
     "MemoryResourceCache",
