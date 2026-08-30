@@ -224,4 +224,104 @@ describe("FluxRouter live invalidation synchronization", () => {
     expect(() => new FluxRouter({ liveBatchDelayMs: -1, deferHistory: true }))
       .toThrowError(/liveBatchDelayMs/);
   });
+
+  it("applies active patches immediately and schedules canonical refresh", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 15,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resourceKeys: ["rooms", "summary"],
+        resources: {
+          rooms: { version: "r1", value: [{ id: 1, open: true }] },
+        },
+        live: ["rooms", "summary"],
+      },
+    });
+    const updates = vi.fn();
+    router.on("resource:update", updates);
+    const loadResources = vi.spyOn(router, "loadResources").mockResolvedValue();
+    router.startLive();
+
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: {
+        rooms: [
+          {
+            op: "replace-item",
+            id: 1,
+            value: { id: 1, open: false },
+          },
+        ],
+        summary: [{ op: "replace-resource", value: { count: 2 } }],
+        unknown: [{ op: "replace-resource", value: "untrusted" }],
+      },
+    });
+    await flushMicrotasks();
+
+    expect(router.resourceStore.getSnapshot("rooms")).toEqual([
+      { id: 1, open: false },
+    ]);
+    expect(router.resourceStore.getStateSnapshot("rooms")).toMatchObject({
+      status: "ready",
+      stale: true,
+    });
+    expect(router.resourceStore.getSnapshot("summary")).toBeUndefined();
+    expect(router.resourceStore.getSnapshot("unknown")).toBeUndefined();
+    expect(updates).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(15);
+
+    expect(loadResources).toHaveBeenCalledWith(
+      ["rooms", "summary"],
+      { url: "/rooms", reason: "live" }
+    );
+  });
+
+  it("coalesces live patches and invalidations into one refresh batch", async () => {
+    vi.useFakeTimers();
+    const liveTransport = new ControlledLiveTransport();
+    const router = new FluxRouter({
+      liveTransport,
+      liveBatchDelayMs: 10,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resources: {
+          rooms: { version: "r1", value: [] },
+          summary: { version: "s1", value: { count: 0 } },
+        },
+        live: ["rooms", "summary"],
+      },
+    });
+    const loadResources = vi.spyOn(router, "loadResources").mockResolvedValue();
+    router.startLive();
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: { rooms: [{ op: "append-item", value: { id: 1 } }] },
+    });
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "invalidate",
+      keys: ["summary", "rooms"],
+    });
+    await flushMicrotasks();
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(loadResources).toHaveBeenCalledOnce();
+    expect(loadResources).toHaveBeenCalledWith(
+      ["rooms", "summary"],
+      { url: "/dashboard", reason: "live" }
+    );
+  });
 });

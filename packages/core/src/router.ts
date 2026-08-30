@@ -600,16 +600,32 @@ export class FluxRouter {
   }
 
   private handleLiveEvent(event: LiveEvent): void {
-    if (event.type !== "invalidate" && event.type !== "resync") return;
     const activeKeys = new Set(this.liveManager.getManifest()?.keys ?? []);
+    if (event.type === "patch") {
+      const keys = Object.keys(event.patches).filter(key => activeKeys.has(key));
+      for (const key of keys) {
+        if (this.resourceStore.patch(key, event.patches[key])) {
+          const version = this.resourceStore.getRecord(key)?.version ?? "";
+          this.events.emit("resource:update", { key, version });
+        }
+      }
+      this.queueLiveRefresh(keys);
+      return;
+    }
+    if (event.type !== "invalidate" && event.type !== "resync") return;
     const keys = event.keys.filter(key => activeKeys.has(key));
     if (keys.length === 0) return;
 
     for (const key of keys) {
       this.resourceStore.markStale(key);
       this.events.emit("resource:invalidate", { key });
-      this.pendingLiveRefreshKeys.add(key);
     }
+    this.queueLiveRefresh(keys);
+  }
+
+  private queueLiveRefresh(keys: string[]): void {
+    for (const key of keys) this.pendingLiveRefreshKeys.add(key);
+    if (keys.length === 0) return;
     if (this.liveRefreshTimer !== undefined) return;
     this.liveRefreshTimer = setTimeout(() => {
       this.liveRefreshTimer = undefined;
