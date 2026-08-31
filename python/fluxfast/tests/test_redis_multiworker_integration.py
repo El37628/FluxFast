@@ -10,7 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import anyio
-import httpx
+import httpx2
 import pytest
 
 from fluxfast import RedisResourceCache
@@ -55,7 +55,7 @@ def _start_worker(port: int, environment: dict[str, str]) -> subprocess.Popen:
 
 
 async def _wait_for_workers(
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     workers: list[tuple[int, subprocess.Popen]],
 ) -> None:
     pending = set(range(len(workers)))
@@ -70,7 +70,7 @@ async def _wait_for_workers(
                 try:
                     response = await client.get(f"http://127.0.0.1:{port}/health")
                     response.raise_for_status()
-                except httpx.HTTPError:
+                except httpx2.HTTPError:
                     continue
                 assert response.json() == {"pid": process.pid}
                 pending.remove(index)
@@ -122,7 +122,7 @@ async def test_three_fastapi_workers_share_invalidation_and_refill() -> None:
     try:
         await admin.set(state_key, 1)
         await admin.delete(load_count_key)
-        async with httpx.AsyncClient(timeout=5) as client:
+        async with httpx2.AsyncClient(timeout=5) as client:
             await _wait_for_workers(client, workers)
 
             first = await client.get(
