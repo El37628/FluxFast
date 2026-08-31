@@ -66,9 +66,13 @@ FluxFast application shutdown closes an optional cache backend without
 requiring custom backends to implement `close()`.
 
 The cache is strict. Redis connection, command, serialization-size, and unsafe
-write failures are exposed through FluxFast cache error types with the original
-exception chained. No process-local fallback is attempted. Cache invalidation
-must succeed before a corresponding live signal is published.
+write failures are exposed through public `ResourceCacheError`,
+`ResourceCacheUnavailableError`, and `ResourceCacheSerializationError` types
+with the original exception chained. No process-local fallback is attempted.
+Malformed, oversized, or unknown-schema entries are safely logged without
+identities or values, atomically removed with their tag memberships, and treated
+as misses; a cleanup failure remains a strict availability error. Cache
+invalidation must succeed before a corresponding live signal is published.
 
 Backend operational metrics use bounded counters without resource keys, scope
 fingerprints, tenant or user identifiers, namespaces, Redis URLs, or other

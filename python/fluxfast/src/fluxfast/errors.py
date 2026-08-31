@@ -20,6 +20,18 @@ class ResourceError(FluxFastError):
     """Raised when a resource loader fails during execution."""
 
 
+class ResourceCacheError(FluxFastError):
+    """Base error for configured resource-cache backend failures."""
+
+
+class ResourceCacheUnavailableError(ResourceCacheError):
+    """Raised when the configured shared cache cannot complete an operation."""
+
+
+class ResourceCacheSerializationError(ResourceCacheError):
+    """Raised when a resource cannot be stored as bounded safe cache data."""
+
+
 class ValidationError(FluxFastError):
     """Raised when form/request validation fails."""
 
