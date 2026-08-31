@@ -4,7 +4,10 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+
+import { resolvePublishedMixedPairing } from "./published-mixed-config.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureRoot = path.join(repositoryRoot, "tests", "release-consumer", "next-init");
@@ -14,11 +17,24 @@ const environmentRoot = path.join(temporaryRoot, "python-environment");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 const bootstrapPython = process.env.FLUXFAST_E2E_PYTHON ?? "python";
-const expectedPythonVersion = (
-  process.env.FLUXFAST_PYTHON_VERSION ?? "0.3.0"
-).replace(/^v/, "");
+const repositoryVersion = JSON.parse(
+  fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8")
+).version;
+const pairing = resolvePublishedMixedPairing({
+  pairing: process.env.FLUXFAST_PAIRING ?? "python-current",
+  releaseVersion: process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion,
+  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.3.0",
+});
+const expectedPythonVersion = process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "")
+  ?? pairing.pythonVersion;
+const expectedJavaScriptVersion = process.env.FLUXFAST_JAVASCRIPT_VERSION?.replace(/^v/, "")
+  ?? pairing.javascriptVersion;
 const pythonSpec = process.env.FLUXFAST_PYTHON_SPEC
   ?? `fluxfast==${expectedPythonVersion}`;
+const coreSpec = process.env.FLUXFAST_CORE_SPEC
+  ?? `@fluxfast/core@${expectedJavaScriptVersion}`;
+const nextSpec = process.env.FLUXFAST_NEXT_SPEC
+  ?? `@fluxfast/next@${expectedJavaScriptVersion}`;
 
 function cleanEnvironment(extra = {}) {
   const environment = { ...process.env };
@@ -101,7 +117,7 @@ function installedPackageVersion(packageName) {
 }
 
 async function installPublishedPython(python) {
-  const attempts = process.env.FLUXFAST_PYTHON_SPEC ? 1 : 12;
+  const attempts = process.env.FLUXFAST_PYTHON_SPEC ? 1 : 18;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const result = runResult(
       python,
@@ -118,23 +134,49 @@ async function installPublishedPython(python) {
   }
 }
 
+async function installPublishedJavaScript() {
+  const attempts = process.env.FLUXFAST_CORE_SPEC || process.env.FLUXFAST_NEXT_SPEC
+    ? 1
+    : 18;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = runResult(
+      npmCommand,
+      ["install", "--package-lock=false", "--no-save", coreSpec, nextSpec],
+      consumerRoot
+    );
+    if (!result.error && result.status === 0) return;
+    if (result.error) throw result.error;
+    if (attempt === attempts) {
+      throw new Error(
+        `Published JavaScript packages ${coreSpec} and ${nextSpec} were unavailable `
+          + `after ${attempts} attempts.`
+      );
+    }
+    console.log(
+      `Waiting for ${coreSpec} and ${nextSpec} registry propagation `
+        + `(${attempt}/${attempts})…`
+    );
+    await delay(10_000);
+  }
+}
+
 let child;
+let browser;
 try {
   fs.cpSync(fixtureRoot, consumerRoot, { recursive: true });
-  run(npmCommand, [
-    "install",
-    "--package-lock=false",
-    "--save-exact",
-    "@fluxfast/core@0.2.0",
-    "@fluxfast/next@0.2.0",
-  ], consumerRoot);
-  assert.equal(installedPackageVersion("@fluxfast/core"), "0.2.0");
-  assert.equal(installedPackageVersion("@fluxfast/next"), "0.2.0");
+  run(npmCommand, ["install", "--package-lock=false"], consumerRoot);
+  await installPublishedJavaScript();
+  assert.equal(installedPackageVersion("@fluxfast/core"), expectedJavaScriptVersion);
+  assert.equal(installedPackageVersion("@fluxfast/next"), expectedJavaScriptVersion);
 
   run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
   fs.copyFileSync(
     path.join(consumerRoot, "fixtures", "mixed-home.tsx"),
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx")
+  );
+  fs.copyFileSync(
+    path.join(consumerRoot, "fixtures", pairing.backendFixture),
+    path.join(consumerRoot, "backend.py")
   );
   run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
@@ -208,7 +250,8 @@ try {
 
   assert.equal(typeof html, "string", `Frontend did not become ready.\n${output}`);
   assert.match(html, /Published mixed consumer/);
-  assert.match(html, /Revenue <!-- -->120000<!-- --> from loader <!-- -->1/);
+  assert.match(html, /Revenue <!-- -->120000<!-- --> from loader <!-- -->\d+/);
+  assert.match(html, new RegExp(`capabilities-value[^>]*>${pairing.expectedCapabilities}<`));
   assert.doesNotMatch(html, /Loading analytics/);
 
   const protocolResponse = await fetch(frontendUrl, {
@@ -222,13 +265,38 @@ try {
   assert.equal(envelope.resources.analytics.value.revenue, 120_000);
   assert.equal("resourceKeys" in envelope, false);
   assert.equal("deferred" in envelope, false);
+  assert.equal("live" in envelope, false);
   assert.equal("resourceErrors" in envelope, false);
+
+  const requireFromConsumer = createRequire(path.join(consumerRoot, "package.json"));
+  const { chromium } = requireFromConsumer("@playwright/test");
+  browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const liveRequests = [];
+  const browserErrors = [];
+  page.on("request", request => {
+    if (request.headers()["x-fluxfast-live"] === "1") liveRequests.push(request.url());
+  });
+  page.on("pageerror", error => browserErrors.push(error.message));
+  page.on("console", message => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  await page.goto(frontendUrl);
+  await page.getByRole("heading", { name: "Published mixed consumer" }).waitFor();
+  assert.equal(
+    await page.locator("[data-testid=capabilities-value]").textContent(),
+    pairing.expectedCapabilities
+  );
+  await delay(750);
+  assert.deepEqual(liveRequests, []);
+  assert.deepEqual(browserErrors, []);
 
   console.log(
     `Published mixed pairing passed: Python ${expectedPythonVersion} + `
-      + `@fluxfast/next 0.2.0 at ${frontendUrl}.`
+      + `@fluxfast/next ${expectedJavaScriptVersion} at ${frontendUrl}.`
   );
 } finally {
+  await browser?.close();
   if (child) {
     terminateProcessGroup(child, "SIGTERM");
     if (!(await waitForExit(child, 10_000))) {

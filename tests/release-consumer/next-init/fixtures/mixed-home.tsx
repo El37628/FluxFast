@@ -5,6 +5,7 @@ import { useResource } from "@fluxfast/next";
 interface Analytics {
   revenue: number;
   load: number;
+  capabilities: string;
 }
 
 export default function HomePage() {
@@ -16,6 +17,7 @@ export default function HomePage() {
       <p data-testid="analytics-value">
         Revenue {analytics.revenue} from loader {analytics.load}
       </p>
+      <p data-testid="capabilities-value">{analytics.capabilities}</p>
     </main>
   );
 }
