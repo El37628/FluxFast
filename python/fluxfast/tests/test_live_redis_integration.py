@@ -15,6 +15,7 @@ from fastapi import FastAPI
 
 from fluxfast import (
     FluxFast,
+    LiveCoordinator,
     LiveEvent,
     LiveInvalidateEvent,
     Page,
@@ -248,6 +249,79 @@ async def test_positive_ttl_live_resource_invalidates_and_refills_shared_cache()
                 await worker_b.close()
             finally:
                 await worker_a.close()
+
+
+@pytest.mark.anyio
+async def test_standalone_coordinator_publishes_background_invalidation() -> None:
+    assert REDIS_URL is not None
+    deployment = uuid4().hex
+    namespace = f"test-background-publisher-{deployment}"
+    channel_prefix = f"fluxfast:{namespace}:live:"
+    publisher_cache = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    subscriber_cache = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    publisher = LiveCoordinator(
+        cache=publisher_cache,
+        broker=RedisLiveBroker.from_url(
+            REDIS_URL,
+            channel_prefix=channel_prefix,
+        ),
+    )
+    subscriber = LiveCoordinator(
+        cache=subscriber_cache,
+        broker=RedisLiveBroker.from_url(
+            REDIS_URL,
+            channel_prefix=channel_prefix,
+        ),
+    )
+    resource_scope = scope.tenant("hotel-1")
+    page = Page(
+        "Rooms",
+        [
+            resource(
+                "rooms",
+                lambda: [{"id": 1}],
+                scope=resource_scope,
+                ttl=60,
+                live=True,
+            )
+        ],
+    )
+    subscription = subscriber.resolve_subscription(page, {"rooms"})
+    stream = subscriber.subscribe(subscription)
+    received: list[LiveEvent] = []
+
+    try:
+        populated = await ResourceEngine.resolve_page_resources(
+            page,
+            {},
+            None,
+            publisher_cache,
+            TimingMetrics(),
+        )
+        cache_key = ResourceEngine.get_cache_key(page.resources[0])
+        assert populated.resources["rooms"].value == [{"id": 1}]
+        assert await subscriber_cache.get(cache_key) is not None
+
+        async with anyio.create_task_group() as tasks:
+            tasks.start_soon(_receive_one, stream, received)
+            await _wait_for_subscribers(subscriber.broker, 1)
+            await publisher.invalidate("rooms", scope=resource_scope)
+
+        assert received == [LiveInvalidateEvent(keys=["rooms"])]
+        assert await subscriber_cache.get(cache_key) is None
+    finally:
+        await stream.aclose()
+        try:
+            await publisher_cache.clear()
+        finally:
+            try:
+                await subscriber.close()
+            finally:
+                try:
+                    await publisher.close()
+                finally:
+                    await subscriber_cache.close()
+                    await publisher_cache.close()
 
 
 @pytest.mark.anyio
