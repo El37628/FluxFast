@@ -150,6 +150,19 @@ async def test_non_positive_ttl_deletes_instead_of_storing(ttl) -> None:
 
 
 @pytest.mark.anyio
+async def test_delete_removes_only_the_opaque_resource_key() -> None:
+    client = RecordingRedisClient()
+    cache = RedisResourceCache(client, namespace="hotel-prod")
+
+    await cache.delete("tenant:secret::rooms")
+
+    assert len(client.deletes) == 1
+    (redis_key,) = client.deletes[0]
+    assert redis_key.startswith("fluxfast:cache:v1:hotel-prod:resource:")
+    assert "tenant:secret" not in redis_key
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("ttl", [True, float("nan"), float("inf"), "60"])
 async def test_cache_rejects_invalid_ttls(ttl) -> None:
     cache = RedisResourceCache(RecordingRedisClient(), namespace="hotel-prod")

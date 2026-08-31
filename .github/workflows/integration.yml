@@ -47,7 +47,12 @@ jobs:
           redis_container_id=$(docker ps --filter publish=6379 --format '{{.ID}}')
           test -n "$redis_container_id"
           echo "FLUXFAST_TEST_REDIS_CONTAINER=$redis_container_id" >> "$GITHUB_ENV"
-      - run: pytest -q python/fluxfast/tests/test_live_redis.py python/fluxfast/tests/test_live_redis_integration.py
+      - run: >-
+          pytest -q
+          python/fluxfast/tests/test_live_redis.py
+          python/fluxfast/tests/test_live_redis_integration.py
+          python/fluxfast/tests/test_redis_cache.py
+          python/fluxfast/tests/test_redis_cache_integration.py
         env:
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/15
 
