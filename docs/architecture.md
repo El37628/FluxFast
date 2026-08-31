@@ -8,7 +8,9 @@ FastAPI route + dependencies
           ↓
 Page and scoped ResourceSpecs
           ↓
-concurrent resource engine + server cache
+concurrent resource engine
+          ↓
+MemoryResourceCache (one process) / RedisResourceCache (shared workers)
           ↓
 fluxfast/1 envelope
           ↓
@@ -39,6 +41,19 @@ LiveManager ← fetch-SSE ← LiveCoordinator ← Memory / Redis broker
 
 The broker never owns resource values. It carries scoped invalidation, patch,
 or resync signals; canonical state still comes from the page's resource loader.
+
+Distributed resource coherence is also a server-only concern:
+
+```text
+worker A ─┐
+worker B ─┼─→ RedisResourceCache ─→ native TTL + opaque tag indexes
+worker C ─┘
+```
+
+The resource engine uses the existing `ResourceCacheBackend` interface, so
+Redis adds no browser capability or wire field. A shared warm entry can be read
+through any worker. Simultaneous cold misses may still execute several loaders;
+v0.5 deliberately does not add a distributed loader lease.
 
 ## Blocking and deferred resource flow
 
@@ -139,6 +154,14 @@ appropriate for development, tests, or exactly one FastAPI process.
 signals across workers and hosts. Broker interruption ends the affected stream;
 browser reconnect then reloads every active key instead of relying on replay.
 
+`MemoryResourceCache` is also per-process. `RedisResourceCache` shares scoped
+values, TTL, deletion, tag invalidation, and namespace-safe clearing across
+workers. It stores bounded schema-versioned JSON under opaque identities and
+uses strict failure semantics: Redis errors are visible instead of silently
+falling back to a local cache. The cache and live broker have separate explicit
+namespaces and lifecycles because stored values and ephemeral signals are
+different responsibilities.
+
 ## Development topology
 
 The Next adapter requires a Node runtime for its App Router shell, but this does
@@ -155,8 +178,10 @@ React external-store hooks, normal-anchor link interception, server bootstrap,
 and generated component resolution. This keeps future frontend adapters from
 depending on Next-specific behavior.
 
-The in-memory backend resource cache is per process. Cache misses do not cross
-an isolation boundary, but scoped invalidation deletes only the current
-process's entry. Live publication must also reach streams on other workers, so
-multi-worker deployments require `RedisLiveBroker` plus either `ttl=0` for live
-resources or a shared/cross-worker-invalidation-aware `ResourceCacheBackend`.
+The in-memory backend resource cache is per process. Its cache misses do not
+cross an isolation boundary, but scoped invalidation deletes only the current
+process's entry. Multi-worker live deployments therefore have two valid
+topologies: `RedisLiveBroker` with `MemoryResourceCache` and `ttl=0`, or
+`RedisLiveBroker` with `RedisResourceCache` and positive TTLs. See
+[distributed resource coherence](distributed-cache.md) for the complete
+topology, failure, security, and lifecycle contract.

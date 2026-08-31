@@ -120,8 +120,10 @@ one namespace from the other.
 - Redis integration and browser tests must use real separate clients and
   processes; mocked command tests alone cannot establish distributed
   correctness.
-- The first supported Redis version range will be documented only after the CI
-  matrix proves it.
+- Redis Open Source 6.2 through 8.10 is supported. CI proves both ends with
+  Redis 6.2.24/Python 3.11 and Redis 8.10.1/Python 3.14, while the main
+  distributed browser flow runs on Redis 7.4. Newer lines join the supported
+  range only after entering this compatibility matrix.
 
 ## Rejected alternatives
 

@@ -12,7 +12,7 @@ Next.js server (public application origin)
   ↓ header-gated FluxFast rewrite
 FastAPI workers
   ↕
-Redis Pub/Sub when worker count > 1
+Redis resource cache + Pub/Sub when worker count > 1
 ```
 
 Initial documents, live streams, resource-only requests, and mutations all use
@@ -115,35 +115,48 @@ pip install "fluxfast[redis]"
 import os
 
 from fastapi import FastAPI
-from fluxfast import FluxFast, RedisLiveBroker
+from fluxfast import FluxFast, RedisLiveBroker, RedisResourceCache
 
 app = FastAPI()
+redis_url = os.environ["REDIS_URL"]
+namespace = "myapp-prod"
 flux = FluxFast(
     app,
+    cache=RedisResourceCache.from_url(
+        redis_url,
+        namespace=namespace,
+    ),
     broker=RedisLiveBroker.from_url(
-        os.environ["REDIS_URL"],
-        channel_prefix="myapp:fluxfast:v1:",
+        redis_url,
+        channel_prefix=f"fluxfast:{namespace}:live:",
     ),
 )
 ```
 
-Every worker must use the same Redis URL and `channel_prefix`. The prefix is an
-operational namespace, not an authorization boundary; use separate credentials
-and network isolation for Redis. FluxFast broker topics are opaque hashes, but
-Redis access should still be restricted to the application.
+Every worker must use the same Redis URL, cache `namespace`, and broker
+`channel_prefix`. Use unique values for each application/environment. These are
+operational namespaces, not authorization boundaries; use separate credentials
+and network isolation for Redis. FluxFast cache identities and broker topics
+are opaque hashes, but Redis access should still be restricted to the
+application.
 
-Redis carries ephemeral signals only. It does not replace the resource cache or
-database. On connection loss, the server ends the affected subscription and the
-browser reconnects and reloads canonical live resources. Monitor Redis
-availability, reconnects, and publish errors, but do not make a successful
-database transaction depend on Pub/Sub delivery.
+The two Redis components have distinct responsibilities.
+`RedisResourceCache` stores bounded canonical resource entries with native TTL;
+it does not replace the database. `RedisLiveBroker` carries ephemeral signals
+only. On broker connection loss, the server ends the affected subscription and
+the browser reconnects and reloads canonical live resources. Monitor Redis
+availability, cache errors, reconnects, and publish errors, but do not make a
+successful database transaction depend on Pub/Sub delivery.
 
-The default `MemoryResourceCache` is also per process. `RedisLiveBroker` does
-not invalidate a positive-TTL entry held by every other worker. For guaranteed
-canonical convergence across workers, either set `ttl=0` on live resources or
-provide a `ResourceCacheBackend` whose values or invalidations are shared by all
-workers. Do not combine positive-TTL live entries, process-local resource
-caches, and non-sticky load balancing while expecting immediate convergence.
+The default `MemoryResourceCache` is also per process. `RedisLiveBroker` alone
+does not invalidate a positive-TTL entry held by every other worker. Keep
+`ttl=0` if using that process-local cache. The combined configuration above
+uses `RedisResourceCache`, so all workers delete and refill the same entry and
+positive-TTL live resources converge through any worker. Do not combine
+positive-TTL live entries, process-local resource caches, and non-sticky load
+balancing while expecting immediate convergence. See [distributed resource
+coherence](distributed-cache.md) for TTL, failure, security, and lifecycle
+details.
 
 ## Server and load-balancer sizing
 
@@ -196,8 +209,10 @@ Before rollout, verify all of the following through the real proxy chain:
 6. Navigating away and logging out reduce active subscriptions to baseline.
 7. A production Next.js build and `next start` work through the single public
    origin.
-8. Positive-TTL live resources use a shared/invalidation-aware cache, or the
-   multi-worker configuration uses `ttl=0`.
+8. A positive-TTL resource loaded through worker A is a warm hit through worker
+   B, and invalidation through worker C forces a canonical refill.
+9. If `MemoryResourceCache` is intentionally retained, multi-worker live
+   resources use `ttl=0`.
 
 FluxFast's Playwright, Redis integration, and controlled benchmark suites cover
 these behaviors in the repository, but the final proxy and infrastructure

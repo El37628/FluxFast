@@ -295,14 +295,14 @@ snapshot through the application's existing Prometheus, OpenTelemetry, or
 other metrics integration. Counts are process-local; aggregate them across
 workers in the monitoring backend.
 
-## Single-process and Redis brokers
+## Single-process and Redis coordination
 
 `MemoryLiveBroker` is the default. It is suitable for local development, tests,
 and a deployment with exactly one FastAPI process. It cannot carry an event
 from one worker or host to a browser connected through another.
 
 For multiple workers or hosts, install the optional dependency and configure
-the same Redis deployment and channel prefix everywhere:
+the same Redis deployment and explicit namespaces everywhere:
 
 ```bash
 pip install "fluxfast[redis]"
@@ -312,11 +312,17 @@ pip install "fluxfast[redis]"
 import os
 
 from fastapi import FastAPI
-from fluxfast import FluxFast, RedisLiveBroker
+from fluxfast import FluxFast, RedisLiveBroker, RedisResourceCache
 
 app = FastAPI()
-broker = RedisLiveBroker.from_url(os.environ["REDIS_URL"])
-flux = FluxFast(app, broker=broker)
+redis_url = os.environ["REDIS_URL"]
+namespace = "hotel-prod"
+cache = RedisResourceCache.from_url(redis_url, namespace=namespace)
+broker = RedisLiveBroker.from_url(
+    redis_url,
+    channel_prefix=f"fluxfast:{namespace}:live:",
+)
+flux = FluxFast(app, cache=cache, broker=broker)
 ```
 
 Redis Pub/Sub is intentionally ephemeral. A broker interruption ends affected
@@ -326,11 +332,14 @@ has already invalidated canonical cache state, logs the publication failure,
 and lets later refresh/reconnect recover.
 
 `RedisLiveBroker` distributes signals, not server cache entries. If multiple
-workers use the built-in process-local `MemoryResourceCache`, declare live
-resources with `ttl=0` so a canonical refresh cannot hit an old entry in another
-worker. A positive TTL in that topology requires an application-provided shared
-or cross-worker-invalidation-aware `ResourceCacheBackend`. A built-in Redis
-resource cache is not part of v0.4.
+workers keep the built-in process-local `MemoryResourceCache`, declare live
+resources with `ttl=0` so a canonical refresh cannot hit an old entry in
+another worker. `RedisResourceCache` shares values and invalidation across
+workers, so the combined configuration above supports positive-TTL live
+resources. Cache namespace and broker prefix are independently configured and
+must match across all cooperating web and background processes. See
+[distributed resource coherence](distributed-cache.md) for the complete
+topology and failure contract.
 
 ## Backpressure and delivery guarantees
 
@@ -351,8 +360,11 @@ after invalidation, reconnect, resync, or uncertainty.
   than the heartbeat interval, and size file descriptors/connections for one
   stream per active live page and browser tab.
 - Use Redis whenever more than one FastAPI worker/process can serve requests.
-- With multiple workers, use `ttl=0` for live resources unless the configured
-  resource cache is shared or invalidated across those workers.
+- With multiple workers, pair `RedisLiveBroker` with `RedisResourceCache` for
+  shared positive-TTL live resources; use `ttl=0` if retaining
+  `MemoryResourceCache`.
+- Give each application/environment a unique cache namespace and broker prefix,
+  and use the same values in every cooperating process.
 - Authenticate and authorize in FastAPI dependencies on the page route.
 - Use explicit user/tenant/custom scopes from server-owned identities.
 - Clear the router on logout and keep the server's maximum connection age
@@ -362,7 +374,7 @@ See [live deployment](live-deployment.md) for Nginx and Nginx Proxy Manager
 examples, and [the protocol guide](protocol.md#live-resources) for the wire
 contract.
 
-## v0.4 limitations
+## Live Resource boundaries
 
 Live Resources are one-way synchronization signals for existing resources.
 They are not a general event bus, task queue, job runner, WebSocket API,
