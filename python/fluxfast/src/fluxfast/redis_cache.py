@@ -12,6 +12,7 @@ from typing import Any, Final, Protocol, Self
 from ._redis_cache_codec import RedisCacheCodecError, RedisResourceCodec
 from ._redis_cache_keys import RedisCacheKeyspace
 from .cache import CachedResource
+from .cache_metrics import RedisCacheMetrics
 from .errors import (
     ResourceCacheError,
     ResourceCacheSerializationError,
@@ -188,6 +189,7 @@ class RedisResourceCache:
         max_value_bytes: int = DEFAULT_REDIS_MAX_VALUE_BYTES,
         scan_count: int = DEFAULT_REDIS_SCAN_COUNT,
         owns_client: bool = False,
+        metrics: RedisCacheMetrics | None = None,
     ) -> None:
         if (
             isinstance(scan_count, bool)
@@ -201,6 +203,7 @@ class RedisResourceCache:
         self.scan_count = scan_count
         self._owns_client = owns_client
         self._closed = False
+        self.metrics = metrics if metrics is not None else RedisCacheMetrics()
 
     @classmethod
     def from_url(
@@ -210,6 +213,7 @@ class RedisResourceCache:
         namespace: str,
         max_value_bytes: int = DEFAULT_REDIS_MAX_VALUE_BYTES,
         scan_count: int = DEFAULT_REDIS_SCAN_COUNT,
+        metrics: RedisCacheMetrics | None = None,
         **redis_options: Any,
     ) -> RedisResourceCache:
         """Create a cache that owns its lazily imported async Redis client."""
@@ -223,6 +227,7 @@ class RedisResourceCache:
             max_value_bytes=max_value_bytes,
             scan_count=scan_count,
             owns_client=True,
+            metrics=metrics,
         )
 
     @property
@@ -242,39 +247,46 @@ class RedisResourceCache:
 
         self._ensure_open()
         redis_key = self._keyspace.resource_key(key)
+        self.metrics.get_started()
         try:
             async with self._client.pipeline(transaction=True) as pipeline:
                 pipeline.get(redis_key)
                 pipeline.pttl(redis_key)
                 result = await pipeline.execute()
         except Exception as error:
-            raise _unavailable("get") from error
+            raise self._unavailable("get") from error
         if not isinstance(result, (list, tuple)) or len(result) != 2:
-            raise ResourceCacheError(
+            raise self._error(
                 "Redis resource cache get returned an invalid response",
-                details={"operation": "get"},
+                "get",
             )
         payload, ttl_ms = result
         if payload is None:
+            self.metrics.get_miss()
             return None
+        self.metrics.payload_read(_payload_size(payload))
         if isinstance(ttl_ms, bool) or not isinstance(ttl_ms, int):
-            raise ResourceCacheError(
+            raise self._error(
                 "Redis resource cache TTL returned an invalid response",
-                details={"operation": "get"},
+                "get",
             )
         if ttl_ms <= 0:
             await self._delete_resource(key)
+            self.metrics.get_miss()
             return None
 
         try:
             decoded = self._codec.decode(payload)
         except (RedisCacheCodecError, TypeError):
+            self.metrics.error()
             _LOGGER.warning(
                 "Removed an invalid Redis resource cache entry",
                 extra={"fluxfast_cache_operation": "decode"},
             )
             await self._delete_resource(key)
+            self.metrics.get_miss()
             return None
+        self.metrics.get_hit()
         return CachedResource(
             version=decoded.version,
             value=decoded.value,
@@ -299,6 +311,7 @@ class RedisResourceCache:
         try:
             payload = self._codec.encode(resource)
         except (RedisCacheCodecError, TypeError) as error:
+            self.metrics.error()
             raise ResourceCacheSerializationError(
                 str(error),
                 details={"operation": "set"},
@@ -318,7 +331,8 @@ class RedisResourceCache:
                 self._keyspace.tag_prefix,
             )
         except Exception as error:
-            raise _unavailable("set") from error
+            raise self._unavailable("set") from error
+        self.metrics.set_completed(len(payload))
 
     async def delete(self, key: str) -> None:
         """Delete one resource key.
@@ -344,7 +358,8 @@ class RedisResourceCache:
                 self._keyspace.tag_prefix,
             )
         except Exception as error:
-            raise _unavailable("invalidate_tag") from error
+            raise self._unavailable("invalidate_tag") from error
+        self.metrics.tag_invalidation_completed()
 
     async def clear(self) -> None:
         """Unlink only this exact namespace using bounded incremental scans."""
@@ -369,9 +384,9 @@ class RedisResourceCache:
                         not isinstance(item, (str, bytes)) for item in result[1]
                     )
                 ):
-                    raise ResourceCacheError(
+                    raise self._error(
                         "Redis resource cache scan returned an invalid response",
-                        details={"operation": "clear"},
+                        "clear",
                     )
                 cursor, keys = result
                 for start in range(0, len(keys), self.scan_count):
@@ -379,11 +394,12 @@ class RedisResourceCache:
                         *keys[start : start + self.scan_count]
                     )
                 if cursor == 0:
+                    self.metrics.clear_completed()
                     return
         except ResourceCacheError:
             raise
         except Exception as error:
-            raise _unavailable("clear") from error
+            raise self._unavailable("clear") from error
 
     async def close(self) -> None:
         """Close the owned Redis client idempotently."""
@@ -395,7 +411,7 @@ class RedisResourceCache:
             try:
                 await self._client.aclose()
             except Exception as error:
-                raise _unavailable("close") from error
+                raise self._unavailable("close") from error
 
     def _ensure_open(self) -> None:
         if self._closed:
@@ -413,7 +429,23 @@ class RedisResourceCache:
                 self._keyspace.tag_prefix,
             )
         except Exception as error:
-            raise _unavailable("delete") from error
+            raise self._unavailable("delete") from error
+        self.metrics.delete_completed()
+
+    def _error(self, message: str, operation: str) -> ResourceCacheError:
+        self.metrics.error()
+        return ResourceCacheError(message, details={"operation": operation})
+
+    def _unavailable(self, operation: str) -> ResourceCacheUnavailableError:
+        self.metrics.error()
+        _LOGGER.error(
+            "Redis resource cache operation failed",
+            extra={"fluxfast_cache_operation": operation},
+        )
+        return ResourceCacheUnavailableError(
+            f"Redis resource cache {operation} failed",
+            details={"operation": operation},
+        )
 
 
 def _normalize_ttl_ms(ttl: object) -> int | None:
@@ -428,12 +460,12 @@ def _normalize_ttl_ms(ttl: object) -> int | None:
     return max(1, math.ceil(ttl * 1000))
 
 
-def _unavailable(operation: str) -> ResourceCacheUnavailableError:
-    _LOGGER.error(
-        "Redis resource cache operation failed",
-        extra={"fluxfast_cache_operation": operation},
-    )
-    return ResourceCacheUnavailableError(
-        f"Redis resource cache {operation} failed",
-        details={"operation": operation},
-    )
+def _payload_size(payload: object) -> int:
+    if isinstance(payload, bytes):
+        return len(payload)
+    if isinstance(payload, str):
+        try:
+            return len(payload.encode("utf-8"))
+        except UnicodeEncodeError:
+            return 0
+    return 0

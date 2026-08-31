@@ -2,6 +2,7 @@
 
 from .app import FluxFast
 from .cache import CachedResource, MemoryResourceCache, ResourceCacheBackend
+from .cache_metrics import RedisCacheMetrics, RedisCacheMetricsSnapshot
 from .capabilities import (
     CAPABILITY_DEFERRED_RESOURCES,
     CAPABILITY_LIVE_RESOURCES,
@@ -129,6 +130,8 @@ __all__ = [
     "PageEnvelope",
     "PageNotFoundError",
     "ProtocolError",
+    "RedisCacheMetrics",
+    "RedisCacheMetricsSnapshot",
     "RedisLiveBroker",
     "RedisResourceCache",
     "ResourceCacheBackend",

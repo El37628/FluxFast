@@ -12,6 +12,8 @@ import pytest
 
 import fluxfast.redis_cache as redis_cache_module
 from fluxfast import (
+    RedisCacheMetrics,
+    RedisCacheMetricsSnapshot,
     RedisResourceCache,
     ResourceCacheError,
     ResourceCacheSerializationError,
@@ -153,6 +155,75 @@ def make_resource() -> CachedResource:
     )
 
 
+def test_cache_metrics_start_at_zero_and_export_a_bounded_snapshot() -> None:
+    metrics = RedisCacheMetrics()
+
+    assert metrics.snapshot() == RedisCacheMetricsSnapshot()
+    assert metrics.snapshot().as_dict() == {
+        "cache_gets": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "cache_sets": 0,
+        "cache_deletes": 0,
+        "cache_tag_invalidations": 0,
+        "cache_clears": 0,
+        "cache_errors": 0,
+        "cache_payload_bytes_written": 0,
+        "cache_payload_bytes_read": 0,
+    }
+
+
+@pytest.mark.anyio
+async def test_cache_metrics_track_successful_operations_and_payload_bytes() -> None:
+    client = RecordingRedisClient()
+    metrics = RedisCacheMetrics()
+    cache = RedisResourceCache(
+        client,
+        namespace="hotel-prod",
+        metrics=metrics,
+    )
+
+    assert await cache.get("missing") is None
+    await cache.set("rooms", make_resource(), ttl=60)
+    payload = client.evals[0][2][3]
+    assert isinstance(payload, bytes)
+    client.pipeline_result = [payload, 60_000]
+    assert await cache.get("rooms") is not None
+    await cache.delete("rooms")
+    await cache.invalidate_tag("rooms")
+    await cache.clear()
+
+    assert metrics.snapshot() == RedisCacheMetricsSnapshot(
+        cache_gets=2,
+        cache_hits=1,
+        cache_misses=1,
+        cache_sets=1,
+        cache_deletes=1,
+        cache_tag_invalidations=1,
+        cache_clears=1,
+        cache_payload_bytes_written=len(payload),
+        cache_payload_bytes_read=len(payload),
+    )
+
+
+@pytest.mark.anyio
+async def test_cache_metrics_count_failures_without_turning_them_into_misses() -> None:
+    metrics = RedisCacheMetrics()
+    cache = RedisResourceCache(
+        FailingRedisClient("get"),
+        namespace="hotel-prod",
+        metrics=metrics,
+    )
+
+    with pytest.raises(ResourceCacheUnavailableError):
+        await cache.get("tenant:secret::rooms")
+
+    assert metrics.snapshot() == RedisCacheMetricsSnapshot(
+        cache_gets=1,
+        cache_errors=1,
+    )
+
+
 @pytest.mark.anyio
 async def test_cache_set_uses_opaque_key_safe_json_and_native_ttl() -> None:
     client = RecordingRedisClient()
@@ -250,6 +321,13 @@ async def test_corrupt_entries_are_safely_removed_and_become_misses(
     assert "not-json-super-secret" not in caplog.text
     assert "tenant:secret" not in caplog.text
     assert "hotel-prod" not in caplog.text
+    assert cache.metrics.snapshot() == RedisCacheMetricsSnapshot(
+        cache_gets=1,
+        cache_misses=1,
+        cache_deletes=1,
+        cache_errors=1,
+        cache_payload_bytes_read=len(payload),
+    )
 
 
 @pytest.mark.anyio
@@ -382,6 +460,7 @@ async def test_oversized_set_raises_public_serialization_error_without_writing()
     assert captured.value.details == {"operation": "set"}
     assert isinstance(captured.value.__cause__, RedisCachePayloadTooLargeError)
     assert client.evals == []
+    assert cache.metrics.snapshot() == RedisCacheMetricsSnapshot(cache_errors=1)
 
 
 @pytest.mark.anyio
@@ -423,6 +502,7 @@ async def test_eval_failures_use_stable_public_errors(
 
     assert captured.value.details == {"operation": operation}
     assert isinstance(captured.value.__cause__, ConnectionError)
+    assert cache.metrics.snapshot().cache_errors == 1
 
 
 @pytest.mark.anyio
@@ -444,6 +524,8 @@ async def test_clear_and_close_failures_use_stable_public_errors() -> None:
 
     assert clear_error.value.details == {"operation": "clear"}
     assert close_error.value.details == {"operation": "close"}
+    assert clear_cache.metrics.snapshot().cache_errors == 1
+    assert close_cache.metrics.snapshot().cache_errors == 1
 
 
 @pytest.mark.anyio
@@ -453,10 +535,16 @@ async def test_invalid_backend_responses_raise_cache_errors() -> None:
     clear_client = RecordingRedisClient()
     clear_client.scan_results = [(True, [])]
 
+    get_cache = RedisResourceCache(get_client, namespace="hotel-prod")
+    clear_cache = RedisResourceCache(clear_client, namespace="hotel-prod")
+
     with pytest.raises(ResourceCacheError, match="invalid response"):
-        await RedisResourceCache(get_client, namespace="hotel-prod").get("rooms")
+        await get_cache.get("rooms")
     with pytest.raises(ResourceCacheError, match="invalid response"):
-        await RedisResourceCache(clear_client, namespace="hotel-prod").clear()
+        await clear_cache.clear()
+
+    assert get_cache.metrics.snapshot().cache_errors == 1
+    assert clear_cache.metrics.snapshot().cache_errors == 1
 
 
 @pytest.mark.anyio
@@ -489,6 +577,7 @@ async def test_owned_client_closes_idempotently() -> None:
 
 def test_from_url_creates_owned_client_and_forwards_options(monkeypatch) -> None:
     client = RecordingRedisClient()
+    metrics = RedisCacheMetrics()
     calls = []
 
     def load(url: str, **options: Any) -> RecordingRedisClient:
@@ -500,6 +589,7 @@ def test_from_url_creates_owned_client_and_forwards_options(monkeypatch) -> None
     cache = RedisResourceCache.from_url(
         "redis://localhost:6379/3",
         namespace="hotel-prod",
+        metrics=metrics,
         decode_responses=False,
     )
 
@@ -508,6 +598,7 @@ def test_from_url_creates_owned_client_and_forwards_options(monkeypatch) -> None
         ("redis://localhost:6379/3", {"decode_responses": False})
     ]
     assert cache._owns_client is True
+    assert cache.metrics is metrics
 
 
 def test_from_url_explains_how_to_install_optional_dependency(monkeypatch) -> None:

@@ -74,10 +74,17 @@ identities or values, atomically removed with their tag memberships, and treated
 as misses; a cleanup failure remains a strict availability error. Cache
 invalidation must succeed before a corresponding live signal is published.
 
-Backend operational metrics use bounded counters without resource keys, scope
+Each backend exposes a `RedisCacheMetrics` instance with immutable
+`RedisCacheMetricsSnapshot` values for get attempts, hit and miss outcomes,
+successful writes, deletes, tag invalidations and clears, errors, and encoded
+payload bytes read or written. Strict failures increment `cache_errors` without
+being counted as misses, while malformed entries count as both an error and a
+recovered miss. These process-local counters have no resource keys, scope
 fingerprints, tenant or user identifiers, namespaces, Redis URLs, or other
-high-cardinality labels. Logs use `fluxfast.cache.redis`, never include cached
-values or credentials, and avoid raw logical cache identities.
+high-cardinality labels. Applications may inject one metrics instance into
+multiple backends when process-level aggregation is useful. Logs use
+`fluxfast.cache.redis`, never include cached values or credentials, and avoid
+raw logical cache identities.
 
 Applications using multiple workers should configure corresponding explicit
 cache and live namespaces:
