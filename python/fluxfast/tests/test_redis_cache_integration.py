@@ -215,3 +215,32 @@ async def test_clear_unlinks_only_the_exact_encoded_namespace() -> None:
         await admin.aclose()
         await child.close()
         await parent.close()
+
+
+@pytest.mark.anyio
+async def test_corrupt_entry_self_recovers_without_leaving_tag_indexes() -> None:
+    assert REDIS_URL is not None
+    from redis.asyncio import Redis
+
+    namespace = f"test-corrupt-{uuid4().hex}"
+    keyspace = RedisCacheKeyspace(namespace)
+    cache = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    admin = Redis.from_url(REDIS_URL)
+    resource_key = keyspace.resource_key("rooms")
+    membership_key = keyspace.resource_tags_key("rooms")
+    tag_key = keyspace.tag_key("rooms")
+
+    try:
+        future_ms = time.time() * 1000 + 60_000
+        await admin.set(resource_key, b"not-valid-json", px=60_000)
+        await admin.sadd(membership_key, tag_key)
+        await admin.pexpire(membership_key, 60_000)
+        await admin.zadd(tag_key, {resource_key: future_ms})
+        await admin.pexpire(tag_key, 60_000)
+
+        assert await cache.get("rooms") is None
+        assert await admin.exists(resource_key, membership_key, tag_key) == 0
+    finally:
+        await cache.clear()
+        await admin.aclose()
+        await cache.close()

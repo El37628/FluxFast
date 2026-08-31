@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import math
 import time
 from types import TracebackType
 from typing import Any, Final, Protocol, Self
 
-from ._redis_cache_codec import RedisResourceCodec
+from ._redis_cache_codec import RedisCacheCodecError, RedisResourceCodec
 from ._redis_cache_keys import RedisCacheKeyspace
 from .cache import CachedResource
+from .errors import (
+    ResourceCacheError,
+    ResourceCacheSerializationError,
+    ResourceCacheUnavailableError,
+)
 
 DEFAULT_REDIS_MAX_VALUE_BYTES: Final = 1024 * 1024
 DEFAULT_REDIS_SCAN_COUNT: Final = 500
+_LOGGER = logging.getLogger("fluxfast.cache.redis")
 
 _SET_WITH_TAGS_SCRIPT: Final = """
 local resource_key = KEYS[1]
@@ -235,21 +242,39 @@ class RedisResourceCache:
 
         self._ensure_open()
         redis_key = self._keyspace.resource_key(key)
-        async with self._client.pipeline(transaction=True) as pipeline:
-            pipeline.get(redis_key)
-            pipeline.pttl(redis_key)
-            result = await pipeline.execute()
-        if len(result) != 2:
-            raise RuntimeError("Redis cache read returned an unexpected result")
+        try:
+            async with self._client.pipeline(transaction=True) as pipeline:
+                pipeline.get(redis_key)
+                pipeline.pttl(redis_key)
+                result = await pipeline.execute()
+        except Exception as error:
+            raise _unavailable("get") from error
+        if not isinstance(result, (list, tuple)) or len(result) != 2:
+            raise ResourceCacheError(
+                "Redis resource cache get returned an invalid response",
+                details={"operation": "get"},
+            )
         payload, ttl_ms = result
         if payload is None:
             return None
         if isinstance(ttl_ms, bool) or not isinstance(ttl_ms, int):
-            raise TypeError("Redis cache TTL returned an unexpected result")
+            raise ResourceCacheError(
+                "Redis resource cache TTL returned an invalid response",
+                details={"operation": "get"},
+            )
         if ttl_ms <= 0:
+            await self._delete_resource(key)
             return None
 
-        decoded = self._codec.decode(payload)
+        try:
+            decoded = self._codec.decode(payload)
+        except (RedisCacheCodecError, TypeError):
+            _LOGGER.warning(
+                "Removed an invalid Redis resource cache entry",
+                extra={"fluxfast_cache_operation": "decode"},
+            )
+            await self._delete_resource(key)
+            return None
         return CachedResource(
             version=decoded.version,
             value=decoded.value,
@@ -271,20 +296,29 @@ class RedisResourceCache:
         if ttl_ms is None:
             await self._delete_resource(key)
             return
-        payload = self._codec.encode(resource)
+        try:
+            payload = self._codec.encode(resource)
+        except (RedisCacheCodecError, TypeError) as error:
+            raise ResourceCacheSerializationError(
+                str(error),
+                details={"operation": "set"},
+            ) from error
         membership_key = self._keyspace.resource_tags_key(key)
         tag_keys = tuple(
             dict.fromkeys(self._keyspace.tag_key(tag) for tag in resource.tags)
         )
         redis_keys = (redis_key, membership_key, *tag_keys)
-        await self._client.eval(
-            _SET_WITH_TAGS_SCRIPT,
-            len(redis_keys),
-            *redis_keys,
-            payload,
-            ttl_ms,
-            self._keyspace.tag_prefix,
-        )
+        try:
+            await self._client.eval(
+                _SET_WITH_TAGS_SCRIPT,
+                len(redis_keys),
+                *redis_keys,
+                payload,
+                ttl_ms,
+                self._keyspace.tag_prefix,
+            )
+        except Exception as error:
+            raise _unavailable("set") from error
 
     async def delete(self, key: str) -> None:
         """Delete one resource key.
@@ -299,30 +333,57 @@ class RedisResourceCache:
         """Atomically remove every live resource in one opaque tag index."""
 
         self._ensure_open()
-        await self._client.eval(
-            _INVALIDATE_TAG_SCRIPT,
-            1,
-            self._keyspace.tag_key(tag),
-            self._keyspace.resource_prefix,
-            self._keyspace.resource_tags_prefix,
-            self._keyspace.tag_prefix,
-        )
+        tag_key = self._keyspace.tag_key(tag)
+        try:
+            await self._client.eval(
+                _INVALIDATE_TAG_SCRIPT,
+                1,
+                tag_key,
+                self._keyspace.resource_prefix,
+                self._keyspace.resource_tags_prefix,
+                self._keyspace.tag_prefix,
+            )
+        except Exception as error:
+            raise _unavailable("invalidate_tag") from error
 
     async def clear(self) -> None:
         """Unlink only this exact namespace using bounded incremental scans."""
 
         self._ensure_open()
-        cursor = 0
-        while True:
-            cursor, keys = await self._client.scan(
-                cursor,
-                match=self._keyspace.scan_pattern,
-                count=self.scan_count,
-            )
-            for start in range(0, len(keys), self.scan_count):
-                await self._client.unlink(*keys[start : start + self.scan_count])
-            if cursor == 0:
-                return
+        try:
+            cursor = 0
+            while True:
+                result = await self._client.scan(
+                    cursor,
+                    match=self._keyspace.scan_pattern,
+                    count=self.scan_count,
+                )
+                if (
+                    not isinstance(result, (list, tuple))
+                    or len(result) != 2
+                    or isinstance(result[0], bool)
+                    or not isinstance(result[0], int)
+                    or result[0] < 0
+                    or not isinstance(result[1], (list, tuple))
+                    or any(
+                        not isinstance(item, (str, bytes)) for item in result[1]
+                    )
+                ):
+                    raise ResourceCacheError(
+                        "Redis resource cache scan returned an invalid response",
+                        details={"operation": "clear"},
+                    )
+                cursor, keys = result
+                for start in range(0, len(keys), self.scan_count):
+                    await self._client.unlink(
+                        *keys[start : start + self.scan_count]
+                    )
+                if cursor == 0:
+                    return
+        except ResourceCacheError:
+            raise
+        except Exception as error:
+            raise _unavailable("clear") from error
 
     async def close(self) -> None:
         """Close the owned Redis client idempotently."""
@@ -331,22 +392,28 @@ class RedisResourceCache:
             return
         self._closed = True
         if self._owns_client:
-            await self._client.aclose()
+            try:
+                await self._client.aclose()
+            except Exception as error:
+                raise _unavailable("close") from error
 
     def _ensure_open(self) -> None:
         if self._closed:
-            raise RuntimeError("Redis resource cache is closed")
+            raise ResourceCacheError("Redis resource cache is closed")
 
     async def _delete_resource(self, key: str) -> None:
         resource_key = self._keyspace.resource_key(key)
         membership_key = self._keyspace.resource_tags_key(key)
-        await self._client.eval(
-            _DELETE_WITH_TAGS_SCRIPT,
-            2,
-            resource_key,
-            membership_key,
-            self._keyspace.tag_prefix,
-        )
+        try:
+            await self._client.eval(
+                _DELETE_WITH_TAGS_SCRIPT,
+                2,
+                resource_key,
+                membership_key,
+                self._keyspace.tag_prefix,
+            )
+        except Exception as error:
+            raise _unavailable("delete") from error
 
 
 def _normalize_ttl_ms(ttl: object) -> int | None:
@@ -359,3 +426,14 @@ def _normalize_ttl_ms(ttl: object) -> int | None:
     if ttl <= 0:
         return None
     return max(1, math.ceil(ttl * 1000))
+
+
+def _unavailable(operation: str) -> ResourceCacheUnavailableError:
+    _LOGGER.error(
+        "Redis resource cache operation failed",
+        extra={"fluxfast_cache_operation": operation},
+    )
+    return ResourceCacheUnavailableError(
+        f"Redis resource cache {operation} failed",
+        details={"operation": operation},
+    )

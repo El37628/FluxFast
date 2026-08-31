@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from types import TracebackType
 from typing import Any, Self
@@ -10,7 +11,13 @@ from typing import Any, Self
 import pytest
 
 import fluxfast.redis_cache as redis_cache_module
-from fluxfast import RedisResourceCache
+from fluxfast import (
+    RedisResourceCache,
+    ResourceCacheError,
+    ResourceCacheSerializationError,
+    ResourceCacheUnavailableError,
+)
+from fluxfast._redis_cache_codec import RedisCachePayloadTooLargeError
 from fluxfast.cache import CachedResource
 
 
@@ -95,6 +102,48 @@ class RecordingRedisClient:
         self.closed = True
 
 
+class FailingPipeline(RecordingPipeline):
+    async def execute(self) -> list[Any]:
+        raise ConnectionError("redis://user:secret@example.invalid unavailable")
+
+
+class FailingRedisClient(RecordingRedisClient):
+    def __init__(self, operation: str) -> None:
+        super().__init__()
+        self.operation = operation
+
+    def pipeline(self, *, transaction: bool) -> RecordingPipeline:
+        if self.operation == "get":
+            return FailingPipeline(self)
+        return super().pipeline(transaction=transaction)
+
+    async def eval(
+        self,
+        script: str,
+        numkeys: int,
+        *keys_and_args: str | bytes | int,
+    ) -> int:
+        if self.operation == "eval":
+            raise ConnectionError("redis://user:secret@example.invalid unavailable")
+        return await super().eval(script, numkeys, *keys_and_args)
+
+    async def scan(
+        self,
+        cursor: int,
+        *,
+        match: str,
+        count: int,
+    ) -> tuple[int, list[str | bytes]]:
+        if self.operation == "scan":
+            raise ConnectionError("redis://user:secret@example.invalid unavailable")
+        return await super().scan(cursor, match=match, count=count)
+
+    async def aclose(self) -> None:
+        if self.operation == "close":
+            raise ConnectionError("redis://user:secret@example.invalid unavailable")
+        await super().aclose()
+
+
 def make_resource() -> CachedResource:
     return CachedResource(
         version="v1",
@@ -177,6 +226,46 @@ async def test_cache_get_treats_missing_or_non_live_values_as_misses(result) -> 
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"not-json-super-secret",
+        b'{"schema":99,"version":"v1","value":1,"tags":[]}',
+        b'{"schema":1,"version":"","value":1,"tags":[]}',
+    ],
+)
+async def test_corrupt_entries_are_safely_removed_and_become_misses(
+    payload: bytes,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = RecordingRedisClient()
+    client.pipeline_result = [payload, 60_000]
+    cache = RedisResourceCache(client, namespace="hotel-prod")
+    caplog.set_level(logging.WARNING, logger="fluxfast.cache.redis")
+
+    assert await cache.get("tenant:secret::rooms") is None
+
+    assert len(client.evals) == 1
+    assert "Removed an invalid Redis resource cache entry" in caplog.text
+    assert "not-json-super-secret" not in caplog.text
+    assert "tenant:secret" not in caplog.text
+    assert "hotel-prod" not in caplog.text
+
+
+@pytest.mark.anyio
+async def test_corrupt_entry_cleanup_failure_is_strict() -> None:
+    client = FailingRedisClient("eval")
+    client.pipeline_result = [b"not-json", 60_000]
+    cache = RedisResourceCache(client, namespace="hotel-prod")
+
+    with pytest.raises(ResourceCacheUnavailableError) as captured:
+        await cache.get("rooms")
+
+    assert captured.value.details == {"operation": "delete"}
+    assert isinstance(captured.value.__cause__, ConnectionError)
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("ttl", [0, -1, -0.5])
 async def test_non_positive_ttl_deletes_instead_of_storing(ttl) -> None:
     client = RecordingRedisClient()
@@ -233,6 +322,14 @@ async def test_invalidate_tag_uses_only_opaque_namespace_prefixes() -> None:
 
 
 @pytest.mark.anyio
+async def test_invalid_tag_is_a_caller_error_not_an_availability_error() -> None:
+    cache = RedisResourceCache(RecordingRedisClient(), namespace="hotel-prod")
+
+    with pytest.raises(ValueError, match="non-empty string"):
+        await cache.invalidate_tag("")
+
+
+@pytest.mark.anyio
 async def test_clear_scans_exact_namespace_and_unlinks_in_bounded_batches() -> None:
     client = RecordingRedisClient()
     client.scan_results = [
@@ -269,6 +366,100 @@ async def test_cache_rejects_invalid_ttls(ttl) -> None:
 
 
 @pytest.mark.anyio
+async def test_oversized_set_raises_public_serialization_error_without_writing() -> None:
+    client = RecordingRedisClient()
+    cache = RedisResourceCache(
+        client,
+        namespace="hotel-prod",
+        max_value_bytes=64,
+    )
+    resource = make_resource()
+    resource.value = "x" * 256
+
+    with pytest.raises(ResourceCacheSerializationError) as captured:
+        await cache.set("rooms", resource, ttl=60)
+
+    assert captured.value.details == {"operation": "set"}
+    assert isinstance(captured.value.__cause__, RedisCachePayloadTooLargeError)
+    assert client.evals == []
+
+
+@pytest.mark.anyio
+async def test_get_failure_raises_public_unavailable_error_without_fallback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cache = RedisResourceCache(FailingRedisClient("get"), namespace="hotel-prod")
+    caplog.set_level(logging.ERROR, logger="fluxfast.cache.redis")
+
+    with pytest.raises(ResourceCacheUnavailableError) as captured:
+        await cache.get("tenant:secret::rooms")
+
+    assert captured.value.details == {"operation": "get"}
+    assert isinstance(captured.value.__cause__, ConnectionError)
+    assert "Redis resource cache operation failed" in caplog.text
+    assert "user:secret" not in caplog.text
+    assert "tenant:secret" not in caplog.text
+    assert "hotel-prod" not in caplog.text
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("method_name", "args", "operation"),
+    [
+        ("set", ("rooms", make_resource(), 60), "set"),
+        ("delete", ("rooms",), "delete"),
+        ("invalidate_tag", ("rooms",), "invalidate_tag"),
+    ],
+)
+async def test_eval_failures_use_stable_public_errors(
+    method_name: str,
+    args: tuple[Any, ...],
+    operation: str,
+) -> None:
+    cache = RedisResourceCache(FailingRedisClient("eval"), namespace="hotel-prod")
+
+    with pytest.raises(ResourceCacheUnavailableError) as captured:
+        await getattr(cache, method_name)(*args)
+
+    assert captured.value.details == {"operation": operation}
+    assert isinstance(captured.value.__cause__, ConnectionError)
+
+
+@pytest.mark.anyio
+async def test_clear_and_close_failures_use_stable_public_errors() -> None:
+    clear_cache = RedisResourceCache(
+        FailingRedisClient("scan"),
+        namespace="hotel-prod",
+    )
+    close_cache = RedisResourceCache(
+        FailingRedisClient("close"),
+        namespace="hotel-prod",
+        owns_client=True,
+    )
+
+    with pytest.raises(ResourceCacheUnavailableError) as clear_error:
+        await clear_cache.clear()
+    with pytest.raises(ResourceCacheUnavailableError) as close_error:
+        await close_cache.close()
+
+    assert clear_error.value.details == {"operation": "clear"}
+    assert close_error.value.details == {"operation": "close"}
+
+
+@pytest.mark.anyio
+async def test_invalid_backend_responses_raise_cache_errors() -> None:
+    get_client = RecordingRedisClient()
+    get_client.pipeline_result = [b"value"]
+    clear_client = RecordingRedisClient()
+    clear_client.scan_results = [(True, [])]
+
+    with pytest.raises(ResourceCacheError, match="invalid response"):
+        await RedisResourceCache(get_client, namespace="hotel-prod").get("rooms")
+    with pytest.raises(ResourceCacheError, match="invalid response"):
+        await RedisResourceCache(clear_client, namespace="hotel-prod").clear()
+
+
+@pytest.mark.anyio
 async def test_injected_client_is_not_owned_by_default() -> None:
     client = RecordingRedisClient()
     cache = RedisResourceCache(client, namespace="hotel-prod")
@@ -277,7 +468,7 @@ async def test_injected_client_is_not_owned_by_default() -> None:
     await cache.close()
 
     assert client.closed is False
-    with pytest.raises(RuntimeError, match="closed"):
+    with pytest.raises(ResourceCacheError, match="closed"):
         await cache.get("rooms")
 
 
