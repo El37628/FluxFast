@@ -69,6 +69,7 @@ from .protocol import (
     ResourceErrorDetail,
     ResourceWireRecord,
 )
+from .redis_cache import DEFAULT_REDIS_MAX_VALUE_BYTES, RedisResourceCache
 from .resource import ResourceLoader, ResourceSpec, resource
 from .router import FluxRouter
 from .scope import CacheScope, ScopeType, scope
@@ -83,6 +84,7 @@ __all__ = [
     "DEFAULT_LIVE_QUEUE_SIZE",
     "DEFAULT_REDIS_CHANNEL_PREFIX",
     "DEFAULT_REDIS_MAX_MESSAGE_BYTES",
+    "DEFAULT_REDIS_MAX_VALUE_BYTES",
     "HEADER_CAPABILITIES",
     "LIVE_EVENT_NAME",
     "LIVE_HEARTBEAT",
@@ -120,6 +122,7 @@ __all__ = [
     "PageNotFoundError",
     "ProtocolError",
     "RedisLiveBroker",
+    "RedisResourceCache",
     "ResourceCacheBackend",
     "ResourceError",
     "ResourceErrorDetail",
