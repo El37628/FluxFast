@@ -11,7 +11,7 @@ function stableVersion(value, label) {
 export function resolvePublishedMixedPairing({
   pairing,
   releaseVersion,
-  previousVersion = "0.3.0",
+  previousVersion = "0.4.1"
 }) {
   const release = stableVersion(releaseVersion, "Release version");
   const previous = stableVersion(previousVersion, "Previous version");
@@ -20,8 +20,9 @@ export function resolvePublishedMixedPairing({
     return {
       pythonVersion: release,
       javascriptVersion: previous,
-      backendFixture: "mixed-live-backend.py",
-      expectedCapabilities: "deferred-resources",
+      backendFixture: "distributed_backend.py",
+      frontendFixture: "distributed-home.tsx",
+      mode: "distributed"
     };
   }
   if (pairing === "javascript-current") {
@@ -29,10 +30,10 @@ export function resolvePublishedMixedPairing({
       pythonVersion: previous,
       javascriptVersion: release,
       backendFixture: "mixed-legacy-backend.py",
+      frontendFixture: "mixed-home.tsx",
       expectedCapabilities: "deferred-resources,live-resources",
+      mode: "legacy"
     };
   }
-  throw new Error(
-    "FLUXFAST_PAIRING must be either python-current or javascript-current."
-  );
+  throw new Error("FLUXFAST_PAIRING must be either python-current or javascript-current.");
 }
