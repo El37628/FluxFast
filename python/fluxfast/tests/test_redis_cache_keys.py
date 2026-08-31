@@ -88,6 +88,21 @@ def test_resource_tag_membership_key_reuses_only_the_opaque_digest():
     assert membership_key.rsplit(":", 1)[1] == resource_key.rsplit(":", 1)[1]
 
 
+def test_key_type_prefixes_are_namespace_local_and_non_overlapping():
+    keyspace = RedisCacheKeyspace("hotel:blue")
+
+    assert keyspace.resource_prefix == f"{keyspace.prefix}:resource:"
+    assert keyspace.resource_tags_prefix == f"{keyspace.prefix}:resource-tags:"
+    assert keyspace.tag_prefix == f"{keyspace.prefix}:tag:"
+    assert len(
+        {
+            keyspace.resource_prefix,
+            keyspace.resource_tags_prefix,
+            keyspace.tag_prefix,
+        }
+    ) == 3
+
+
 @pytest.mark.parametrize("method_name", ["resource_key", "tag_key"])
 @pytest.mark.parametrize("value", [None, True, 1, ""])
 def test_key_derivation_rejects_empty_or_non_string_values(method_name, value):

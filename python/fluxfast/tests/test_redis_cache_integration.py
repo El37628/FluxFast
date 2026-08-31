@@ -108,3 +108,60 @@ async def test_tag_indexes_track_overwrites_and_active_member_expiry() -> None:
         await cache.delete("long")
         await admin.aclose()
         await cache.close()
+
+
+@pytest.mark.anyio
+async def test_tag_invalidation_crosses_clients_and_stays_in_namespace() -> None:
+    assert REDIS_URL is not None
+    from redis.asyncio import Redis
+
+    unique = uuid4().hex
+    namespace = f"test-invalidate-{unique}"
+    keyspace = RedisCacheKeyspace(namespace)
+    writer = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    invalidator = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    admin = Redis.from_url(REDIS_URL)
+    external_key = f"outside-fluxfast-{unique}"
+    shared_tag_key = keyspace.tag_key("shared")
+
+    try:
+        first = _resource("first-v1", "first")
+        first.tags = ("shared", "first-only")
+        second = _resource("second-v1", "second")
+        second.tags = ("shared", "second-only")
+        keep = _resource("keep-v1", "keep")
+        keep.tags = ("keep",)
+        await writer.set("first", first, ttl=60)
+        await writer.set("second", second, ttl=60)
+        await writer.set("keep", keep, ttl=60)
+
+        await admin.set(external_key, b"preserve", px=60_000)
+        await admin.zadd(
+            shared_tag_key,
+            {external_key: time.time() * 1000 + 60_000},
+        )
+
+        await invalidator.invalidate_tag("shared")
+
+        assert await writer.get("first") is None
+        assert await writer.get("second") is None
+        kept = await writer.get("keep")
+        assert kept is not None and kept.value == "keep"
+        assert await admin.get(external_key) == b"preserve"
+        assert await admin.exists(
+            shared_tag_key,
+            keyspace.tag_key("first-only"),
+            keyspace.tag_key("second-only"),
+            keyspace.resource_tags_key("first"),
+            keyspace.resource_tags_key("second"),
+        ) == 0
+
+        await invalidator.invalidate_tag("shared")
+    finally:
+        await writer.delete("first")
+        await writer.delete("second")
+        await writer.delete("keep")
+        await admin.delete(external_key)
+        await admin.aclose()
+        await invalidator.close()
+        await writer.close()

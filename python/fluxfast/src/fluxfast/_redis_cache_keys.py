@@ -38,23 +38,38 @@ class RedisCacheKeyspace:
 
         return f"{self.prefix}:*"
 
+    @property
+    def resource_prefix(self) -> str:
+        """Return the namespace-local prefix for opaque resource keys."""
+
+        return f"{self.prefix}:resource:"
+
+    @property
+    def resource_tags_prefix(self) -> str:
+        """Return the namespace-local prefix for tag-membership keys."""
+
+        return f"{self.prefix}:resource-tags:"
+
+    @property
+    def tag_prefix(self) -> str:
+        """Return the namespace-local prefix for opaque tag indexes."""
+
+        return f"{self.prefix}:tag:"
+
     def resource_key(self, logical_identity: str) -> str:
         """Return an opaque key for one complete logical resource identity."""
 
-        return f"{self.prefix}:resource:{_digest(logical_identity, 'identity')}"
+        return f"{self.resource_prefix}{_digest(logical_identity, 'identity')}"
 
     def resource_tags_key(self, logical_identity: str) -> str:
         """Return the private tag-membership key for one resource identity."""
 
-        return (
-            f"{self.prefix}:resource-tags:"
-            f"{_digest(logical_identity, 'identity')}"
-        )
+        return f"{self.resource_tags_prefix}{_digest(logical_identity, 'identity')}"
 
     def tag_key(self, tag: str) -> str:
         """Return an opaque key for one namespace-local cache tag."""
 
-        return f"{self.prefix}:tag:{_digest(tag, 'tag')}"
+        return f"{self.tag_prefix}{_digest(tag, 'tag')}"
 
 
 def _validate_namespace(namespace: object) -> None:

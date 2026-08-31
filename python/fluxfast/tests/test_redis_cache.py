@@ -98,7 +98,7 @@ async def test_cache_set_uses_opaque_key_safe_json_and_native_ttl() -> None:
     script, numkeys, keys_and_args = client.evals[0]
     assert "ZADD" in script
     assert numkeys == 3
-    redis_key, membership_key, tag_key, payload, ttl_ms = keys_and_args
+    redis_key, membership_key, tag_key, payload, ttl_ms, tag_prefix = keys_and_args
     assert isinstance(redis_key, str)
     assert isinstance(membership_key, str)
     assert isinstance(tag_key, str)
@@ -108,6 +108,7 @@ async def test_cache_set_uses_opaque_key_safe_json_and_native_ttl() -> None:
         "fluxfast:cache:v1:hotel-prod:resource-tags:"
     )
     assert tag_key.startswith("fluxfast:cache:v1:hotel-prod:tag:")
+    assert tag_prefix == "fluxfast:cache:v1:hotel-prod:tag:"
     assert "tenant:secret" not in redis_key
     assert ttl_ms == 1235
     assert json.loads(payload) == {
@@ -169,7 +170,7 @@ async def test_non_positive_ttl_deletes_instead_of_storing(ttl) -> None:
     assert len(client.evals) == 1
     _script, numkeys, keys_and_args = client.evals[0]
     assert numkeys == 2
-    assert len(keys_and_args) == 2
+    assert len(keys_and_args) == 3
     assert client.sets == []
 
 
@@ -184,14 +185,34 @@ async def test_delete_removes_only_the_opaque_resource_key() -> None:
     script, numkeys, keys_and_args = client.evals[0]
     assert "ZREM" in script
     assert numkeys == 2
-    redis_key, membership_key = keys_and_args
+    redis_key, membership_key, tag_prefix = keys_and_args
     assert isinstance(redis_key, str)
     assert isinstance(membership_key, str)
     assert redis_key.startswith("fluxfast:cache:v1:hotel-prod:resource:")
     assert membership_key.startswith(
         "fluxfast:cache:v1:hotel-prod:resource-tags:"
     )
+    assert tag_prefix == "fluxfast:cache:v1:hotel-prod:tag:"
     assert "tenant:secret" not in redis_key
+
+
+@pytest.mark.anyio
+async def test_invalidate_tag_uses_only_opaque_namespace_prefixes() -> None:
+    client = RecordingRedisClient()
+    cache = RedisResourceCache(client, namespace="hotel-prod")
+
+    await cache.invalidate_tag("tenant:secret")
+
+    assert len(client.evals) == 1
+    script, numkeys, keys_and_args = client.evals[0]
+    assert "ZREMRANGEBYSCORE" in script
+    assert numkeys == 1
+    tag_key, resource_prefix, membership_prefix, tag_prefix = keys_and_args
+    assert isinstance(tag_key, str)
+    assert "tenant:secret" not in tag_key
+    assert resource_prefix == "fluxfast:cache:v1:hotel-prod:resource:"
+    assert membership_prefix == "fluxfast:cache:v1:hotel-prod:resource-tags:"
+    assert tag_prefix == "fluxfast:cache:v1:hotel-prod:tag:"
 
 
 @pytest.mark.anyio

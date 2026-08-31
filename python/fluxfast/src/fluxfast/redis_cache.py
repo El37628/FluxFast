@@ -34,8 +34,10 @@ end
 
 local old_tags = redis.call('SMEMBERS', membership_key)
 for _, tag_key in ipairs(old_tags) do
-    redis.call('ZREM', tag_key, resource_key)
-    refresh_tag(tag_key)
+    if string.sub(tag_key, 1, string.len(ARGV[3])) == ARGV[3] then
+        redis.call('ZREM', tag_key, resource_key)
+        refresh_tag(tag_key)
+    end
 end
 
 redis.call('SET', resource_key, ARGV[1], 'PX', ttl_ms)
@@ -61,16 +63,54 @@ local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2
 
 local old_tags = redis.call('SMEMBERS', membership_key)
 for _, tag_key in ipairs(old_tags) do
-    redis.call('ZREM', tag_key, resource_key)
-    redis.call('ZREMRANGEBYSCORE', tag_key, '-inf', now_ms)
-    local last_member = redis.call('ZRANGE', tag_key, -1, -1, 'WITHSCORES')
-    if #last_member == 0 then
-        redis.call('DEL', tag_key)
-    else
-        redis.call('PEXPIREAT', tag_key, math.ceil(tonumber(last_member[2])))
+    if string.sub(tag_key, 1, string.len(ARGV[1])) == ARGV[1] then
+        redis.call('ZREM', tag_key, resource_key)
+        redis.call('ZREMRANGEBYSCORE', tag_key, '-inf', now_ms)
+        local last_member = redis.call('ZRANGE', tag_key, -1, -1, 'WITHSCORES')
+        if #last_member == 0 then
+            redis.call('DEL', tag_key)
+        else
+            redis.call('PEXPIREAT', tag_key, math.ceil(tonumber(last_member[2])))
+        end
     end
 end
 return redis.call('DEL', resource_key, membership_key)
+"""
+
+_INVALIDATE_TAG_SCRIPT: Final = """
+local target_tag_key = KEYS[1]
+local resource_prefix = ARGV[1]
+local membership_prefix = ARGV[2]
+local tag_prefix = ARGV[3]
+local redis_time = redis.call('TIME')
+local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)
+
+redis.call('ZREMRANGEBYSCORE', target_tag_key, '-inf', now_ms)
+local resource_keys = redis.call('ZRANGE', target_tag_key, 0, -1)
+local removed = 0
+for _, resource_key in ipairs(resource_keys) do
+    if string.sub(resource_key, 1, string.len(resource_prefix)) == resource_prefix then
+        local digest = string.sub(resource_key, string.len(resource_prefix) + 1)
+        local membership_key = membership_prefix .. digest
+        local resource_tags = redis.call('SMEMBERS', membership_key)
+        for _, tag_key in ipairs(resource_tags) do
+            if string.sub(tag_key, 1, string.len(tag_prefix)) == tag_prefix then
+                redis.call('ZREM', tag_key, resource_key)
+                redis.call('ZREMRANGEBYSCORE', tag_key, '-inf', now_ms)
+                local last_member = redis.call('ZRANGE', tag_key, -1, -1, 'WITHSCORES')
+                if #last_member == 0 then
+                    redis.call('DEL', tag_key)
+                else
+                    redis.call('PEXPIREAT', tag_key, math.ceil(tonumber(last_member[2])))
+                end
+            end
+        end
+        removed = removed + redis.call('DEL', resource_key)
+        redis.call('DEL', membership_key)
+    end
+end
+redis.call('DEL', target_tag_key)
+return removed
 """
 
 
@@ -222,6 +262,7 @@ class RedisResourceCache:
             *redis_keys,
             payload,
             ttl_ms,
+            self._keyspace.tag_prefix,
         )
 
     async def delete(self, key: str) -> None:
@@ -234,9 +275,17 @@ class RedisResourceCache:
         await self._delete_resource(key)
 
     async def invalidate_tag(self, tag: str) -> None:
-        """Invalidate a tag once Redis tag indexes are enabled."""
+        """Atomically remove every live resource in one opaque tag index."""
 
-        raise NotImplementedError("Redis cache tag indexes are not enabled yet")
+        self._ensure_open()
+        await self._client.eval(
+            _INVALIDATE_TAG_SCRIPT,
+            1,
+            self._keyspace.tag_key(tag),
+            self._keyspace.resource_prefix,
+            self._keyspace.resource_tags_prefix,
+            self._keyspace.tag_prefix,
+        )
 
     async def clear(self) -> None:
         """Clear this namespace once bounded scanning is enabled."""
@@ -264,6 +313,7 @@ class RedisResourceCache:
             2,
             resource_key,
             membership_key,
+            self._keyspace.tag_prefix,
         )
 
 
