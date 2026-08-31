@@ -7,6 +7,7 @@ import {
   FluxEventName,
   type ResourceLoadReason,
 } from "./events";
+import { TransportError } from "./errors";
 import { HistoryManager } from "./history";
 import { LiveManager, type LiveManagerDiagnostic } from "./live/manager";
 import type { LiveEvent } from "./live/protocol";
@@ -533,9 +534,16 @@ export class FluxRouter {
       if (envelope.mutation.externalRedirect) {
         this.hardNavigate(envelope.mutation.externalRedirect);
       } else if (envelope.mutation.redirect) {
-        await this.visit(envelope.mutation.redirect, {
-          preserveScroll: options.preserveScroll,
-        });
+        try {
+          await this.visit(envelope.mutation.redirect, {
+            preserveScroll: options.preserveScroll,
+          });
+        } catch (error) {
+          if (!(error instanceof TransportError) || error.status !== 404) {
+            throw error;
+          }
+          this.hardNavigate(envelope.mutation.redirect);
+        }
       } else if (activeInvalidations.length > 0) {
         await this.loadResources(activeInvalidations, {
           url: this.pageStore.getSnapshot().url || "/",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useForm, useResource, useRouter } from "@fluxfast/next";
+import { useEffect, useState } from "react";
 
 interface ApplicationDetails {
   name: string;
@@ -16,6 +17,9 @@ export default function RoomsPage() {
   const rooms = useResource<Room[]>("rooms");
   const router = useRouter();
   const form = useForm({ name: "" });
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => setHydrated(true), []);
 
   return (
     <main>
@@ -44,6 +48,13 @@ export default function RoomsPage() {
 
       <button type="button" onClick={() => void router.mutate("/rooms/finish")}>
         Finish
+      </button>
+      <button
+        type="button"
+        disabled={!hydrated}
+        onClick={() => void router.mutate("/rooms/missing")}
+      >
+        Missing redirect
       </button>
     </main>
   );

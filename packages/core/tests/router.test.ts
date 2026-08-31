@@ -3,6 +3,7 @@ import { FluxRouter } from "../src/router";
 import { FluxTransport, VisitTransportRequest, MutationTransportRequest } from "../src/transport";
 import { PageEnvelope, MutationEnvelope } from "../src/protocol";
 import { HistoryManager } from "../src/history";
+import { TransportError } from "../src/errors";
 
 class MockTransport implements FluxTransport {
   public visitMock = vi.fn<
@@ -897,6 +898,45 @@ describe("FluxRouter Core", () => {
 
     await router.mutate("/logout");
     expect(hardNavigate).toHaveBeenCalledWith("https://example.com/login");
+  });
+
+  it("uses document navigation when a mutation redirect targets a missing page", async () => {
+    const transport = new MockTransport();
+    const hardNavigate = vi.fn();
+    const router = new FluxRouter({ transport, hardNavigate });
+    transport.mutateMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      mutation: { redirect: "/missing" },
+    });
+    transport.visitMock.mockRejectedValueOnce(
+      new TransportError("Not Found", 404)
+    );
+
+    await expect(router.mutate("/rooms/finish")).resolves.toMatchObject({
+      mutation: { redirect: "/missing" },
+    });
+
+    expect(hardNavigate).toHaveBeenCalledOnce();
+    expect(hardNavigate).toHaveBeenCalledWith("/missing");
+  });
+
+  it("preserves non-404 mutation redirect failures", async () => {
+    const transport = new MockTransport();
+    const hardNavigate = vi.fn();
+    const router = new FluxRouter({ transport, hardNavigate });
+    transport.mutateMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      mutation: { redirect: "/private" },
+    });
+    transport.visitMock.mockRejectedValueOnce(
+      new TransportError("Forbidden", 403)
+    );
+
+    await expect(router.mutate("/rooms/finish")).rejects.toMatchObject({
+      status: 403,
+    });
+
+    expect(hardNavigate).not.toHaveBeenCalled();
   });
 
   it("handles mixed-version responses from a 0.2 backend without deferred metadata", async () => {

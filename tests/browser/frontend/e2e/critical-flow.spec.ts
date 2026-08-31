@@ -52,3 +52,14 @@ test("navigates, validates, mutates, and redirects through one browser origin", 
     expect(new URL(request.url).origin).toBe(new URL(baseURL!).origin);
   }
 });
+
+test("renders not-found after a mutation redirects to an unknown page", async ({
+  page,
+}) => {
+  await page.goto("/rooms");
+
+  await page.getByRole("button", { name: "Missing redirect" }).click();
+
+  await expect(page).toHaveURL(/\/route-that-does-not-exist$/);
+  await expect(page.getByText("This page could not be found.")).toBeVisible();
+});

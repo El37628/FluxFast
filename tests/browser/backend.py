@@ -254,6 +254,11 @@ async def finish_rooms():
     return flux_redirect("/")
 
 
+@flux.mutation("/rooms/missing")
+async def redirect_to_missing_page():
+    return flux_redirect("/route-that-does-not-exist")
+
+
 @flux.mutation("/deferred-mutation/refresh")
 async def refresh_live_analytics():
     return mutation(
