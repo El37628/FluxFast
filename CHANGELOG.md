@@ -5,6 +5,36 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-31
+
+### Added
+
+- Capability-negotiated Live Resources through `resource(..., live=True)`, with
+  reusable-scope validation, authenticated fetch-based SSE subscriptions, and
+  additive `fluxfast/1` page manifests.
+- Framework-neutral live connection management with bounded reconnect backoff,
+  offline recovery, canonical reconnect resynchronization, navigation cleanup,
+  and the optional `useLiveStatus()` React hook.
+- `MemoryLiveBroker` and optional `RedisLiveBroker` implementations supporting
+  bounded subscriber queues, overflow resync, opaque scoped topics, and
+  multi-worker publication.
+- Scoped manual and mutation-driven invalidation broadcasts, origin-client
+  suppression, immediate live patches, and canonical resource-only
+  verification after live signals.
+- Count-only live runtime diagnostics, the `X-FluxFast-Live-Resources` response
+  header, and optional process-local connection, publication, resync, overflow,
+  and error metrics.
+- Browser, Redis restart, clean packed-consumer, published mixed-version, and
+  controlled live benchmark coverage for the v0.4 release path.
+
+### Changed
+
+- Existing resource hooks now update automatically from live synchronization
+  while preserving stale values during canonical revalidation; no separate
+  live-resource state or hook is required.
+- Page cache, history restoration, prefetch, deferred loading, and mutation
+  races preserve the authoritative live manifest and reject obsolete work.
+
 ## [0.3.0] - 2026-08-30
 
 ### Added
@@ -63,7 +93,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.4.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
+[0.4.0]: https://github.com/El37628/FluxFast/releases/tag/v0.4.0
