@@ -166,6 +166,50 @@ When publishing from request code that already has the originating client ID,
 pass `origin_client_id` to suppress the echoed event in that client only. Do not
 use user or tenant identities as client IDs.
 
+### Publishing outside FastAPI
+
+Background jobs and external ingestion processes can use the same public
+coordinator without constructing a FastAPI application. Configure its Redis
+cache namespace and broker channel prefix exactly like every web worker:
+
+```python
+from fluxfast import (
+    LiveCoordinator,
+    RedisLiveBroker,
+    RedisResourceCache,
+    scope,
+)
+
+namespace = "hotel-prod"
+cache = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+broker = RedisLiveBroker.from_url(
+    REDIS_URL,
+    channel_prefix=f"fluxfast:{namespace}:live:",
+)
+publisher = LiveCoordinator(cache=cache, broker=broker)
+
+try:
+    await publisher.invalidate(
+        "rooms",
+        scope=scope.tenant(hotel.id),
+    )
+finally:
+    await publisher.close()
+    await cache.close()
+```
+
+`LiveCoordinator` is the supported resource publisher for Celery, RQ, ARQ,
+scheduled tasks, and custom workers. Its `invalidate()` and `patch()` methods
+delete canonical cache state before publishing the scoped signal, just as they
+do inside `FluxFast`. Scope must come from trusted server-side identity. This
+API remains resource-specific; FluxFast does not expose arbitrary event topics
+or turn Redis Pub/Sub into a general message bus.
+
+The coordinator closes its broker, while the independently supplied cache
+retains its own lifecycle. Close both when the worker process owns both
+objects. Long-running worker processes may instead construct them once at
+startup and close them during worker shutdown.
+
 ## Deferred plus live
 
 `defer=True` and `live=True` compose on one resource:
@@ -321,8 +365,8 @@ contract.
 ## v0.4 limitations
 
 Live Resources are one-way synchronization signals for existing resources.
-They are not a general event bus, WebSocket API, chat/presence primitive,
-durable log, background-worker SDK, or cross-tab shared connection. Each tab
+They are not a general event bus, task queue, job runner, WebSocket API,
+chat/presence primitive, durable log, or cross-tab shared connection. Each tab
 has its own connection and client ID. Patches always revalidate, and custom
 non-resource topics are not exposed. These constraints keep resource loaders,
 FastAPI authorization, and the existing `ResourceStore` as the correctness
