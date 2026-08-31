@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureRoot = path.join(repositoryRoot, "tests", "release-consumer", "next-init");
@@ -19,6 +19,11 @@ const localPython = path.join(repositoryRoot, ".venv", "bin", "python");
 const pythonCommand = process.env.FLUXFAST_E2E_PYTHON ?? (
   fs.existsSync(localPython) ? localPython : "python"
 );
+const runLiveConsumer = process.env.FLUXFAST_RUN_LIVE === "1";
+const runDistributedConsumer = process.env.FLUXFAST_RUN_DISTRIBUTED === "1";
+if (runLiveConsumer && runDistributedConsumer) {
+  throw new Error("Run the clean live and distributed consumers separately.");
+}
 
 function run(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
   const childEnvironment = { ...process.env };
@@ -59,7 +64,7 @@ function findPythonArtifact() {
   return path.join(artifactRoot, matches[0]);
 }
 
-function prepareIsolatedPython() {
+function prepareIsolatedPython({ distributed = false } = {}) {
   fs.mkdirSync(artifactRoot, { recursive: true });
   const environmentRoot = path.join(temporaryRoot, "python-environment");
   run(pythonCommand, ["-m", "venv", environmentRoot]);
@@ -83,18 +88,24 @@ function prepareIsolatedPython() {
     ]);
   }
 
-  run(
-    isolatedPython,
-    ["-m", "pip", "install", findPythonArtifact()],
-    consumerRoot,
-    { PYTHONPATH: "" }
-  );
+  const wheel = findPythonArtifact();
+  const requirement = distributed
+    ? `fluxfast[redis] @ ${pathToFileURL(wheel).href}`
+    : wheel;
+  const requirements = ["-m", "pip", "install", requirement];
+  if (distributed) requirements.push("httpx2>=2.0.0,<3.0.0");
+  run(isolatedPython, requirements, consumerRoot, { PYTHONPATH: "" });
+  const imports = distributed
+    ? "import fluxfast, httpx2, redis; modules = (fluxfast, httpx2, redis)"
+    : "import fluxfast; modules = (fluxfast,)";
   run(
     isolatedPython,
     [
       "-c",
-      "import sys; from pathlib import Path; import fluxfast; "
-        + "assert Path(fluxfast.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())",
+      "import sys; from pathlib import Path; "
+        + `${imports}; `
+        + "assert all(Path(module.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()) "
+        + "for module in modules)",
     ],
     consumerRoot,
     { PYTHONPATH: "" }
@@ -173,8 +184,11 @@ try {
   run(npmCommand, ["run", "verify:dry-run"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
   run(npmCommand, ["run", "verify:init"], consumerRoot);
+  const homeFixture = runDistributedConsumer
+    ? "distributed-home.tsx"
+    : "deferred-home.tsx";
   fs.copyFileSync(
-    path.join(consumerRoot, "fixtures", "deferred-home.tsx"),
+    path.join(consumerRoot, "fixtures", homeFixture),
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx")
   );
   run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
@@ -182,11 +196,20 @@ try {
   run(npxCommand, ["--no-install", "fluxfast", "doctor"], consumerRoot);
   run(npmCommand, ["run", "typecheck"], consumerRoot);
   run(npmCommand, ["run", "build"], consumerRoot);
-  if (process.env.FLUXFAST_RUN_LIVE === "1") {
+  if (runLiveConsumer) {
     const isolatedPython = prepareIsolatedPython();
     run(
       process.execPath,
       [path.join(repositoryRoot, "scripts", "test-next-init-live.mjs"), consumerRoot],
+      repositoryRoot,
+      { FLUXFAST_E2E_PYTHON: isolatedPython, PYTHONPATH: "" }
+    );
+  }
+  if (runDistributedConsumer) {
+    const isolatedPython = prepareIsolatedPython({ distributed: true });
+    run(
+      process.execPath,
+      [path.join(repositoryRoot, "scripts", "test-next-init-distributed.mjs"), consumerRoot],
       repositoryRoot,
       { FLUXFAST_E2E_PYTHON: isolatedPython, PYTHONPATH: "" }
     );

@@ -16,6 +16,16 @@ jobs:
   build:
     name: Test and build distributions
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:8.10.1-alpine3.23
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,7 +57,9 @@ jobs:
       - name: Test Python package
         run: |
           python -m ruff check python/fluxfast tests/release-consumer/python \
-            tests/release-consumer/next-init/backend.py
+            tests/release-consumer/next-init/backend.py \
+            tests/release-consumer/next-init/distributed_backend.py \
+            tests/release-consumer/next-init/distributed_proxy.py
           python -m pytest -q python/fluxfast/tests
           python -m pip_audit python/fluxfast --strict --progress-spinner off
       - name: Test same-origin browser integration
@@ -66,6 +78,16 @@ jobs:
           FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-deferred-consumer/artifacts
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_RUN_LIVE: "1"
+        run: |
+          mkdir -p "$FLUXFAST_ARTIFACT_DIR"
+          cp release/npm/*.tgz release/python/*.whl "$FLUXFAST_ARTIFACT_DIR/"
+          pnpm test:consumer:init
+      - name: Verify distributed artifacts in a clean three-worker consumer
+        env:
+          FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-distributed-consumer/artifacts
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_RUN_DISTRIBUTED: "1"
+          FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
         run: |
           mkdir -p "$FLUXFAST_ARTIFACT_DIR"
           cp release/npm/*.tgz release/python/*.whl "$FLUXFAST_ARTIFACT_DIR/"

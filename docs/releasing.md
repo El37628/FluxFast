@@ -10,6 +10,12 @@ a clean temporary consumer. That consumer runs `fluxfast init`, builds a
 production Next application, launches its own FastAPI backend from the isolated
 wheel environment, and proves deferred skeleton-to-resource behavior in a real
 browser through one origin.
+The release gate also runs a separate clean consumer against Redis with three
+independent FastAPI worker processes. From only the built wheel and npm
+tarballs, it proves that a deferred live resource is populated by one worker,
+reused from the shared cache by another, invalidated by a mutation on a third,
+synchronized over Redis Pub/Sub, and then reused at its new value without
+running another loader.
 After registry publication, the workflow installs the new Python package with
 the configured previous JavaScript line, then the previous Python line with the
 new JavaScript packages. It runs both real application pairings and verifies
