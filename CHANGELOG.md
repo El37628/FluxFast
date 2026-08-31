@@ -5,6 +5,14 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-08-31
+
+### Fixed
+
+- Missing-page redirects now preserve a real HTTP 404 without triggering
+  React Server Components' negative `performance.measure()` timestamp error
+  in local Next.js development.
+
 ## [0.4.2] - 2026-08-31
 
 ### Fixed
@@ -109,10 +117,11 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.4.3...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
 [0.4.0]: https://github.com/El37628/FluxFast/releases/tag/v0.4.0
 [0.4.1]: https://github.com/El37628/FluxFast/releases/tag/v0.4.1
 [0.4.2]: https://github.com/El37628/FluxFast/releases/tag/v0.4.2
+[0.4.3]: https://github.com/El37628/FluxFast/releases/tag/v0.4.3
