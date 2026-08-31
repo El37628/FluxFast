@@ -56,10 +56,21 @@ test("navigates, validates, mutates, and redirects through one browser origin", 
 test("renders not-found after a mutation redirects to an unknown page", async ({
   page,
 }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+
   await page.goto("/rooms");
 
-  await page.getByRole("button", { name: "Missing redirect" }).click();
+  const [notFoundResponse] = await Promise.all([
+    page.waitForResponse(response =>
+      response.request().resourceType() === "document" &&
+      new URL(response.url()).pathname === "/route-that-does-not-exist"
+    ),
+    page.getByRole("button", { name: "Missing redirect" }).click(),
+  ]);
 
+  expect(notFoundResponse.status()).toBe(404);
   await expect(page).toHaveURL(/\/route-that-does-not-exist$/);
   await expect(page.getByText("This page could not be found.")).toBeVisible();
+  expect(pageErrors).toEqual([]);
 });

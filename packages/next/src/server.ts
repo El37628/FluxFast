@@ -49,6 +49,10 @@ const NEVER_FORWARD = new Set([
   "upgrade",
 ]);
 
+const INITIAL_NOT_FOUND = Symbol("fluxfast.initial-not-found");
+
+type InitialEnvelopeResult = PageEnvelope | typeof INITIAL_NOT_FOUND;
+
 export function buildFluxPath(
   segments: string[] | undefined,
   searchParams: FluxSearchParams = {}
@@ -68,11 +72,11 @@ export function buildFluxPath(
   return encoded ? `${pathname}?${encoded}` : pathname;
 }
 
-export async function fetchInitialEnvelope({
+async function requestInitialEnvelope({
   backendUrl,
   path,
   headers = {},
-}: FetchInitialEnvelopeOptions): Promise<PageEnvelope> {
+}: FetchInitialEnvelopeOptions): Promise<InitialEnvelopeResult> {
   if (!path.startsWith("/") || path.startsWith("//")) {
     throw new TypeError("FluxFast initial paths must be origin-relative");
   }
@@ -100,7 +104,7 @@ export async function fetchInitialEnvelope({
     );
   }
   if (response.status === 404) {
-    notFound();
+    return INITIAL_NOT_FOUND;
   }
   if (!response.ok) {
     const detail = data as { error?: { message?: string }; detail?: string };
@@ -114,6 +118,20 @@ export async function fetchInitialEnvelope({
   }
   assertPageEnvelope(data);
   return data;
+}
+
+export async function fetchInitialEnvelope(
+  options: FetchInitialEnvelopeOptions
+): Promise<PageEnvelope> {
+  const result = await requestInitialEnvelope(options);
+  if (result === INITIAL_NOT_FOUND) {
+    notFound();
+  }
+  return result;
+}
+
+function FluxNotFound(): never {
+  notFound();
 }
 
 export function createFluxNextPage(config: FluxNextConfig) {
@@ -138,11 +156,17 @@ export function createFluxNextPage(config: FluxNextConfig) {
       if (value !== null) forwarded[name] = value;
     }
 
-    const initialEnvelope = await fetchInitialEnvelope({
+    const initialEnvelope = await requestInitialEnvelope({
       backendUrl: resolveFluxBackendUrl(config.backendUrl),
       path,
       headers: forwarded,
     });
+    if (initialEnvelope === INITIAL_NOT_FOUND) {
+      // Resolve the async page before invoking notFound(). This avoids a React
+      // development instrumentation bug that measures a rejected async page
+      // with an end time of -Infinity while preserving Next's real 404 status.
+      return React.createElement(FluxNotFound);
+    }
     return React.createElement(config.application, {
       initialEnvelope,
       clientUrl: config.clientUrl,
