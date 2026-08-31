@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
 import sys
+from collections.abc import AsyncIterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,7 +15,11 @@ import anyio
 import httpx2
 import pytest
 
-from fluxfast import CAPABILITY_DEFERRED_RESOURCES, RedisResourceCache
+from fluxfast import (
+    CAPABILITY_DEFERRED_RESOURCES,
+    CAPABILITY_LIVE_RESOURCES,
+    RedisResourceCache,
+)
 
 REDIS_URL = os.getenv("FLUXFAST_TEST_REDIS_URL")
 pytestmark = pytest.mark.skipif(
@@ -26,6 +32,12 @@ _FLUXFAST_HEADERS = {"X-FluxFast": "1"}
 _DEFERRED_HEADERS = {
     **_FLUXFAST_HEADERS,
     "X-FluxFast-Capabilities": CAPABILITY_DEFERRED_RESOURCES,
+}
+_DEFERRED_LIVE_HEADERS = {
+    **_FLUXFAST_HEADERS,
+    "X-FluxFast-Capabilities": (
+        f"{CAPABILITY_DEFERRED_RESOURCES},{CAPABILITY_LIVE_RESOURCES}"
+    ),
 }
 
 
@@ -92,6 +104,15 @@ def _stop_workers(workers: list[tuple[int, subprocess.Popen]]) -> None:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
+
+
+async def _next_sse_payload(lines: AsyncIterator[str]) -> dict[str, object]:
+    async for line in lines:
+        if line.startswith("data: "):
+            payload = json.loads(line.removeprefix("data: "))
+            assert isinstance(payload, dict)
+            return payload
+    raise AssertionError("live stream closed before the expected event")
 
 
 @pytest.mark.anyio
@@ -264,6 +285,171 @@ async def test_deferred_resource_follow_up_populates_shared_worker_cache() -> No
                 workers[2][1].pid
             )
             assert int(await admin.get(load_count_key)) == 1
+    finally:
+        _stop_workers(workers)
+        try:
+            await cleanup_cache.clear()
+            await admin.delete(state_key, load_count_key)
+        finally:
+            await cleanup_cache.close()
+            await admin.aclose()
+
+
+@pytest.mark.anyio
+async def test_deferred_live_resource_composes_across_workers_and_expiration() -> None:
+    assert REDIS_URL is not None
+    from redis.asyncio import Redis
+
+    deployment = uuid4().hex
+    namespace = f"test-deferred-live-workers-{deployment}"
+    state_key = f"fluxfast:test:{deployment}:activity"
+    load_count_key = f"fluxfast:test:{deployment}:activity-loads"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "FLUXFAST_TEST_REDIS_URL": REDIS_URL,
+            "FLUXFAST_TEST_CACHE_NAMESPACE": namespace,
+            "FLUXFAST_TEST_LIVE_PREFIX": f"fluxfast:{namespace}:live:",
+            "FLUXFAST_TEST_STATE_KEY": state_key,
+            "FLUXFAST_TEST_LOAD_COUNT_KEY": load_count_key,
+            "FLUXFAST_TEST_ACTIVITY_TTL": "1",
+        }
+    )
+    ports: list[int] = []
+    while len(ports) < 3:
+        port = _available_port()
+        if port not in ports:
+            ports.append(port)
+    workers = [(port, _start_worker(port, environment)) for port in ports]
+    assert len({process.pid for _port, process in workers}) == 3
+    admin = Redis.from_url(REDIS_URL)
+    cleanup_cache = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+
+    try:
+        await admin.set(state_key, 0)
+        await admin.delete(load_count_key)
+        async with httpx2.AsyncClient(timeout=5) as client:
+            await _wait_for_workers(client, workers)
+            stream_headers = {
+                **_DEFERRED_LIVE_HEADERS,
+                "Accept": "text/event-stream",
+                "X-FluxFast-Protocol": "1",
+                "X-FluxFast-Live": "1",
+                "X-FluxFast-Live-Keys": "activity",
+                "X-FluxFast-Client-ID": "deferred_live_test",
+            }
+            async with client.stream(
+                "GET",
+                f"http://127.0.0.1:{ports[0]}/activity",
+                headers=stream_headers,
+            ) as stream:
+                stream.raise_for_status()
+                lines = stream.aiter_lines()
+                with anyio.fail_after(5):
+                    ready = await _next_sse_payload(lines)
+                assert ready == {
+                    "protocol": "fluxfast/1",
+                    "type": "ready",
+                    "keys": ["activity"],
+                }
+
+                cold = await client.get(
+                    f"http://127.0.0.1:{ports[1]}/activity",
+                    headers=_DEFERRED_LIVE_HEADERS,
+                )
+                cold.raise_for_status()
+                assert cold.json()["resources"] == {}
+                assert cold.json()["deferred"] == ["activity"]
+                assert cold.json()["live"] == ["activity"]
+                assert await admin.get(load_count_key) is None
+
+                follow_up = await client.get(
+                    f"http://127.0.0.1:{ports[2]}/activity",
+                    headers={
+                        **_DEFERRED_LIVE_HEADERS,
+                        "X-FluxFast-Only": "activity",
+                    },
+                )
+                follow_up.raise_for_status()
+                first_record = follow_up.json()["resources"]["activity"]
+                assert first_record["value"] == {"value": 0}
+                assert follow_up.json()["live"] == ["activity"]
+                assert "deferred" not in follow_up.json()
+                assert int(await admin.get(load_count_key)) == 1
+
+                warm = await client.get(
+                    f"http://127.0.0.1:{ports[0]}/activity",
+                    headers=_DEFERRED_LIVE_HEADERS,
+                )
+                warm.raise_for_status()
+                assert warm.json()["resources"]["activity"] == first_record
+                assert warm.json()["live"] == ["activity"]
+                assert "deferred" not in warm.json()
+                assert int(await admin.get(load_count_key)) == 1
+
+                mutation_response = await client.post(
+                    f"http://127.0.0.1:{ports[2]}/activity/increment",
+                    headers=_FLUXFAST_HEADERS,
+                )
+                mutation_response.raise_for_status()
+                assert mutation_response.json()["mutation"]["invalidate"] == [
+                    "activity"
+                ]
+                with anyio.fail_after(5):
+                    invalidation = await _next_sse_payload(lines)
+                assert invalidation == {
+                    "protocol": "fluxfast/1",
+                    "type": "invalidate",
+                    "keys": ["activity"],
+                }
+
+                refreshed = await client.get(
+                    f"http://127.0.0.1:{ports[1]}/activity",
+                    headers={
+                        **_DEFERRED_LIVE_HEADERS,
+                        "X-FluxFast-Only": "activity",
+                    },
+                )
+                refreshed.raise_for_status()
+                refreshed_record = refreshed.json()["resources"]["activity"]
+                assert refreshed_record["value"] == {"value": 1}
+                assert refreshed_record["version"] != first_record["version"]
+                assert int(await admin.get(load_count_key)) == 2
+
+                shared_refresh = await client.get(
+                    f"http://127.0.0.1:{ports[0]}/activity",
+                    headers=_DEFERRED_LIVE_HEADERS,
+                )
+                shared_refresh.raise_for_status()
+                assert (
+                    shared_refresh.json()["resources"]["activity"]
+                    == refreshed_record
+                )
+                assert int(await admin.get(load_count_key)) == 2
+
+                await admin.set(state_key, 2)
+                await anyio.sleep(1.2)
+                expired = await client.get(
+                    f"http://127.0.0.1:{ports[2]}/activity",
+                    headers=_DEFERRED_LIVE_HEADERS,
+                )
+                expired.raise_for_status()
+                assert expired.json()["resources"] == {}
+                assert expired.json()["deferred"] == ["activity"]
+                assert int(await admin.get(load_count_key)) == 2
+
+                reloaded = await client.get(
+                    f"http://127.0.0.1:{ports[0]}/activity",
+                    headers={
+                        **_DEFERRED_LIVE_HEADERS,
+                        "X-FluxFast-Only": "activity",
+                    },
+                )
+                reloaded.raise_for_status()
+                assert reloaded.json()["resources"]["activity"]["value"] == {
+                    "value": 2
+                }
+                assert int(await admin.get(load_count_key)) == 3
     finally:
         _stop_workers(workers)
         try:
