@@ -49,6 +49,31 @@ export interface LiveManagerOptions {
   random?: () => number;
 }
 
+export type LiveManagerDiagnostic =
+  | {
+      type: "connect:start" | "connect:open" | "reconnect";
+      keyCount: number;
+      reconnectAttempt: number;
+    }
+  | {
+      type: "connect:close";
+      keyCount: number;
+      reconnectAttempt: number;
+      reason: "lifecycle" | "stream-end" | "error" | "offline";
+      willReconnect: boolean;
+    }
+  | {
+      type: "connect:error";
+      keyCount: number;
+      reconnectAttempt: number;
+      errorType: "transport";
+    }
+  | {
+      type: "event";
+      eventType: LiveEvent["type"];
+      keyCount: number;
+    };
+
 export const DEFAULT_LIVE_RECONNECT_INITIAL_DELAY_MS = 500;
 export const DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS = 10_000;
 export const DEFAULT_LIVE_RECONNECT_JITTER = 0.2;
@@ -112,6 +137,9 @@ export class LiveManager {
   private readonly random: () => number;
   private readonly subscribers = new Set<() => void>();
   private readonly eventSubscribers = new Set<(event: LiveEvent) => void>();
+  private readonly diagnosticSubscribers = new Set<
+    (event: LiveManagerDiagnostic) => void
+  >();
   private snapshot: LiveStatusSnapshot = INITIAL_STATUS;
   private manifest?: LiveManifest;
   private identity?: string;
@@ -162,6 +190,13 @@ export class LiveManager {
     return () => this.eventSubscribers.delete(listener);
   }
 
+  subscribeDiagnostics(
+    listener: (event: LiveManagerDiagnostic) => void
+  ): () => void {
+    this.diagnosticSubscribers.add(listener);
+    return () => this.diagnosticSubscribers.delete(listener);
+  }
+
   /** Replace the authoritative page URL and live-key manifest. */
   updateManifest(url: string, keys: string[]): void {
     const nextManifest = this.normalizeManifest(url, keys);
@@ -172,7 +207,7 @@ export class LiveManager {
 
     const shouldReconnect = this.desired;
     this.cancelReconnect();
-    this.stopConnection();
+    this.stopConnection("lifecycle", shouldReconnect);
     this.manifest = nextManifest;
     this.identity = nextIdentity;
     this.setSnapshot(INITIAL_STATUS);
@@ -205,7 +240,7 @@ export class LiveManager {
   disconnect(): void {
     this.desired = false;
     this.cancelReconnect();
-    this.stopConnection();
+    this.stopConnection("lifecycle", false);
     this.stopNetworkSubscription?.();
     this.stopNetworkSubscription = undefined;
     this.setSnapshot({
@@ -226,7 +261,7 @@ export class LiveManager {
     this.ensureNetworkSubscription();
     const reconnectAttempt = this.snapshot.reconnectAttempt + 1;
     this.cancelReconnect();
-    this.stopConnection();
+    this.stopConnection("lifecycle", true);
     if (!this.network.isOnline()) {
       this.setOffline(Math.max(1, reconnectAttempt));
       return;
@@ -238,7 +273,7 @@ export class LiveManager {
   clear(): void {
     this.desired = false;
     this.cancelReconnect();
-    this.stopConnection();
+    this.stopConnection("lifecycle", false);
     this.stopNetworkSubscription?.();
     this.stopNetworkSubscription = undefined;
     this.manifest = undefined;
@@ -250,6 +285,7 @@ export class LiveManager {
     this.clear();
     this.subscribers.clear();
     this.eventSubscribers.clear();
+    this.diagnosticSubscribers.clear();
   }
 
   private normalizeManifest(url: string, keys: string[]): LiveManifest | undefined {
@@ -275,6 +311,26 @@ export class LiveManager {
       ...this.snapshot,
       status,
       connected: false,
+      reconnectAttempt,
+    });
+    if (
+      generation !== this.generation ||
+      !this.desired ||
+      this.manifest !== manifest ||
+      this.connection
+    ) {
+      return;
+    }
+    if (status === "reconnecting") {
+      this.emitDiagnostic({
+        type: "reconnect",
+        keyCount: manifest.keys.length,
+        reconnectAttempt,
+      });
+    }
+    this.emitDiagnostic({
+      type: "connect:start",
+      keyCount: manifest.keys.length,
       reconnectAttempt,
     });
     if (
@@ -328,23 +384,36 @@ export class LiveManager {
           lastEventAt: this.now(),
         });
         if (generation !== this.generation) return;
-        this.emitEvent(event);
-        if (generation !== this.generation) return;
+        if (event.type === "ready") {
+          this.emitDiagnostic({
+            type: "connect:open",
+            keyCount: event.keys.length,
+            reconnectAttempt,
+          });
+        }
+        if (!this.dispatchEvent(event, generation)) return;
         if (
           reconnectManifest &&
           generation === this.generation &&
           this.manifest === reconnectManifest
         ) {
-          this.emitEvent({
+          if (!this.dispatchEvent({
             protocol: PROTOCOL_VERSION,
             type: "resync",
             keys: [...reconnectManifest.keys],
             reason: "reconnect",
-          });
+          }, generation)) return;
         }
       }
       if (generation !== this.generation) return;
       this.connection = undefined;
+      this.emitDiagnostic({
+        type: "connect:close",
+        keyCount: this.manifest?.keys.length ?? 0,
+        reconnectAttempt,
+        reason: "stream-end",
+        willReconnect: this.desired,
+      });
       if (this.desired) {
         this.scheduleReconnect(false);
       } else {
@@ -361,8 +430,24 @@ export class LiveManager {
 
   private handleConnectionError(generation: number, error: unknown): void {
     if (generation !== this.generation) return;
+    const hadConnection = this.connection !== undefined;
     this.connection = undefined;
     const normalized = normalizeError(error);
+    this.emitDiagnostic({
+      type: "connect:error",
+      keyCount: this.manifest?.keys.length ?? 0,
+      reconnectAttempt: this.snapshot.reconnectAttempt,
+      errorType: "transport",
+    });
+    if (hadConnection) {
+      this.emitDiagnostic({
+        type: "connect:close",
+        keyCount: this.manifest?.keys.length ?? 0,
+        reconnectAttempt: this.snapshot.reconnectAttempt,
+        reason: "error",
+        willReconnect: this.desired,
+      });
+    }
     this.reportError(normalized);
     if (generation !== this.generation) return;
     if (this.desired) {
@@ -454,7 +539,7 @@ export class LiveManager {
         ? Math.max(1, this.snapshot.reconnectAttempt)
         : Math.max(1, this.snapshot.reconnectAttempt + 1);
     this.cancelReconnect();
-    this.stopConnection();
+    this.stopConnection("offline", true);
     this.setOffline(reconnectAttempt);
   };
 
@@ -486,10 +571,45 @@ export class LiveManager {
     }
   }
 
-  private stopConnection(): void {
+  private dispatchEvent(event: LiveEvent, generation: number): boolean {
+    this.emitDiagnostic({
+      type: "event",
+      eventType: event.type,
+      keyCount: event.type === "patch"
+        ? Object.keys(event.patches).length
+        : event.keys.length,
+    });
+    if (generation !== this.generation) return false;
+    this.emitEvent(event);
+    return generation === this.generation;
+  }
+
+  private emitDiagnostic(event: LiveManagerDiagnostic): void {
+    for (const listener of [...this.diagnosticSubscribers]) {
+      try {
+        listener(event);
+      } catch {
+        // Diagnostics must never destabilize live synchronization.
+      }
+    }
+  }
+
+  private stopConnection(
+    reason: "lifecycle" | "offline",
+    willReconnect: boolean
+  ): void {
     ++this.generation;
     const connection = this.connection;
     this.connection = undefined;
+    if (connection) {
+      this.emitDiagnostic({
+        type: "connect:close",
+        keyCount: this.manifest?.keys.length ?? 0,
+        reconnectAttempt: this.snapshot.reconnectAttempt,
+        reason,
+        willReconnect,
+      });
+    }
     connection?.close("live lifecycle changed");
   }
 

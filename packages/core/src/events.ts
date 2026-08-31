@@ -3,6 +3,7 @@
  */
 
 import type { ResourceErrorDetail } from "./protocol";
+import type { LiveEvent, LiveResyncReason } from "./live/protocol";
 
 export type ResourceLoadReason =
   | "deferred"
@@ -27,6 +28,16 @@ export interface ResourceErrorEvent extends ResourceLoadEvent {
   error: ResourceErrorDetail;
 }
 
+export interface LiveConnectionEvent {
+  keyCount: number;
+  reconnectAttempt: number;
+}
+
+export interface LiveConnectionCloseEvent extends LiveConnectionEvent {
+  reason: "lifecycle" | "stream-end" | "error" | "offline";
+  willReconnect: boolean;
+}
+
 export type FluxEventName =
   | "visit:start"
   | "visit:success"
@@ -44,7 +55,16 @@ export type FluxEventName =
   | "prefetch:success"
   | "mutation:start"
   | "mutation:success"
-  | "mutation:error";
+  | "mutation:error"
+  | "live:connect:start"
+  | "live:connect:open"
+  | "live:connect:close"
+  | "live:connect:error"
+  | "live:reconnect"
+  | "live:event"
+  | "live:invalidate"
+  | "live:patch"
+  | "live:resync";
 
 export interface FluxEventPayloads {
   "visit:start": { visitId: string; url: string };
@@ -64,6 +84,15 @@ export interface FluxEventPayloads {
   "mutation:start": { url: string };
   "mutation:success": { url: string };
   "mutation:error": { url: string; error: Error };
+  "live:connect:start": LiveConnectionEvent;
+  "live:connect:open": LiveConnectionEvent;
+  "live:connect:close": LiveConnectionCloseEvent;
+  "live:connect:error": LiveConnectionEvent & { errorType: "transport" };
+  "live:reconnect": LiveConnectionEvent;
+  "live:event": { eventType: LiveEvent["type"]; keyCount: number };
+  "live:invalidate": { keyCount: number };
+  "live:patch": { resourceCount: number };
+  "live:resync": { keyCount: number; reason: LiveResyncReason };
 }
 
 export type FluxEventListener<E extends FluxEventName> = (

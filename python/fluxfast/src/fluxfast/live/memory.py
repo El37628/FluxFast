@@ -15,6 +15,7 @@ from .events import (
     LivePatchEvent,
     LiveResyncEvent,
 )
+from .metrics import LiveMetrics
 
 DEFAULT_LIVE_QUEUE_SIZE: Final = 64
 
@@ -51,7 +52,12 @@ class MemoryLiveBroker:
     closed so its transport can reconnect and reconstruct authoritative state.
     """
 
-    def __init__(self, *, max_queue_size: int = DEFAULT_LIVE_QUEUE_SIZE) -> None:
+    def __init__(
+        self,
+        *,
+        max_queue_size: int = DEFAULT_LIVE_QUEUE_SIZE,
+        metrics: LiveMetrics | None = None,
+    ) -> None:
         if (
             isinstance(max_queue_size, bool)
             or not isinstance(max_queue_size, int)
@@ -63,6 +69,12 @@ class MemoryLiveBroker:
         self._subscribers: set[_Subscriber] = set()
         self._closed = False
         self._queue_overflow_count = 0
+        self._metrics = metrics
+
+    def bind_metrics(self, metrics: LiveMetrics) -> None:
+        """Attach the coordinator's metrics collector to this broker."""
+
+        self._metrics = metrics
 
     @property
     def subscriber_count(self) -> int:
@@ -105,6 +117,8 @@ class MemoryLiveBroker:
                     subscriber.events.append(event)
                 else:
                     self._queue_overflow_count += 1
+                    if self._metrics is not None:
+                        self._metrics.queue_overflow()
                     keys = _event_keys(event)
                     for queued_event in subscriber.events:
                         keys.update(_event_keys(queued_event))

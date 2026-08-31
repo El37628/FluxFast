@@ -215,6 +215,42 @@ Configure `live_heartbeat_interval` and `live_max_connection_age` on
 `router.clear()` during logout; it closes the stream and clears resource, page,
 and prefetch state.
 
+## Observability
+
+The framework-neutral router extends its existing `router.on(...)` diagnostics
+with:
+
+```text
+live:connect:start    live:connect:open     live:connect:close
+live:connect:error    live:reconnect        live:event
+live:invalidate       live:patch            live:resync
+```
+
+Payloads contain counts, reconnect attempts, safe reason enums, event types,
+and the fixed `transport` error category. They deliberately omit URLs, logical
+resource names, scopes, tenant/user identifiers, headers, and error messages.
+These events are diagnostic only; resource synchronization does not depend on
+listeners.
+
+Each capable page response includes `X-FluxFast-Live-Resources` with the live
+resource count. It never lists resource names.
+
+Python exposes process-local counters through
+`flux.live.metrics.snapshot().as_dict()` (also available as
+`flux.live_metrics`). The snapshot contains:
+
+```text
+live_connections_active       live_connections_total
+live_events_published         live_invalidations_published
+live_patches_published        live_resyncs
+live_queue_overflows          live_publish_errors
+```
+
+FluxFast intentionally does not select a monitoring vendor. Export this
+snapshot through the application's existing Prometheus, OpenTelemetry, or
+other metrics integration. Counts are process-local; aggregate them across
+workers in the monitoring backend.
+
 ## Single-process and Redis brokers
 
 `MemoryLiveBroker` is the default. It is suitable for local development, tests,

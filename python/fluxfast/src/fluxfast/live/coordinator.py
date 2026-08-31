@@ -19,7 +19,9 @@ from .events import (
     LiveEvent,
     LiveInvalidateEvent,
     LivePatchEvent,
+    LiveResyncEvent,
 )
+from .metrics import LiveMetrics
 
 _TOPIC_PERSONALIZATION: Final = b"fluxfast-live-v1"
 _TOPIC_PREFIX: Final = "fluxfast.live."
@@ -73,9 +75,18 @@ class LiveSubscription:
 class LiveCoordinator:
     """Coordinates scoped subscriptions, cache invalidation, and publication."""
 
-    def __init__(self, cache: ResourceCacheBackend, broker: LiveBroker) -> None:
+    def __init__(
+        self,
+        cache: ResourceCacheBackend,
+        broker: LiveBroker,
+        metrics: LiveMetrics | None = None,
+    ) -> None:
         self.cache = cache
         self.broker = broker
+        self.metrics = metrics if metrics is not None else LiveMetrics()
+        bind_metrics = getattr(broker, "bind_metrics", None)
+        if callable(bind_metrics):
+            bind_metrics(self.metrics)
 
     def resolve_subscription(
         self,
@@ -108,7 +119,7 @@ class LiveCoordinator:
 
         if not subscription.keys or not subscription.topics:
             raise ValueError("no requested live resources are declared by this page")
-        return self.broker.subscribe(set(subscription.topics))
+        return self._tracked_subscription(subscription)
 
     async def invalidate(
         self,
@@ -154,10 +165,26 @@ class LiveCoordinator:
         try:
             await self.broker.publish(topic, event)
         except Exception:
+            self.metrics.publish_error()
             _LOGGER.exception(
                 "Live Resource publication failed; canonical cache state was invalidated",
                 extra={"fluxfast_live_event_type": event.type},
             )
+        else:
+            self.metrics.event_published(event.type)
+
+    async def _tracked_subscription(
+        self,
+        subscription: LiveSubscription,
+    ) -> AsyncIterator[LiveEvent]:
+        self.metrics.connection_opened()
+        try:
+            async for event in self.broker.subscribe(set(subscription.topics)):
+                if isinstance(event, LiveResyncEvent):
+                    self.metrics.resync()
+                yield event
+        finally:
+            self.metrics.connection_closed()
 
     @staticmethod
     def _cache_key(scope: CacheScope, resource_key: str) -> str:

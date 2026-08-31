@@ -17,7 +17,9 @@ from fluxfast import (
     LiveCoordinator,
     LiveEvent,
     LiveInvalidateEvent,
+    LiveMetrics,
     LivePatchEvent,
+    LiveResyncEvent,
     MemoryLiveBroker,
     MemoryResourceCache,
     Page,
@@ -194,6 +196,8 @@ def test_fluxfast_wires_default_or_custom_live_broker() -> None:
     default_flux = FluxFast(FastAPI())
     assert isinstance(default_flux.live.broker, MemoryLiveBroker)
     assert default_flux.app.state.fluxfast_live is default_flux.live
+    assert default_flux.live.metrics is default_flux.live_metrics
+    assert default_flux.app.state.fluxfast_live_metrics is default_flux.live_metrics
 
     custom_broker = MemoryLiveBroker(max_queue_size=5)
     custom_flux = FluxFast(FastAPI(), broker=custom_broker)
@@ -212,6 +216,54 @@ def test_fluxfast_wires_default_or_custom_live_broker() -> None:
             broker=MemoryLiveBroker(),
             live_broker=MemoryLiveBroker(),
         )
+
+
+@pytest.mark.anyio
+async def test_live_metrics_track_connections_publications_and_resyncs() -> None:
+    metrics = LiveMetrics()
+    broker = MemoryLiveBroker(max_queue_size=1)
+    coordinator = LiveCoordinator(MemoryResourceCache(), broker, metrics=metrics)
+    resource_scope = scope.public()
+    subscription = coordinator.resolve_subscription(
+        Page(
+            "Dashboard",
+            [resource("summary", dict, scope=resource_scope, live=True)],
+        ),
+        {"summary"},
+    )
+    stream = coordinator.subscribe(subscription)
+    received: list[LiveEvent] = []
+
+    async with anyio.create_task_group() as tasks:
+        tasks.start_soon(_receive_one, stream, received)
+        await _wait_for_subscriber(broker)
+        snapshot = metrics.snapshot()
+        assert snapshot.live_connections_active == 1
+        assert snapshot.live_connections_total == 1
+        await coordinator.invalidate("summary", scope=resource_scope)
+
+    await coordinator.patch(
+        "summary",
+        [{"op": "replace-resource", "value": {"count": 2}}],
+        scope=resource_scope,
+    )
+    await coordinator.invalidate("summary", scope=resource_scope)
+    assert broker.queue_overflow_count == 1
+    overflow = await anext(stream)
+    assert overflow == LiveResyncEvent(keys=["summary"], reason="overflow")
+    await stream.aclose()
+
+    snapshot = metrics.snapshot()
+    assert snapshot.as_dict() == {
+        "live_connections_active": 0,
+        "live_connections_total": 1,
+        "live_events_published": 3,
+        "live_invalidations_published": 2,
+        "live_patches_published": 1,
+        "live_resyncs": 1,
+        "live_queue_overflows": 1,
+        "live_publish_errors": 0,
+    }
 
 
 @pytest.mark.anyio
@@ -243,3 +295,4 @@ async def test_publish_failure_keeps_invalidated_canonical_state(
 
     assert await cache.get(cache_key) is None
     assert "publication failed" in caplog.text
+    assert coordinator.metrics.snapshot().live_publish_errors == 1
