@@ -47,7 +47,13 @@ jobs:
           redis_container_id=$(docker ps --filter publish=6379 --format '{{.ID}}')
           test -n "$redis_container_id"
           echo "FLUXFAST_TEST_REDIS_CONTAINER=$redis_container_id" >> "$GITHUB_ENV"
-      - run: pytest -q python/fluxfast/tests/test_live_redis.py python/fluxfast/tests/test_live_redis_integration.py
+      - run: >-
+          pytest -q
+          python/fluxfast/tests/test_live_redis.py
+          python/fluxfast/tests/test_live_redis_integration.py
+          python/fluxfast/tests/test_redis_cache.py
+          python/fluxfast/tests/test_redis_cache_integration.py
+          python/fluxfast/tests/test_redis_multiworker_integration.py
         env:
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/15
 
@@ -80,3 +86,36 @@ jobs:
       - run: pnpm test:e2e:production
         env:
           FLUXFAST_E2E_PYTHON: python
+
+  distributed-browser:
+    name: Distributed browser flow
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install --global pnpm@10.15.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - run: python -m pip install -e 'python/fluxfast[dev,redis]'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
+      - run: pnpm test:e2e:distributed
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/15

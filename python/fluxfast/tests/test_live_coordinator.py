@@ -23,6 +23,7 @@ from fluxfast import (
     MemoryLiveBroker,
     MemoryResourceCache,
     Page,
+    ResourceCacheUnavailableError,
     append_item,
     derive_live_topic,
     resource,
@@ -147,6 +148,26 @@ async def test_manual_invalidation_deletes_cache_before_publishing() -> None:
         LiveInvalidateEvent(keys=["summary"], originClientId="ff_origin")
     ]
     await stream.aclose()
+
+
+@pytest.mark.anyio
+async def test_failed_cache_invalidation_never_publishes_live_signal() -> None:
+    published: list[tuple[str, LiveEvent]] = []
+
+    class FailingCache(MemoryResourceCache):
+        async def delete(self, key: str) -> None:
+            raise ResourceCacheUnavailableError("shared cache unavailable")
+
+    class RecordingBroker(MemoryLiveBroker):
+        async def publish(self, topic: str, event: LiveEvent) -> None:
+            published.append((topic, event))
+
+    coordinator = LiveCoordinator(FailingCache(), RecordingBroker())
+
+    with pytest.raises(ResourceCacheUnavailableError, match="unavailable"):
+        await coordinator.invalidate("rooms", scope=scope.tenant("hotel-1"))
+
+    assert published == []
 
 
 @pytest.mark.anyio

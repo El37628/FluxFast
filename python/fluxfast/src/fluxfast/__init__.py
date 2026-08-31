@@ -2,6 +2,7 @@
 
 from .app import FluxFast
 from .cache import CachedResource, MemoryResourceCache, ResourceCacheBackend
+from .cache_metrics import RedisCacheMetrics, RedisCacheMetricsSnapshot
 from .capabilities import (
     CAPABILITY_DEFERRED_RESOURCES,
     CAPABILITY_LIVE_RESOURCES,
@@ -12,6 +13,9 @@ from .errors import (
     FluxFastLiveScopeError,
     PageNotFoundError,
     ProtocolError,
+    ResourceCacheError,
+    ResourceCacheSerializationError,
+    ResourceCacheUnavailableError,
     ResourceError,
     ScopeError,
     ValidationError,
@@ -69,6 +73,11 @@ from .protocol import (
     ResourceErrorDetail,
     ResourceWireRecord,
 )
+from .redis_cache import (
+    DEFAULT_REDIS_MAX_VALUE_BYTES,
+    DEFAULT_REDIS_SCAN_COUNT,
+    RedisResourceCache,
+)
 from .resource import ResourceLoader, ResourceSpec, resource
 from .router import FluxRouter
 from .scope import CacheScope, ScopeType, scope
@@ -83,6 +92,8 @@ __all__ = [
     "DEFAULT_LIVE_QUEUE_SIZE",
     "DEFAULT_REDIS_CHANNEL_PREFIX",
     "DEFAULT_REDIS_MAX_MESSAGE_BYTES",
+    "DEFAULT_REDIS_MAX_VALUE_BYTES",
+    "DEFAULT_REDIS_SCAN_COUNT",
     "HEADER_CAPABILITIES",
     "LIVE_EVENT_NAME",
     "LIVE_HEARTBEAT",
@@ -119,8 +130,14 @@ __all__ = [
     "PageEnvelope",
     "PageNotFoundError",
     "ProtocolError",
+    "RedisCacheMetrics",
+    "RedisCacheMetricsSnapshot",
     "RedisLiveBroker",
+    "RedisResourceCache",
     "ResourceCacheBackend",
+    "ResourceCacheError",
+    "ResourceCacheSerializationError",
+    "ResourceCacheUnavailableError",
     "ResourceError",
     "ResourceErrorDetail",
     "ResourceLoader",
