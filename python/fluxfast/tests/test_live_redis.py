@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import pytest
@@ -33,6 +34,36 @@ class RecordingRedisClient:
 class FailingRedisClient(RecordingRedisClient):
     async def publish(self, channel: str, message: bytes) -> int:
         raise ConnectionError("Redis unavailable")
+
+
+class DisconnectingPubSub:
+    def __init__(self) -> None:
+        self.subscribed: tuple[str, ...] = ()
+        self.unsubscribed: tuple[str, ...] = ()
+        self.closed = False
+
+    async def subscribe(self, *channels: str) -> None:
+        self.subscribed = channels
+
+    async def unsubscribe(self, *channels: str) -> None:
+        self.unsubscribed = channels
+
+    async def get_message(self, **_kwargs: Any) -> None:
+        raise ConnectionError(
+            "redis://service-user:super-secret@example.invalid unavailable"
+        )
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+class DisconnectingRedisClient(RecordingRedisClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pubsub_client = DisconnectingPubSub()
+
+    def pubsub(self, **_kwargs: Any) -> DisconnectingPubSub:
+        return self.pubsub_client
 
 
 @pytest.mark.anyio
@@ -73,6 +104,30 @@ async def test_publish_failure_is_exposed_to_the_coordinator() -> None:
 
     with pytest.raises(ConnectionError, match="unavailable"):
         await broker.publish("topic", LiveInvalidateEvent(keys=["summary"]))
+
+
+@pytest.mark.anyio
+async def test_subscription_disconnect_log_omits_redis_credentials(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = DisconnectingRedisClient()
+    broker = RedisLiveBroker(client, channel_prefix="application:")
+    stream = broker.subscribe({"opaque-topic"})
+
+    with (
+        caplog.at_level(logging.WARNING, logger="fluxfast.live.redis"),
+        pytest.raises(StopAsyncIteration),
+    ):
+        await anext(stream)
+
+    assert "subscription disconnected" in caplog.text
+    assert "service-user" not in caplog.text
+    assert "super-secret" not in caplog.text
+    assert "example.invalid" not in caplog.text
+    assert caplog.records[-1].fluxfast_live_error_type == "ConnectionError"
+    assert client.pubsub_client.subscribed == ("application:opaque-topic",)
+    assert client.pubsub_client.unsubscribed == ("application:opaque-topic",)
+    assert client.pubsub_client.closed is True
 
 
 def test_from_url_explains_how_to_install_optional_dependency(monkeypatch: Any) -> None:

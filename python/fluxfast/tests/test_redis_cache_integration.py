@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Awaitable, Callable
+from typing import Any
 from uuid import uuid4
 
+import anyio
 import pytest
 
 from fluxfast import CachedResource, RedisResourceCache
@@ -18,12 +21,74 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _resource(version: str, value: object) -> CachedResource:
+def _resource(
+    version: str,
+    value: object,
+    *,
+    tags: tuple[str, ...] = (),
+) -> CachedResource:
     return CachedResource(
         version=version,
         value=value,
         expires_at=time.monotonic() + 60,
+        tags=tags,
     )
+
+
+async def _race(
+    *operations: Callable[[], Awaitable[Any]],
+) -> list[Any]:
+    start = anyio.Event()
+    ready = [anyio.Event() for _operation in operations]
+    results: list[Any] = [None] * len(operations)
+
+    async def run(
+        index: int,
+        operation: Callable[[], Awaitable[Any]],
+    ) -> None:
+        ready[index].set()
+        await start.wait()
+        results[index] = await operation()
+
+    async with anyio.create_task_group() as tasks:
+        for index, operation in enumerate(operations):
+            tasks.start_soon(run, index, operation)
+        for event in ready:
+            await event.wait()
+        start.set()
+
+    return results
+
+
+async def _assert_single_resource_is_consistent(
+    admin: Any,
+    keyspace: RedisCacheKeyspace,
+    logical_key: str,
+    resource: CachedResource | None,
+) -> None:
+    keys = {
+        key
+        async for key in admin.scan_iter(
+            match=keyspace.scan_pattern,
+            count=100,
+        )
+    }
+    if resource is None:
+        assert keys == set()
+        return
+
+    resource_key = keyspace.resource_key(logical_key)
+    membership_key = keyspace.resource_tags_key(logical_key)
+    tag_keys = {keyspace.tag_key(tag) for tag in resource.tags}
+    expected = {resource_key.encode(), *(key.encode() for key in tag_keys)}
+    if tag_keys:
+        expected.add(membership_key.encode())
+    assert keys == expected
+    assert await admin.smembers(membership_key) == {
+        key.encode() for key in tag_keys
+    }
+    for tag_key in tag_keys:
+        assert await admin.zrange(tag_key, 0, -1) == [resource_key.encode()]
 
 
 @pytest.mark.anyio
@@ -244,3 +309,204 @@ async def test_corrupt_entry_self_recovers_without_leaving_tag_indexes() -> None
         await cache.clear()
         await admin.aclose()
         await cache.close()
+
+
+@pytest.mark.anyio
+async def test_namespace_tag_and_clear_operations_are_fully_isolated() -> None:
+    assert REDIS_URL is not None
+    from redis.asyncio import Redis
+
+    deployment = uuid4().hex
+    first_namespace = f"test-isolation-a-{deployment}"
+    second_namespace = f"test-isolation-b-{deployment}"
+    first = RedisResourceCache.from_url(
+        REDIS_URL,
+        namespace=first_namespace,
+    )
+    second = RedisResourceCache.from_url(
+        REDIS_URL,
+        namespace=second_namespace,
+    )
+    admin = Redis.from_url(REDIS_URL)
+    logical_key = "tenant:1::rooms"
+
+    try:
+        await first.set(
+            logical_key,
+            _resource("a-v1", {"application": "a"}, tags=("shared",)),
+            ttl=60,
+        )
+        await second.set(
+            logical_key,
+            _resource("b-v1", {"application": "b"}, tags=("shared",)),
+            ttl=60,
+        )
+
+        await first.invalidate_tag("shared")
+
+        assert await first.get(logical_key) is None
+        second_hit = await second.get(logical_key)
+        assert second_hit is not None
+        assert second_hit.value == {"application": "b"}
+        await _assert_single_resource_is_consistent(
+            admin,
+            RedisCacheKeyspace(first_namespace),
+            logical_key,
+            None,
+        )
+        await _assert_single_resource_is_consistent(
+            admin,
+            RedisCacheKeyspace(second_namespace),
+            logical_key,
+            second_hit,
+        )
+
+        await first.set(
+            logical_key,
+            _resource("a-v2", {"application": "a2"}, tags=("shared",)),
+            ttl=60,
+        )
+        await first.clear()
+
+        assert await first.get(logical_key) is None
+        second_hit = await second.get(logical_key)
+        assert second_hit is not None
+        assert second_hit.value == {"application": "b"}
+        await _assert_single_resource_is_consistent(
+            admin,
+            RedisCacheKeyspace(first_namespace),
+            logical_key,
+            None,
+        )
+        await _assert_single_resource_is_consistent(
+            admin,
+            RedisCacheKeyspace(second_namespace),
+            logical_key,
+            second_hit,
+        )
+    finally:
+        await first.clear()
+        await second.clear()
+        await admin.aclose()
+        await second.close()
+        await first.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("_iteration", range(8))
+async def test_concurrent_operations_never_leave_malformed_cache_state(
+    _iteration: int,
+) -> None:
+    assert REDIS_URL is not None
+    from redis.asyncio import Redis
+
+    namespace = f"test-concurrency-{uuid4().hex}"
+    keyspace = RedisCacheKeyspace(namespace)
+    first = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    second = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    admin = Redis.from_url(REDIS_URL)
+    logical_key = "tenant:1::rooms"
+
+    async def delayed_expiry_read() -> CachedResource | None:
+        await anyio.sleep(0.08)
+        return await second.get(logical_key)
+
+    try:
+        # get + delete: the read can be a valid hit or miss, while delete wins
+        # the final state and removes every tag index.
+        await first.set(
+            logical_key,
+            _resource("base-v1", "base", tags=("base",)),
+            ttl=60,
+        )
+        read_result, _deleted = await _race(
+            lambda: first.get(logical_key),
+            lambda: second.delete(logical_key),
+        )
+        assert read_result is None or read_result.value == "base"
+        assert await first.get(logical_key) is None
+        await _assert_single_resource_is_consistent(admin, keyspace, logical_key, None)
+
+        # set + delete: either operation may win, but the surviving entry and
+        # all indexes must describe one complete write.
+        replacement = _resource(
+            "replacement-v1",
+            "replacement",
+            tags=("replacement",),
+        )
+        await _race(
+            lambda: first.set(logical_key, replacement, ttl=60),
+            lambda: second.delete(logical_key),
+        )
+        final = await first.get(logical_key)
+        assert final is None or final.value == "replacement"
+        await _assert_single_resource_is_consistent(admin, keyspace, logical_key, final)
+
+        # set + tag invalidation: last-command-wins is allowed; partial tag
+        # membership or malformed data is not.
+        await first.clear()
+        await first.set(
+            logical_key,
+            _resource("base-v2", "base", tags=("shared",)),
+            ttl=60,
+        )
+        shared_replacement = _resource(
+            "replacement-v2",
+            "replacement",
+            tags=("shared", "replacement"),
+        )
+        await _race(
+            lambda: first.set(logical_key, shared_replacement, ttl=60),
+            lambda: second.invalidate_tag("shared"),
+        )
+        final = await first.get(logical_key)
+        assert final is None or final.value == "replacement"
+        await _assert_single_resource_is_consistent(admin, keyspace, logical_key, final)
+
+        # Two simultaneous sets are atomic and last-writer-wins as a complete
+        # value plus its exact tag membership.
+        await first.clear()
+        first_write = _resource("first-v1", "first", tags=("first",))
+        second_write = _resource("second-v1", "second", tags=("second",))
+        await _race(
+            lambda: first.set(logical_key, first_write, ttl=60),
+            lambda: second.set(logical_key, second_write, ttl=60),
+        )
+        final = await first.get(logical_key)
+        assert final is not None
+        assert (final.version, final.value, final.tags) in {
+            ("first-v1", "first", ("first",)),
+            ("second-v1", "second", ("second",)),
+        }
+        await _assert_single_resource_is_consistent(admin, keyspace, logical_key, final)
+
+        # clear + read can return the valid pre-clear value or a miss; once
+        # clear completes, no namespace-local data remains.
+        read_result, _cleared = await _race(
+            lambda: first.get(logical_key),
+            second.clear,
+        )
+        assert read_result is None or read_result.value in {"first", "second"}
+        assert await first.get(logical_key) is None
+        await _assert_single_resource_is_consistent(admin, keyspace, logical_key, None)
+
+        # TTL expiration + reads may straddle the deadline, but every hit is a
+        # complete value and the post-deadline state is a clean miss.
+        await first.set(
+            logical_key,
+            _resource("expiring-v1", "expiring", tags=("expiring",)),
+            ttl=0.04,
+        )
+        immediate, expired = await _race(
+            lambda: first.get(logical_key),
+            delayed_expiry_read,
+        )
+        assert immediate is None or immediate.value == "expiring"
+        assert expired is None
+        assert await first.get(logical_key) is None
+        await _assert_single_resource_is_consistent(admin, keyspace, logical_key, None)
+    finally:
+        await first.clear()
+        await admin.aclose()
+        await second.close()
+        await first.close()

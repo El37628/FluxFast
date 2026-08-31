@@ -133,6 +133,14 @@ workers because v0.5 has no distributed lease or single-flight lock. Valid
 competing writes are last-writer-wins. Loaders must therefore remain safe to
 run more than once and must return the same authorized canonical state.
 
+Resource writes, deletes, and tag invalidations use small atomic Redis scripts;
+reads obtain the value and remaining TTL in one transaction. A read racing
+with `delete()`, `invalidate_tag()`, expiry, or `clear()` may observe either the
+complete value from before that operation or a miss, but never a partial cache
+entry. Namespace-wide `clear()` is intentionally a bounded `SCAN` plus `UNLINK`,
+not a global transaction; quiesce writers if an application requires a strict
+administrative clear boundary.
+
 ## Invalidation and tags
 
 Scoped resource invalidation uses the same logical identity on every worker.
@@ -208,6 +216,12 @@ Redis URLs, credentials, resource keys, scope fingerprints, cached values, and
 tenant/user identifiers. Decide at the application boundary whether an
 operation should fail the request, be retried, or be handled by infrastructure;
 do not introduce an incoherent local fallback.
+
+Live publication-failure and Redis subscription-disconnect logs also omit the
+underlying exception text and traceback because provider errors can embed a
+credential-bearing Redis URL. Use the bounded live error metrics and Redis
+provider diagnostics for operational detail without copying credentials into
+application logs.
 
 ## Metrics and operations
 
