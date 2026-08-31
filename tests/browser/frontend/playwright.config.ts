@@ -11,12 +11,14 @@ const port = Number(process.env.FLUXFAST_E2E_PORT ?? "3100");
 const backendPort = Number(process.env.FLUXFAST_E2E_BACKEND_PORT ?? "3101");
 const production = process.env.FLUXFAST_E2E_PRODUCTION === "1";
 const backendUrl = `http://127.0.0.1:${backendPort}`;
+const localDevelopmentEnv = { ...process.env };
+delete localDevelopmentEnv.CI;
 
 const developmentServer = {
   command: `exec ${JSON.stringify(python)} -m fluxfast.cli dev tests.browser.backend:app --frontend tests/browser/frontend --frontend-port ${port} --no-reload`,
   cwd: repositoryRoot,
   env: {
-    ...process.env,
+    ...localDevelopmentEnv,
     NEXT_TELEMETRY_DISABLED: "1",
   },
   url: `http://127.0.0.1:${port}`,

@@ -50,7 +50,7 @@ describe("Next adapter paths", () => {
     expect(buildFluxPath(undefined)).toBe("/");
   });
 
-  it("resolves a not-found child before interrupting an async page", async () => {
+  it("completes a timing anchor before interrupting a missing async page", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ detail: "Not Found" }),
       {
@@ -67,7 +67,13 @@ describe("Next adapter paths", () => {
 
     expect(React.isValidElement(result)).toBe(true);
     expect(notFoundMock).not.toHaveBeenCalled();
-    const NotFoundComponent = result.type as () => never;
+    const children = React.Children.toArray(
+      (result.props as { children: React.ReactNode }).children
+    ) as React.ReactElement[];
+    expect(children).toHaveLength(2);
+    const TimingAnchor = children[0]?.type as () => null;
+    expect(TimingAnchor()).toBeNull();
+    const NotFoundComponent = children[1]?.type as () => never;
     expect(() => NotFoundComponent()).toThrow("NEXT_NOT_FOUND");
     expect(notFoundMock).toHaveBeenCalledOnce();
   });
