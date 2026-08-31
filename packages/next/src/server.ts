@@ -134,6 +134,10 @@ function FluxNotFound(): never {
   notFound();
 }
 
+function FluxNotFoundTimingAnchor() {
+  return null;
+}
+
 export function createFluxNextPage(config: FluxNextConfig) {
   return async function FluxNextPage({
     params,
@@ -162,10 +166,16 @@ export function createFluxNextPage(config: FluxNextConfig) {
       headers: forwarded,
     });
     if (initialEnvelope === INITIAL_NOT_FOUND) {
-      // Resolve the async page before invoking notFound(). This avoids a React
-      // development instrumentation bug that measures a rejected async page
-      // with an end time of -Infinity while preserving Next's real 404 status.
-      return React.createElement(FluxNotFound);
+      // React 19.2's local-development RSC profiler records an invalid end time
+      // when the first child of this fulfilled async page throws notFound(). A
+      // completed, invisible sibling gives the profiler a valid timing anchor.
+      // Unlike Suspense, this preserves Next's real 404 response status.
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(FluxNotFoundTimingAnchor),
+        React.createElement(FluxNotFound)
+      );
     }
     return React.createElement(config.application, {
       initialEnvelope,
