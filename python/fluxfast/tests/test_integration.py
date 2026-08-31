@@ -508,6 +508,52 @@ def test_resource_failure_returns_protocol_error_without_private_details():
     }
 
 
+def test_resource_contract_error_is_debuggable_and_production_safe():
+    class RoomContract(BaseModel):
+        id: int
+
+    def create_contract_app(*, debug: bool) -> FastAPI:
+        app = FastAPI()
+        flux = FluxFast(app, debug=debug)
+        rooms = flux.define_resource("rooms", list[RoomContract])
+
+        @flux.page("/contract-failure")
+        async def contract_failure_page():
+            return Page(
+                component="rooms/index",
+                resources=[resource(rooms, lambda: [{"id": "private-room-id"}])],
+            )
+
+        return app
+
+    production_response = TestClient(create_contract_app(debug=False)).get(
+        "/contract-failure",
+        headers={HEADER_FLUXFAST: "1"},
+    )
+    debug_response = TestClient(create_contract_app(debug=True)).get(
+        "/contract-failure",
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert production_response.status_code == 500
+    assert production_response.json()["error"] == {
+        "type": "ResourceContractError",
+        "message": "A resource could not be resolved",
+        "details": None,
+    }
+    assert "private-room-id" not in production_response.text
+    assert debug_response.status_code == 500
+    assert debug_response.json()["error"] == {
+        "type": "ResourceContractError",
+        "message": 'Resource "rooms" failed its declared contract.',
+        "details": {
+            "rooms.0.id": [
+                "Input should be a valid integer, unable to parse string as an integer"
+            ]
+        },
+    }
+
+
 def test_deferred_follow_up_returns_successes_and_sanitized_resource_errors():
     app = FastAPI()
     flux = FluxFast(app, debug=False)

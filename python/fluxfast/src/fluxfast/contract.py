@@ -6,11 +6,32 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic_core import PydanticSerializationError
 
+from .errors import ResourceContractError
 from .serialization import canonical_json
 
 T = TypeVar("T")
+
+
+def _contract_validation_details(
+    key: str,
+    error: ValidationError,
+) -> dict[str, list[str]]:
+    """Return useful field messages without retaining rejected input values."""
+
+    details: dict[str, list[str]] = {}
+    for item in error.errors(
+        include_url=False,
+        include_context=False,
+        include_input=False,
+    ):
+        location = item.get("loc", ())
+        path = ".".join((key, *(str(part) for part in location)))
+        message = str(item.get("msg", "Value does not match the declared type"))
+        details.setdefault(path, []).append(message)
+    return details or {key: ["Value does not match the declared type"]}
 
 
 def _field_wire_name(owner: type[Any], name: str) -> str:
@@ -110,11 +131,23 @@ class ResourceContract(Generic[T]):
     def _serialize_wire(self, value: Any) -> Any:
         """Validate and serialize a loader value to its declared JSON shape."""
 
-        validated = self._adapter.validate_python(value)
-        wire_value = self._adapter.dump_python(
-            validated,
-            mode="json",
-            by_alias=True,
-            warnings="error",
-        )
+        message = f'Resource "{self.key}" failed its declared contract.'
+        try:
+            validated = self._adapter.validate_python(value)
+            wire_value = self._adapter.dump_python(
+                validated,
+                mode="json",
+                by_alias=True,
+                warnings="error",
+            )
+        except ValidationError as error:
+            raise ResourceContractError(
+                message,
+                details=_contract_validation_details(self.key, error),
+            ) from error
+        except PydanticSerializationError as error:
+            raise ResourceContractError(
+                message,
+                details={self.key: [str(error)]},
+            ) from error
         return _canonicalize_unordered_collections(validated, wire_value)
