@@ -13,6 +13,7 @@ from ._redis_cache_keys import RedisCacheKeyspace
 from .cache import CachedResource
 
 DEFAULT_REDIS_MAX_VALUE_BYTES: Final = 1024 * 1024
+DEFAULT_REDIS_SCAN_COUNT: Final = 500
 
 _SET_WITH_TAGS_SCRIPT: Final = """
 local resource_key = KEYS[1]
@@ -145,6 +146,16 @@ class _RedisClient(Protocol):
         *keys_and_args: str | bytes | int,
     ) -> Any: ...
 
+    async def scan(
+        self,
+        cursor: int,
+        *,
+        match: str,
+        count: int,
+    ) -> tuple[int, list[str | bytes]]: ...
+
+    async def unlink(self, *keys: str | bytes) -> Any: ...
+
     async def aclose(self) -> None: ...
 
 
@@ -168,11 +179,19 @@ class RedisResourceCache:
         *,
         namespace: str,
         max_value_bytes: int = DEFAULT_REDIS_MAX_VALUE_BYTES,
+        scan_count: int = DEFAULT_REDIS_SCAN_COUNT,
         owns_client: bool = False,
     ) -> None:
+        if (
+            isinstance(scan_count, bool)
+            or not isinstance(scan_count, int)
+            or scan_count < 1
+        ):
+            raise ValueError("scan_count must be a positive integer")
         self._client = client
         self._keyspace = RedisCacheKeyspace(namespace)
         self._codec = RedisResourceCodec(max_value_bytes=max_value_bytes)
+        self.scan_count = scan_count
         self._owns_client = owns_client
         self._closed = False
 
@@ -183,6 +202,7 @@ class RedisResourceCache:
         *,
         namespace: str,
         max_value_bytes: int = DEFAULT_REDIS_MAX_VALUE_BYTES,
+        scan_count: int = DEFAULT_REDIS_SCAN_COUNT,
         **redis_options: Any,
     ) -> RedisResourceCache:
         """Create a cache that owns its lazily imported async Redis client."""
@@ -194,6 +214,7 @@ class RedisResourceCache:
             client,
             namespace=namespace,
             max_value_bytes=max_value_bytes,
+            scan_count=scan_count,
             owns_client=True,
         )
 
@@ -288,9 +309,20 @@ class RedisResourceCache:
         )
 
     async def clear(self) -> None:
-        """Clear this namespace once bounded scanning is enabled."""
+        """Unlink only this exact namespace using bounded incremental scans."""
 
-        raise NotImplementedError("Redis cache namespace clearing is not enabled yet")
+        self._ensure_open()
+        cursor = 0
+        while True:
+            cursor, keys = await self._client.scan(
+                cursor,
+                match=self._keyspace.scan_pattern,
+                count=self.scan_count,
+            )
+            for start in range(0, len(keys), self.scan_count):
+                await self._client.unlink(*keys[start : start + self.scan_count])
+            if cursor == 0:
+                return
 
     async def close(self) -> None:
         """Close the owned Redis client idempotently."""
