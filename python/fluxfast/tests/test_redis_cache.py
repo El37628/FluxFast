@@ -50,6 +50,7 @@ class RecordingRedisClient:
         self.pipeline_commands: list[list[tuple[str, str]]] = []
         self.sets: list[tuple[str, bytes, int]] = []
         self.deletes: list[tuple[str, ...]] = []
+        self.evals: list[tuple[str, int, tuple[str | bytes | int, ...]]] = []
         self.closed = False
 
     def pipeline(self, *, transaction: bool) -> RecordingPipeline:
@@ -63,6 +64,15 @@ class RecordingRedisClient:
     async def delete(self, *keys: str) -> int:
         self.deletes.append(keys)
         return len(keys)
+
+    async def eval(
+        self,
+        script: str,
+        numkeys: int,
+        *keys_and_args: str | bytes | int,
+    ) -> int:
+        self.evals.append((script, numkeys, keys_and_args))
+        return 1
 
     async def aclose(self) -> None:
         self.closed = True
@@ -84,9 +94,20 @@ async def test_cache_set_uses_opaque_key_safe_json_and_native_ttl() -> None:
 
     await cache.set("tenant:secret::rooms", make_resource(), ttl=1.2341)
 
-    assert len(client.sets) == 1
-    redis_key, payload, ttl_ms = client.sets[0]
+    assert len(client.evals) == 1
+    script, numkeys, keys_and_args = client.evals[0]
+    assert "ZADD" in script
+    assert numkeys == 3
+    redis_key, membership_key, tag_key, payload, ttl_ms = keys_and_args
+    assert isinstance(redis_key, str)
+    assert isinstance(membership_key, str)
+    assert isinstance(tag_key, str)
+    assert isinstance(payload, bytes)
     assert redis_key.startswith("fluxfast:cache:v1:hotel-prod:resource:")
+    assert membership_key.startswith(
+        "fluxfast:cache:v1:hotel-prod:resource-tags:"
+    )
+    assert tag_key.startswith("fluxfast:cache:v1:hotel-prod:tag:")
     assert "tenant:secret" not in redis_key
     assert ttl_ms == 1235
     assert json.loads(payload) == {
@@ -145,7 +166,10 @@ async def test_non_positive_ttl_deletes_instead_of_storing(ttl) -> None:
 
     await cache.set("rooms", make_resource(), ttl=ttl)
 
-    assert len(client.deletes) == 1
+    assert len(client.evals) == 1
+    _script, numkeys, keys_and_args = client.evals[0]
+    assert numkeys == 2
+    assert len(keys_and_args) == 2
     assert client.sets == []
 
 
@@ -156,9 +180,17 @@ async def test_delete_removes_only_the_opaque_resource_key() -> None:
 
     await cache.delete("tenant:secret::rooms")
 
-    assert len(client.deletes) == 1
-    (redis_key,) = client.deletes[0]
+    assert len(client.evals) == 1
+    script, numkeys, keys_and_args = client.evals[0]
+    assert "ZREM" in script
+    assert numkeys == 2
+    redis_key, membership_key = keys_and_args
+    assert isinstance(redis_key, str)
+    assert isinstance(membership_key, str)
     assert redis_key.startswith("fluxfast:cache:v1:hotel-prod:resource:")
+    assert membership_key.startswith(
+        "fluxfast:cache:v1:hotel-prod:resource-tags:"
+    )
     assert "tenant:secret" not in redis_key
 
 

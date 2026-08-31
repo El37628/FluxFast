@@ -32,6 +32,7 @@ The internal key space is versioned independently from the browser protocol:
 
 ```text
 fluxfast:cache:v1:<namespace>:resource:<identity-digest>
+fluxfast:cache:v1:<namespace>:resource-tags:<identity-digest>
 fluxfast:cache:v1:<namespace>:tag:<tag-digest>
 ```
 
@@ -47,11 +48,13 @@ Redis TTL and constructs a compatible `CachedResource.expires_at` using the
 current process's monotonic clock.
 
 Tags use namespace-local Redis sorted sets whose members are complete resource
-Redis keys and whose scores are absolute expiry times. Small atomic operations
-or pipelines keep resource values and tag memberships coherent during set,
-overwrite, delete, and tag invalidation. Expired memberships are pruned during
-normal operations. Competing valid writes are last-writer-wins; v0.5 does not
-add a distributed loader lock.
+Redis keys and whose scores are absolute expiry times. A private per-resource
+Redis set contains only its complete opaque tag-index keys, allowing overwrites
+and deletes to remove prior memberships atomically without exposing tag values
+in keys. Small atomic operations or pipelines keep resource values and tag
+memberships coherent during set, overwrite, delete, and tag invalidation.
+Expired memberships are pruned during normal operations. Competing valid writes
+are last-writer-wins; v0.5 does not add a distributed loader lock.
 
 `clear()` scans only the configured namespace in bounded batches and removes
 matches with `UNLINK` where available. Runtime code must not use `KEYS`,

@@ -43,6 +43,14 @@ class RedisCacheKeyspace:
 
         return f"{self.prefix}:resource:{_digest(logical_identity, 'identity')}"
 
+    def resource_tags_key(self, logical_identity: str) -> str:
+        """Return the private tag-membership key for one resource identity."""
+
+        return (
+            f"{self.prefix}:resource-tags:"
+            f"{_digest(logical_identity, 'identity')}"
+        )
+
     def tag_key(self, tag: str) -> str:
         """Return an opaque key for one namespace-local cache tag."""
 

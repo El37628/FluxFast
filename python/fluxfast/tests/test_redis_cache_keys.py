@@ -76,6 +76,18 @@ def test_tag_keys_are_deterministic_opaque_and_distinct_from_resources():
     assert resource_key != tag_key
 
 
+def test_resource_tag_membership_key_reuses_only_the_opaque_digest():
+    keyspace = RedisCacheKeyspace("hotel-prod")
+    logical_identity = "tenant:secret::rooms"
+
+    resource_key = keyspace.resource_key(logical_identity)
+    membership_key = keyspace.resource_tags_key(logical_identity)
+
+    assert membership_key.startswith(f"{keyspace.prefix}:resource-tags:")
+    assert logical_identity not in membership_key
+    assert membership_key.rsplit(":", 1)[1] == resource_key.rsplit(":", 1)[1]
+
+
 @pytest.mark.parametrize("method_name", ["resource_key", "tag_key"])
 @pytest.mark.parametrize("value", [None, True, 1, ""])
 def test_key_derivation_rejects_empty_or_non_string_values(method_name, value):
