@@ -14,6 +14,65 @@ from .cache import CachedResource
 
 DEFAULT_REDIS_MAX_VALUE_BYTES: Final = 1024 * 1024
 
+_SET_WITH_TAGS_SCRIPT: Final = """
+local resource_key = KEYS[1]
+local membership_key = KEYS[2]
+local ttl_ms = tonumber(ARGV[2])
+local redis_time = redis.call('TIME')
+local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)
+local expires_at_ms = now_ms + ttl_ms
+
+local function refresh_tag(tag_key)
+    redis.call('ZREMRANGEBYSCORE', tag_key, '-inf', now_ms)
+    local last_member = redis.call('ZRANGE', tag_key, -1, -1, 'WITHSCORES')
+    if #last_member == 0 then
+        redis.call('DEL', tag_key)
+    else
+        redis.call('PEXPIREAT', tag_key, math.ceil(tonumber(last_member[2])))
+    end
+end
+
+local old_tags = redis.call('SMEMBERS', membership_key)
+for _, tag_key in ipairs(old_tags) do
+    redis.call('ZREM', tag_key, resource_key)
+    refresh_tag(tag_key)
+end
+
+redis.call('SET', resource_key, ARGV[1], 'PX', ttl_ms)
+redis.call('DEL', membership_key)
+for index = 3, #KEYS do
+    local tag_key = KEYS[index]
+    redis.call('ZREMRANGEBYSCORE', tag_key, '-inf', now_ms)
+    redis.call('ZADD', tag_key, expires_at_ms, resource_key)
+    redis.call('SADD', membership_key, tag_key)
+    refresh_tag(tag_key)
+end
+if #KEYS > 2 then
+    redis.call('PEXPIREAT', membership_key, expires_at_ms)
+end
+return expires_at_ms
+"""
+
+_DELETE_WITH_TAGS_SCRIPT: Final = """
+local resource_key = KEYS[1]
+local membership_key = KEYS[2]
+local redis_time = redis.call('TIME')
+local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)
+
+local old_tags = redis.call('SMEMBERS', membership_key)
+for _, tag_key in ipairs(old_tags) do
+    redis.call('ZREM', tag_key, resource_key)
+    redis.call('ZREMRANGEBYSCORE', tag_key, '-inf', now_ms)
+    local last_member = redis.call('ZRANGE', tag_key, -1, -1, 'WITHSCORES')
+    if #last_member == 0 then
+        redis.call('DEL', tag_key)
+    else
+        redis.call('PEXPIREAT', tag_key, math.ceil(tonumber(last_member[2])))
+    end
+end
+return redis.call('DEL', resource_key, membership_key)
+"""
+
 
 class _RedisPipeline(Protocol):
     async def __aenter__(self) -> Self: ...
@@ -38,6 +97,13 @@ class _RedisClient(Protocol):
     async def set(self, key: str, value: bytes, *, px: int) -> Any: ...
 
     async def delete(self, *keys: str) -> Any: ...
+
+    async def eval(
+        self,
+        script: str,
+        numkeys: int,
+        *keys_and_args: str | bytes | int,
+    ) -> Any: ...
 
     async def aclose(self) -> None: ...
 
@@ -142,10 +208,21 @@ class RedisResourceCache:
         redis_key = self._keyspace.resource_key(key)
         ttl_ms = _normalize_ttl_ms(ttl)
         if ttl_ms is None:
-            await self._client.delete(redis_key)
+            await self._delete_resource(key)
             return
         payload = self._codec.encode(resource)
-        await self._client.set(redis_key, payload, px=ttl_ms)
+        membership_key = self._keyspace.resource_tags_key(key)
+        tag_keys = tuple(
+            dict.fromkeys(self._keyspace.tag_key(tag) for tag in resource.tags)
+        )
+        redis_keys = (redis_key, membership_key, *tag_keys)
+        await self._client.eval(
+            _SET_WITH_TAGS_SCRIPT,
+            len(redis_keys),
+            *redis_keys,
+            payload,
+            ttl_ms,
+        )
 
     async def delete(self, key: str) -> None:
         """Delete one resource key.
@@ -154,7 +231,7 @@ class RedisResourceCache:
         """
 
         self._ensure_open()
-        await self._client.delete(self._keyspace.resource_key(key))
+        await self._delete_resource(key)
 
     async def invalidate_tag(self, tag: str) -> None:
         """Invalidate a tag once Redis tag indexes are enabled."""
@@ -178,6 +255,16 @@ class RedisResourceCache:
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError("Redis resource cache is closed")
+
+    async def _delete_resource(self, key: str) -> None:
+        resource_key = self._keyspace.resource_key(key)
+        membership_key = self._keyspace.resource_tags_key(key)
+        await self._client.eval(
+            _DELETE_WITH_TAGS_SCRIPT,
+            2,
+            resource_key,
+            membership_key,
+        )
 
 
 def _normalize_ttl_ms(ttl: object) -> int | None:
