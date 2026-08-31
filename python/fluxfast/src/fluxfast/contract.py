@@ -2,12 +2,85 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Generic, TypeVar
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
+
+from .serialization import canonical_json
 
 T = TypeVar("T")
+
+
+def _field_wire_name(owner: type[Any], name: str) -> str:
+    model_fields = getattr(owner, "__pydantic_fields__", {})
+    model_field = model_fields.get(name)
+    alias = getattr(model_field, "serialization_alias", None)
+    return alias if isinstance(alias, str) else name
+
+
+def _canonicalize_unordered_collections(source: Any, wire_value: Any) -> Any:
+    """Sort serialized sets recursively while retaining sequence order."""
+
+    if isinstance(source, BaseModel):
+        if getattr(type(source), "__pydantic_root_model__", False):
+            return _canonicalize_unordered_collections(source.root, wire_value)
+        if not isinstance(wire_value, dict):
+            return wire_value
+        result = dict(wire_value)
+        for name in type(source).model_fields:
+            wire_name = _field_wire_name(type(source), name)
+            if wire_name in result:
+                result[wire_name] = _canonicalize_unordered_collections(
+                    getattr(source, name),
+                    result[wire_name],
+                )
+        return result
+
+    if is_dataclass(source) and not isinstance(source, type):
+        if not isinstance(wire_value, dict):
+            return wire_value
+        result = dict(wire_value)
+        for dataclass_field in fields(source):
+            wire_name = _field_wire_name(type(source), dataclass_field.name)
+            if wire_name in result:
+                result[wire_name] = _canonicalize_unordered_collections(
+                    getattr(source, dataclass_field.name),
+                    result[wire_name],
+                )
+        return result
+
+    if isinstance(source, Mapping) and isinstance(wire_value, dict):
+        result = dict(wire_value)
+        for source_key, source_value in source.items():
+            wire_key = source_key if source_key in result else str(source_key)
+            if wire_key in result:
+                result[wire_key] = _canonicalize_unordered_collections(
+                    source_value,
+                    result[wire_key],
+                )
+        return result
+
+    if isinstance(source, (set, frozenset)) and isinstance(wire_value, list):
+        if len(source) == len(wire_value):
+            normalized = [
+                _canonicalize_unordered_collections(item, serialized)
+                for item, serialized in zip(source, wire_value, strict=True)
+            ]
+        else:
+            normalized = list(wire_value)
+        return sorted(normalized, key=canonical_json)
+
+    if isinstance(source, (list, tuple)) and isinstance(wire_value, list):
+        if len(source) != len(wire_value):
+            return wire_value
+        return [
+            _canonicalize_unordered_collections(item, serialized)
+            for item, serialized in zip(source, wire_value, strict=True)
+        ]
+
+    return wire_value
 
 
 def _validate_resource_key(key: object) -> str:
@@ -33,3 +106,15 @@ class ResourceContract(Generic[T]):
     def __post_init__(self) -> None:
         object.__setattr__(self, "key", _validate_resource_key(self.key))
         object.__setattr__(self, "_adapter", TypeAdapter(self.annotation))
+
+    def _serialize_wire(self, value: Any) -> Any:
+        """Validate and serialize a loader value to its declared JSON shape."""
+
+        validated = self._adapter.validate_python(value)
+        wire_value = self._adapter.dump_python(
+            validated,
+            mode="json",
+            by_alias=True,
+            warnings="error",
+        )
+        return _canonicalize_unordered_collections(validated, wire_value)

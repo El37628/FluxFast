@@ -103,7 +103,11 @@ class ResourceEngine:
                         if inspect.isawaitable(val):
                             val = await val
 
-                    wire_value = to_jsonable(val)
+                    wire_value = (
+                        spec.contract._serialize_wire(val)
+                        if spec.contract is not None
+                        else to_jsonable(val)
+                    )
                     ver = compute_version(wire_value)
                     if spec.defer and only_keys is not None:
                         metrics.deferred_resolved += 1
