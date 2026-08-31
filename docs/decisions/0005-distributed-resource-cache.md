@@ -24,6 +24,8 @@ browser protocol, and frontend packages do not gain Redis-specific behavior or
 capabilities.
 
 Every cache instance requires an explicit, validated application namespace.
+Namespace delimiters are percent-encoded before constructing Redis keys, so a
+namespace such as `hotel` cannot overlap `hotel:blue` during a bounded `SCAN`.
 Logical cache identities and tags are hashed before they become Redis keys, so
 scope fingerprints and application identifiers are not exposed in key names.
 The internal key space is versioned independently from the browser protocol:
