@@ -3,9 +3,24 @@
 from dataclasses import asdict
 
 import pytest
+from fastapi import FastAPI
+from pydantic import BaseModel
 
-from fluxfast import FluxFastLiveScopeError, Page, resource, scope
+from fluxfast import (
+    FluxFast,
+    FluxFastLiveScopeError,
+    MemoryResourceCache,
+    Page,
+    resource,
+    scope,
+)
+from fluxfast.engine import ResourceEngine
 from fluxfast.scope import ScopeType
+from fluxfast.timing import TimingMetrics
+
+
+class Room(BaseModel):
+    id: int
 
 
 def test_resource_spec_creation():
@@ -22,6 +37,62 @@ def test_resource_spec_creation():
     assert spec.scope.scope_type == ScopeType.TENANT
     assert spec.scope.fingerprint() == "tenant:123"
     assert spec.tags == ("hotel", "hotel:123")
+    assert spec.contract is None
+
+
+def test_typed_resource_spec_retains_contract_and_string_runtime_key():
+    flux = FluxFast(FastAPI())
+    rooms = flux.define_resource("rooms", list[Room])
+
+    spec = resource(
+        rooms,
+        lambda: [Room(id=1)],
+        scope=scope.tenant("hotel-1"),
+        ttl=60,
+        tags=["rooms"],
+        defer=True,
+        live=True,
+    )
+
+    assert spec.key == "rooms"
+    assert isinstance(spec.key, str)
+    assert spec.contract is rooms
+    assert spec.scope == scope.tenant("hotel-1")
+    assert spec.ttl == 60
+    assert spec.tags == ("rooms",)
+    assert spec.defer is True
+    assert spec.live is True
+
+
+def test_typed_resource_uses_contract_key_in_live_scope_errors():
+    flux = FluxFast(FastAPI())
+    activity = flux.define_resource("activity", list[Room])
+
+    with pytest.raises(
+        FluxFastLiveScopeError,
+        match='Live resource "activity" requires an explicit reusable scope',
+    ):
+        resource(activity, list, live=True)
+
+
+@pytest.mark.anyio
+async def test_typed_resource_flows_through_existing_resource_engine():
+    flux = FluxFast(FastAPI())
+    rooms = flux.define_resource("rooms", list[Room])
+    page = Page(
+        component="rooms/index",
+        resources=[resource(rooms, lambda: [Room(id=1)])],
+    )
+
+    resolution = await ResourceEngine.resolve_page_resources(
+        page=page,
+        known_versions={},
+        only_keys=None,
+        cache=MemoryResourceCache(),
+        metrics=TimingMetrics(),
+    )
+
+    assert resolution.resources["rooms"].value == [{"id": 1}]
 
 
 def test_resource_default_scope():
@@ -119,6 +190,20 @@ def test_page_rejects_duplicate_resource_keys():
             resources=[
                 resource("same", lambda: 1),
                 resource("same", lambda: 2),
+            ],
+        )
+
+
+def test_page_rejects_duplicate_typed_and_string_resource_keys():
+    flux = FluxFast(FastAPI())
+    rooms = flux.define_resource("rooms", list[Room])
+
+    with pytest.raises(ValueError, match="duplicates: rooms"):
+        Page(
+            component="duplicate/index",
+            resources=[
+                resource(rooms, list),
+                resource("rooms", list),
             ],
         )
 
