@@ -23,27 +23,28 @@ const repositoryVersion = JSON.parse(
 const pairing = resolvePublishedMixedPairing({
   pairing: process.env.FLUXFAST_PAIRING ?? "python-current",
   releaseVersion: process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion,
-  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.3.0",
+  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.4.1"
 });
-const expectedPythonVersion = process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "")
-  ?? pairing.pythonVersion;
-const expectedJavaScriptVersion = process.env.FLUXFAST_JAVASCRIPT_VERSION?.replace(/^v/, "")
-  ?? pairing.javascriptVersion;
-const pythonSpec = process.env.FLUXFAST_PYTHON_SPEC
-  ?? `fluxfast==${expectedPythonVersion}`;
-const coreSpec = process.env.FLUXFAST_CORE_SPEC
-  ?? `@fluxfast/core@${expectedJavaScriptVersion}`;
-const nextSpec = process.env.FLUXFAST_NEXT_SPEC
-  ?? `@fluxfast/next@${expectedJavaScriptVersion}`;
+const expectedPythonVersion =
+  process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "") ?? pairing.pythonVersion;
+const expectedJavaScriptVersion =
+  process.env.FLUXFAST_JAVASCRIPT_VERSION?.replace(/^v/, "") ?? pairing.javascriptVersion;
+const pythonSpec =
+  process.env.FLUXFAST_PYTHON_SPEC ??
+  (pairing.mode === "distributed"
+    ? `fluxfast[redis]==${expectedPythonVersion}`
+    : `fluxfast==${expectedPythonVersion}`);
+const coreSpec = process.env.FLUXFAST_CORE_SPEC ?? `@fluxfast/core@${expectedJavaScriptVersion}`;
+const nextSpec = process.env.FLUXFAST_NEXT_SPEC ?? `@fluxfast/next@${expectedJavaScriptVersion}`;
 
 function cleanEnvironment(extra = {}) {
   const environment = { ...process.env };
   for (const key of Object.keys(environment)) {
     const normalized = key.toLowerCase();
     if (
-      normalized.includes("verify_deps_before_run")
-      || normalized.includes("link_workspace_packages")
-      || normalized.includes("@jsr:registry")
+      normalized.includes("verify_deps_before_run") ||
+      normalized.includes("link_workspace_packages") ||
+      normalized.includes("@jsr:registry")
     ) {
       delete environment[key];
     }
@@ -52,7 +53,7 @@ function cleanEnvironment(extra = {}) {
     ...environment,
     NEXT_TELEMETRY_DISABLED: "1",
     PYTHONPATH: "",
-    ...extra,
+    ...extra
   };
 }
 
@@ -60,7 +61,7 @@ function runResult(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
   return spawnSync(command, args, {
     cwd,
     env: cleanEnvironment(extraEnvironment),
-    stdio: "inherit",
+    stdio: "inherit"
   });
 }
 
@@ -85,10 +86,12 @@ async function reservePort() {
   const address = server.address();
   assert.ok(address && typeof address !== "string");
   const port = address.port;
-  await new Promise((resolve, reject) => server.close(error => {
-    if (error) reject(error);
-    else resolve();
-  }));
+  await new Promise((resolve, reject) =>
+    server.close(error => {
+      if (error) reject(error);
+      else resolve();
+    })
+  );
   return port;
 }
 
@@ -102,17 +105,20 @@ async function waitForExit(child, timeoutMilliseconds) {
   if (child.exitCode !== null || child.signalCode !== null) return true;
   return Promise.race([
     new Promise(resolve => child.once("exit", () => resolve(true))),
-    delay(timeoutMilliseconds).then(() => false),
+    delay(timeoutMilliseconds).then(() => false)
   ]);
 }
 
 function installedPackageVersion(packageName) {
-  const manifestPath = path.join(
-    consumerRoot,
-    "node_modules",
-    ...packageName.split("/"),
-    "package.json"
+  const packageRoot = fs.realpathSync(
+    path.join(consumerRoot, "node_modules", ...packageName.split("/"))
   );
+  assert.equal(
+    packageRoot.startsWith(`${consumerRoot}${path.sep}`),
+    true,
+    `${packageName} resolved outside the temporary consumer: ${packageRoot}`
+  );
+  const manifestPath = path.join(packageRoot, "package.json");
   return JSON.parse(fs.readFileSync(manifestPath, "utf8")).version;
 }
 
@@ -127,17 +133,26 @@ async function installPublishedPython(python) {
     if (!result.error && result.status === 0) return;
     if (result.error) throw result.error;
     if (attempt === attempts) {
-      throw new Error(`Published Python package ${pythonSpec} was unavailable after ${attempts} attempts.`);
+      throw new Error(
+        `Published Python package ${pythonSpec} was unavailable after ${attempts} attempts.`
+      );
     }
     console.log(`Waiting for ${pythonSpec} registry propagation (${attempt}/${attempts})…`);
     await delay(10_000);
   }
 }
 
+function installDistributedHarnessDependency(python) {
+  if (pairing.mode !== "distributed") return;
+  run(
+    python,
+    ["-m", "pip", "install", "--disable-pip-version-check", "httpx2>=2.0.0,<3.0.0"],
+    consumerRoot
+  );
+}
+
 async function installPublishedJavaScript() {
-  const attempts = process.env.FLUXFAST_CORE_SPEC || process.env.FLUXFAST_NEXT_SPEC
-    ? 1
-    : 18;
+  const attempts = process.env.FLUXFAST_CORE_SPEC || process.env.FLUXFAST_NEXT_SPEC ? 1 : 18;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const result = runResult(
       npmCommand,
@@ -148,13 +163,12 @@ async function installPublishedJavaScript() {
     if (result.error) throw result.error;
     if (attempt === attempts) {
       throw new Error(
-        `Published JavaScript packages ${coreSpec} and ${nextSpec} were unavailable `
-          + `after ${attempts} attempts.`
+        `Published JavaScript packages ${coreSpec} and ${nextSpec} were unavailable ` +
+          `after ${attempts} attempts.`
       );
     }
     console.log(
-      `Waiting for ${coreSpec} and ${nextSpec} registry propagation `
-        + `(${attempt}/${attempts})…`
+      `Waiting for ${coreSpec} and ${nextSpec} registry propagation ` + `(${attempt}/${attempts})…`
     );
     await delay(10_000);
   }
@@ -171,130 +185,154 @@ try {
 
   run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
   fs.copyFileSync(
-    path.join(consumerRoot, "fixtures", "mixed-home.tsx"),
+    path.join(consumerRoot, "fixtures", pairing.frontendFixture),
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx")
   );
-  fs.copyFileSync(
-    path.join(consumerRoot, "fixtures", pairing.backendFixture),
-    path.join(consumerRoot, "backend.py")
-  );
+  if (pairing.mode === "legacy") {
+    fs.copyFileSync(
+      path.join(consumerRoot, "fixtures", pairing.backendFixture),
+      path.join(consumerRoot, "backend.py")
+    );
+  }
   run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
   run(npmCommand, ["run", "typecheck"], consumerRoot);
   run(npmCommand, ["run", "build"], consumerRoot);
 
   run(bootstrapPython, ["-m", "venv", environmentRoot]);
-  const python = process.platform === "win32"
-    ? path.join(environmentRoot, "Scripts", "python.exe")
-    : path.join(environmentRoot, "bin", "python");
+  const python =
+    process.platform === "win32"
+      ? path.join(environmentRoot, "Scripts", "python.exe")
+      : path.join(environmentRoot, "bin", "python");
   run(python, ["-m", "ensurepip", "--upgrade"]);
   await installPublishedPython(python);
-  run(python, [
-    "-c",
-    "import sys; from pathlib import Path; import fluxfast; "
-      + "assert fluxfast.__version__ == sys.argv[1]; "
-      + "assert Path(fluxfast.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())",
-    expectedPythonVersion,
-  ], consumerRoot);
-
-  const frontendPort = await reservePort();
-  const frontendUrl = `http://127.0.0.1:${frontendPort}`;
-  child = spawn(
+  installDistributedHarnessDependency(python);
+  run(
     python,
     [
-      "-m",
-      "fluxfast.cli",
-      "dev",
-      "backend:app",
-      "--frontend",
-      consumerRoot,
-      "--frontend-port",
-      String(frontendPort),
-      "--no-reload",
+      "-c",
+      "import sys; from pathlib import Path; import fluxfast; " +
+        "assert fluxfast.__version__ == sys.argv[1]; " +
+        "assert Path(fluxfast.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())",
+      expectedPythonVersion
     ],
-    {
-      cwd: consumerRoot,
-      detached: process.platform !== "win32",
-      env: cleanEnvironment(),
-      stdio: ["ignore", "pipe", "pipe"],
-    }
+    consumerRoot
   );
-  let output = "";
-  const recordOutput = chunk => {
-    output += chunk.toString();
-    if (output.length > 80_000) output = output.slice(-80_000);
-  };
-  child.stdout.on("data", recordOutput);
-  child.stderr.on("data", recordOutput);
 
-  const deadline = Date.now() + 120_000;
-  let html;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error(`Mixed-version supervisor exited before readiness.\n${output}`);
+  if (pairing.mode === "distributed") {
+    if (!process.env.FLUXFAST_TEST_REDIS_URL) {
+      throw new Error("FLUXFAST_TEST_REDIS_URL is required for the current-Python mixed pairing.");
     }
-    try {
-      const response = await fetch(frontendUrl);
-      if (response.ok) {
-        const candidate = await response.text();
-        if (candidate.includes("Published mixed consumer")) {
-          html = candidate;
-          break;
-        }
+    run(
+      process.execPath,
+      [path.join(repositoryRoot, "scripts", "test-next-init-distributed.mjs"), consumerRoot],
+      repositoryRoot,
+      { FLUXFAST_E2E_PYTHON: python, PYTHONPATH: "" }
+    );
+    console.log(
+      `Mixed distributed pairing passed: Python ${expectedPythonVersion} + ` +
+        `@fluxfast/next ${expectedJavaScriptVersion}.`
+    );
+  } else {
+    const frontendPort = await reservePort();
+    const frontendUrl = `http://127.0.0.1:${frontendPort}`;
+    child = spawn(
+      python,
+      [
+        "-m",
+        "fluxfast.cli",
+        "dev",
+        "backend:app",
+        "--frontend",
+        consumerRoot,
+        "--frontend-port",
+        String(frontendPort),
+        "--no-reload"
+      ],
+      {
+        cwd: consumerRoot,
+        detached: process.platform !== "win32",
+        env: cleanEnvironment(),
+        stdio: ["ignore", "pipe", "pipe"]
       }
-    } catch {
-      // The supervisor and Next server are still starting.
+    );
+    let output = "";
+    const recordOutput = chunk => {
+      output += chunk.toString();
+      if (output.length > 80_000) output = output.slice(-80_000);
+    };
+    child.stdout.on("data", recordOutput);
+    child.stderr.on("data", recordOutput);
+
+    const deadline = Date.now() + 120_000;
+    let html;
+    while (Date.now() < deadline) {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(`Mixed-version supervisor exited before readiness.\n${output}`);
+      }
+      try {
+        const response = await fetch(frontendUrl);
+        if (response.ok) {
+          const candidate = await response.text();
+          if (candidate.includes("Published mixed consumer")) {
+            html = candidate;
+            break;
+          }
+        }
+      } catch {
+        // The supervisor and Next server are still starting.
+      }
+      await delay(250);
     }
-    await delay(250);
+
+    assert.equal(typeof html, "string", `Frontend did not become ready.\n${output}`);
+    assert.match(html, /Published mixed consumer/);
+    assert.match(html, /Revenue <!-- -->120000<!-- --> from loader <!-- -->\d+/);
+    assert.match(html, new RegExp(`capabilities-value[^>]*>${pairing.expectedCapabilities}<`));
+    assert.doesNotMatch(html, /Loading analytics/);
+
+    const protocolResponse = await fetch(frontendUrl, {
+      headers: {
+        "x-fluxfast": "1",
+        "x-fluxfast-protocol": "1"
+      }
+    });
+    assert.equal(protocolResponse.ok, true);
+    const envelope = await protocolResponse.json();
+    assert.equal(envelope.resources.analytics.value.revenue, 120_000);
+    assert.equal("resourceKeys" in envelope, false);
+    assert.equal("deferred" in envelope, false);
+    assert.equal("live" in envelope, false);
+    assert.equal("resourceErrors" in envelope, false);
+
+    const requireFromConsumer = createRequire(path.join(consumerRoot, "package.json"));
+    const { chromium } = requireFromConsumer("@playwright/test");
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const liveRequests = [];
+    const browserErrors = [];
+    page.on("request", request => {
+      if (request.headers()["x-fluxfast-live"] === "1") liveRequests.push(request.url());
+    });
+    page.on("pageerror", error => browserErrors.push(error.message));
+    page.on("console", message => {
+      if (message.type() === "error") browserErrors.push(message.text());
+    });
+    await page.goto(frontendUrl);
+    await page.getByRole("heading", { name: "Published mixed consumer" }).waitFor();
+    assert.equal(
+      await page.locator("[data-testid=capabilities-value]").textContent(),
+      pairing.expectedCapabilities
+    );
+    await delay(750);
+    assert.deepEqual(liveRequests, []);
+    assert.deepEqual(browserErrors, []);
+
+    console.log(
+      `Published mixed pairing passed: Python ${expectedPythonVersion} + ` +
+        `@fluxfast/next ${expectedJavaScriptVersion} at ${frontendUrl}.`
+    );
   }
-
-  assert.equal(typeof html, "string", `Frontend did not become ready.\n${output}`);
-  assert.match(html, /Published mixed consumer/);
-  assert.match(html, /Revenue <!-- -->120000<!-- --> from loader <!-- -->\d+/);
-  assert.match(html, new RegExp(`capabilities-value[^>]*>${pairing.expectedCapabilities}<`));
-  assert.doesNotMatch(html, /Loading analytics/);
-
-  const protocolResponse = await fetch(frontendUrl, {
-    headers: {
-      "x-fluxfast": "1",
-      "x-fluxfast-protocol": "1",
-    },
-  });
-  assert.equal(protocolResponse.ok, true);
-  const envelope = await protocolResponse.json();
-  assert.equal(envelope.resources.analytics.value.revenue, 120_000);
-  assert.equal("resourceKeys" in envelope, false);
-  assert.equal("deferred" in envelope, false);
-  assert.equal("live" in envelope, false);
-  assert.equal("resourceErrors" in envelope, false);
-
-  const requireFromConsumer = createRequire(path.join(consumerRoot, "package.json"));
-  const { chromium } = requireFromConsumer("@playwright/test");
-  browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  const liveRequests = [];
-  const browserErrors = [];
-  page.on("request", request => {
-    if (request.headers()["x-fluxfast-live"] === "1") liveRequests.push(request.url());
-  });
-  page.on("pageerror", error => browserErrors.push(error.message));
-  page.on("console", message => {
-    if (message.type() === "error") browserErrors.push(message.text());
-  });
-  await page.goto(frontendUrl);
-  await page.getByRole("heading", { name: "Published mixed consumer" }).waitFor();
-  assert.equal(
-    await page.locator("[data-testid=capabilities-value]").textContent(),
-    pairing.expectedCapabilities
-  );
-  await delay(750);
-  assert.deepEqual(liveRequests, []);
-  assert.deepEqual(browserErrors, []);
-
-  console.log(
-    `Published mixed pairing passed: Python ${expectedPythonVersion} + `
-      + `@fluxfast/next ${expectedJavaScriptVersion} at ${frontendUrl}.`
-  );
 } finally {
   await browser?.close();
   if (child) {

@@ -16,11 +16,14 @@ tarballs, it proves that a deferred live resource is populated by one worker,
 reused from the shared cache by another, invalidated by a mutation on a third,
 synchronized over Redis Pub/Sub, and then reused at its new value without
 running another loader.
-After registry publication, the workflow installs the new Python package with
-the configured previous JavaScript line, then the previous Python line with the
-new JavaScript packages. It runs both real application pairings and verifies
-that capabilities degrade safely when one side predates a feature. The GitHub
-release is created only after these registry-backed mixed-version checks pass.
+Before publication, the release-artifact workflow also combines the built
+current Python package with the published 0.4.1 JavaScript packages, then the
+published Python 0.4.1 package with the built current JavaScript packages.
+After registry publication, the release workflow repeats both pairings using
+only registry packages. The current-Python pairing must pass the full deferred,
+live, and distributed Redis browser scenario; the current-JavaScript pairing
+must preserve v0.4 behavior. The GitHub release is created only after these
+registry-backed mixed-version checks pass.
 
 The normal integration workflow also exercises the real Redis cache, live
 broker, restart behavior, and independent Uvicorn workers against the oldest

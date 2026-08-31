@@ -160,3 +160,68 @@ jobs:
           FLUXFAST_RUN_DISTRIBUTED: "1"
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
         run: pnpm test:consumer:init
+
+  mixed-version-consumers:
+    name: Built current packages with published 0.4.1
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:8.10.1-alpine3.23
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: npm install --global pnpm@10.15.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Build current package artifacts
+        run: |
+          mkdir -p "$RUNNER_TEMP/fluxfast-mixed/artifacts"
+          python -m pip install build
+          python -m build --outdir "$RUNNER_TEMP/fluxfast-mixed/artifacts" python/fluxfast
+          npm pack ./packages/core --pack-destination "$RUNNER_TEMP/fluxfast-mixed/artifacts"
+          npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-mixed/artifacts"
+      - name: Install Chromium
+        run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
+      - name: Verify current Python with published 0.4.1 JavaScript
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_PAIRING: python-current
+          FLUXFAST_PREVIOUS_VERSION: 0.4.1
+          FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+        run: |
+          release_version="$(node -p 'require("./package.json").version')"
+          python_wheel="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-*.whl)"
+          FLUXFAST_RELEASE_VERSION="$release_version" \
+          FLUXFAST_PYTHON_SPEC="fluxfast[redis] @ file://$python_wheel" \
+          FLUXFAST_CORE_SPEC="@fluxfast/core@0.4.1" \
+          FLUXFAST_NEXT_SPEC="@fluxfast/next@0.4.1" \
+            node scripts/test-published-mixed-consumer.mjs
+      - name: Verify published Python 0.4.1 with current JavaScript
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_PAIRING: javascript-current
+          FLUXFAST_PREVIOUS_VERSION: 0.4.1
+        run: |
+          release_version="$(node -p 'require("./package.json").version')"
+          core_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-core-*.tgz)"
+          next_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-next-*.tgz)"
+          FLUXFAST_RELEASE_VERSION="$release_version" \
+          FLUXFAST_PYTHON_SPEC="fluxfast==0.4.1" \
+          FLUXFAST_CORE_SPEC="$core_tarball" \
+          FLUXFAST_NEXT_SPEC="$next_tarball" \
+            node scripts/test-published-mixed-consumer.mjs
