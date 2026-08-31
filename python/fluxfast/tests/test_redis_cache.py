@@ -51,6 +51,9 @@ class RecordingRedisClient:
         self.sets: list[tuple[str, bytes, int]] = []
         self.deletes: list[tuple[str, ...]] = []
         self.evals: list[tuple[str, int, tuple[str | bytes | int, ...]]] = []
+        self.scan_results: list[tuple[int, list[str | bytes]]] = [(0, [])]
+        self.scans: list[tuple[int, str, int]] = []
+        self.unlinks: list[tuple[str | bytes, ...]] = []
         self.closed = False
 
     def pipeline(self, *, transaction: bool) -> RecordingPipeline:
@@ -73,6 +76,20 @@ class RecordingRedisClient:
     ) -> int:
         self.evals.append((script, numkeys, keys_and_args))
         return 1
+
+    async def scan(
+        self,
+        cursor: int,
+        *,
+        match: str,
+        count: int,
+    ) -> tuple[int, list[str | bytes]]:
+        self.scans.append((cursor, match, count))
+        return self.scan_results.pop(0)
+
+    async def unlink(self, *keys: str | bytes) -> int:
+        self.unlinks.append(keys)
+        return len(keys)
 
     async def aclose(self) -> None:
         self.closed = True
@@ -216,6 +233,33 @@ async def test_invalidate_tag_uses_only_opaque_namespace_prefixes() -> None:
 
 
 @pytest.mark.anyio
+async def test_clear_scans_exact_namespace_and_unlinks_in_bounded_batches() -> None:
+    client = RecordingRedisClient()
+    client.scan_results = [
+        (7, [b"key-1", b"key-2", b"key-3"]),
+        (0, [b"key-4"]),
+    ]
+    cache = RedisResourceCache(
+        client,
+        namespace="hotel:blue",
+        scan_count=2,
+    )
+
+    await cache.clear()
+
+    assert client.scans == [
+        (0, "fluxfast:cache:v1:hotel%3Ablue:*", 2),
+        (7, "fluxfast:cache:v1:hotel%3Ablue:*", 2),
+    ]
+    assert client.unlinks == [
+        (b"key-1", b"key-2"),
+        (b"key-3",),
+        (b"key-4",),
+    ]
+    assert client.deletes == []
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("ttl", [True, float("nan"), float("inf"), "60"])
 async def test_cache_rejects_invalid_ttls(ttl) -> None:
     cache = RedisResourceCache(RecordingRedisClient(), namespace="hotel-prod")
@@ -299,7 +343,19 @@ def test_cache_configuration_is_exposed_and_validated() -> None:
         RecordingRedisClient(),
         namespace="hotel-prod",
         max_value_bytes=2048,
+        scan_count=25,
     )
 
     assert cache.namespace == "hotel-prod"
     assert cache.max_value_bytes == 2048
+    assert cache.scan_count == 25
+
+
+@pytest.mark.parametrize("scan_count", [True, False, 0, -1, 1.5, "100"])
+def test_cache_rejects_invalid_scan_counts(scan_count) -> None:
+    with pytest.raises(ValueError, match="scan_count must be a positive integer"):
+        RedisResourceCache(
+            RecordingRedisClient(),
+            namespace="hotel-prod",
+            scan_count=scan_count,
+        )

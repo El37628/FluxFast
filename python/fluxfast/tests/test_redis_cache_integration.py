@@ -165,3 +165,53 @@ async def test_tag_invalidation_crosses_clients_and_stays_in_namespace() -> None
         await admin.aclose()
         await invalidator.close()
         await writer.close()
+
+
+@pytest.mark.anyio
+async def test_clear_unlinks_only_the_exact_encoded_namespace() -> None:
+    assert REDIS_URL is not None
+    from redis.asyncio import Redis
+
+    unique = uuid4().hex
+    parent_namespace = f"clear-{unique}"
+    child_namespace = f"{parent_namespace}:blue"
+    parent_keyspace = RedisCacheKeyspace(parent_namespace)
+    parent = RedisResourceCache.from_url(
+        REDIS_URL,
+        namespace=parent_namespace,
+        scan_count=1,
+    )
+    child = RedisResourceCache.from_url(REDIS_URL, namespace=child_namespace)
+    admin = Redis.from_url(REDIS_URL)
+    external_key = f"outside-clear-{unique}"
+
+    try:
+        parent_resource = _resource("parent-v1", "parent")
+        parent_resource.tags = ("shared",)
+        child_resource = _resource("child-v1", "child")
+        child_resource.tags = ("shared",)
+        await parent.set("rooms", parent_resource, ttl=60)
+        await child.set("rooms", child_resource, ttl=60)
+        await admin.set(external_key, b"preserve", px=60_000)
+
+        await parent.clear()
+
+        assert await parent.get("rooms") is None
+        child_hit = await child.get("rooms")
+        assert child_hit is not None and child_hit.value == "child"
+        assert await admin.get(external_key) == b"preserve"
+        remaining = [
+            key
+            async for key in admin.scan_iter(
+                match=parent_keyspace.scan_pattern,
+                count=100,
+            )
+        ]
+        assert remaining == []
+    finally:
+        await parent.clear()
+        await child.clear()
+        await admin.delete(external_key)
+        await admin.aclose()
+        await child.close()
+        await parent.close()
