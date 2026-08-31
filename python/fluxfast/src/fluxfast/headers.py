@@ -23,6 +23,7 @@ HEADER_DEFERRED_PENDING = "X-FluxFast-Deferred-Pending"
 HEADER_DEFERRED_ERRORS = "X-FluxFast-Deferred-Errors"
 HEADER_LIVE = "X-FluxFast-Live"
 HEADER_LIVE_KEYS = "X-FluxFast-Live-Keys"
+HEADER_LIVE_RESOURCES = "X-FluxFast-Live-Resources"
 HEADER_CLIENT_ID = "X-FluxFast-Client-ID"
 HEADER_SERVER_TIMING = "Server-Timing"
 

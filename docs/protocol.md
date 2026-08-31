@@ -74,6 +74,18 @@ least one key remains pending. A valid deferred cache hit is returned in
 `resources`, or omitted through `X-FluxFast-Known`, and is not listed in
 `deferred`.
 
+For clients advertising `live-resources`, the page response also includes a
+count-only diagnostic header:
+
+```http
+X-FluxFast-Live-Resources: 2
+```
+
+The value is the number of keys in the authoritative `live` manifest. Resource
+names, scopes, scope fingerprints, and broker topics are never placed in this
+header. The header is omitted for clients that did not negotiate the live
+capability.
+
 ## Deferred follow-up
 
 After applying an initial envelope with pending keys, the browser requests the

@@ -16,6 +16,7 @@ from .live import (
     DEFAULT_LIVE_MAX_CONNECTION_AGE,
     LiveBroker,
     LiveCoordinator,
+    LiveMetrics,
     MemoryLiveBroker,
 )
 from .protocol import PROTOCOL_MEDIA_TYPE, PROTOCOL_VERSION, ErrorDetail, ErrorEnvelope
@@ -51,14 +52,19 @@ class FluxFast:
                 raise ValueError(f"{name} must be a finite positive number")
         self.app = app
         self.cache = cache if cache is not None else MemoryResourceCache()
+        self.live_metrics = LiveMetrics()
         configured_broker = (
             live_broker
             if live_broker is not None
             else broker
             if broker is not None
-            else MemoryLiveBroker()
+            else MemoryLiveBroker(metrics=self.live_metrics)
         )
-        self.live = LiveCoordinator(self.cache, configured_broker)
+        self.live = LiveCoordinator(
+            self.cache,
+            configured_broker,
+            metrics=self.live_metrics,
+        )
         self.debug = debug
         self.live_max_connection_age = float(live_max_connection_age)
         self.live_heartbeat_interval = float(live_heartbeat_interval)
@@ -67,6 +73,7 @@ class FluxFast:
         self.app.state.fluxfast_cache = self.cache
         self.app.state.fluxfast_debug = self.debug
         self.app.state.fluxfast_live = self.live
+        self.app.state.fluxfast_live_metrics = self.live_metrics
         self.app.state.fluxfast_live_max_connection_age = self.live_max_connection_age
         self.app.state.fluxfast_live_heartbeat_interval = self.live_heartbeat_interval
         self.app.router.add_event_handler("shutdown", self.live.close)

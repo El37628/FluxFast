@@ -98,6 +98,115 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("FluxRouter live invalidation synchronization", () => {
+  it("emits count-only live runtime diagnostics", async () => {
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 10_000,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard?tenant=secret" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+    const observed: Array<[string, unknown]> = [];
+    const eventNames = [
+      "live:connect:start",
+      "live:connect:open",
+      "live:connect:close",
+      "live:reconnect",
+      "live:event",
+      "live:invalidate",
+      "live:patch",
+      "live:resync",
+    ] as const;
+    for (const name of eventNames) {
+      router.on(name, payload => observed.push([name, payload]));
+    }
+
+    router.startLive();
+    liveTransport.connections[0].emit(ready(["summary"]));
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "invalidate",
+      keys: ["summary"],
+    });
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "patch",
+      patches: {
+        summary: [{ op: "replace-resource", value: { count: 2 } }],
+      },
+    });
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "resync",
+      keys: ["summary"],
+      reason: "server",
+    });
+    await flushMicrotasks();
+    router.liveManager.reconnect();
+    liveTransport.connections[1].emit(ready(["summary"]));
+    await flushMicrotasks();
+    router.stopLive();
+
+    expect(observed).toEqual(expect.arrayContaining([
+      ["live:connect:start", { keyCount: 1, reconnectAttempt: 0 }],
+      ["live:connect:open", { keyCount: 1, reconnectAttempt: 0 }],
+      ["live:reconnect", { keyCount: 1, reconnectAttempt: 1 }],
+      ["live:event", { eventType: "ready", keyCount: 1 }],
+      ["live:event", { eventType: "invalidate", keyCount: 1 }],
+      ["live:invalidate", { keyCount: 1 }],
+      ["live:event", { eventType: "patch", keyCount: 1 }],
+      ["live:patch", { resourceCount: 1 }],
+      ["live:event", { eventType: "resync", keyCount: 1 }],
+      ["live:resync", { keyCount: 1, reason: "server" }],
+      ["live:connect:close", {
+        keyCount: 1,
+        reconnectAttempt: 0,
+        reason: "lifecycle",
+        willReconnect: false,
+      }],
+    ]));
+    expect(JSON.stringify(observed)).not.toContain("secret");
+    expect(JSON.stringify(observed)).not.toContain("summary");
+    router.destroy();
+  });
+
+  it("emits a fixed live transport error category without leaking details", () => {
+    const router = new FluxRouter({
+      liveTransport: {
+        connect: () => {
+          throw new Error("tenant secret and authorization token");
+        },
+      },
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard?tenant=secret" },
+        resources: { summary: { version: "s1", value: { count: 1 } } },
+        live: ["summary"],
+      },
+    });
+    const errors: unknown[] = [];
+    router.on("live:connect:error", payload => errors.push(payload));
+
+    router.startLive();
+
+    expect(errors).toEqual([{
+      keyCount: 1,
+      reconnectAttempt: 0,
+      errorType: "transport",
+    }]);
+    expect(JSON.stringify(errors)).not.toContain("secret");
+    expect(JSON.stringify(errors)).not.toContain("token");
+    router.destroy();
+  });
+
   it("shares one client identity and suppresses only its own live events", async () => {
     vi.useFakeTimers();
     const transport = new MockTransport();

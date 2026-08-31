@@ -21,6 +21,7 @@ from fluxfast.headers import (
     HEADER_DEFERRED_PENDING,
     HEADER_FLUXFAST,
     HEADER_KNOWN,
+    HEADER_LIVE_RESOURCES,
     HEADER_ONLY,
     encode_known_header,
 )
@@ -351,6 +352,7 @@ def test_live_page_manifest_is_complete_and_capability_gated():
     assert set(legacy.json()["resources"]) == {"summary", "activity", "settings"}
     assert "live" not in legacy.json()
     assert "deferred" not in legacy.json()
+    assert HEADER_LIVE_RESOURCES not in legacy.headers
 
     deferred_only = client.get(
         "/live-manifest",
@@ -362,6 +364,7 @@ def test_live_page_manifest_is_complete_and_capability_gated():
     assert deferred_only.status_code == 200
     assert deferred_only.json()["deferred"] == ["activity"]
     assert "live" not in deferred_only.json()
+    assert HEADER_LIVE_RESOURCES not in deferred_only.headers
 
     live_only = client.get(
         "/live-manifest",
@@ -373,6 +376,7 @@ def test_live_page_manifest_is_complete_and_capability_gated():
     assert live_only.status_code == 200
     assert set(live_only.json()["resources"]) == {"summary", "activity", "settings"}
     assert live_only.json()["live"] == ["summary", "activity"]
+    assert live_only.headers[HEADER_LIVE_RESOURCES] == "2"
     assert "resourceKeys" not in live_only.json()
     assert "deferred" not in live_only.json()
 
@@ -389,6 +393,7 @@ def test_live_page_manifest_is_complete_and_capability_gated():
     assert both.json()["resourceKeys"] == ["summary", "activity", "settings"]
     assert both.json()["deferred"] == ["activity"]
     assert both.json()["live"] == ["summary", "activity"]
+    assert both.headers[HEADER_LIVE_RESOURCES] == "2"
 
     summary_version = live_only.json()["resources"]["summary"]["version"]
     known = client.get(
@@ -404,6 +409,7 @@ def test_live_page_manifest_is_complete_and_capability_gated():
     assert known.status_code == 200
     assert "summary" not in known.json()["resources"]
     assert known.json()["live"] == ["summary", "activity"]
+    assert known.headers[HEADER_LIVE_RESOURCES] == "2"
     assert loader_counts == {"summary": 1, "activity": 2, "settings": 5}
 
 

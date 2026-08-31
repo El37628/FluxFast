@@ -8,7 +8,7 @@ import {
   type ResourceLoadReason,
 } from "./events";
 import { HistoryManager } from "./history";
-import { LiveManager } from "./live/manager";
+import { LiveManager, type LiveManagerDiagnostic } from "./live/manager";
 import type { LiveEvent } from "./live/protocol";
 import type { LiveTransport } from "./live/transport";
 import { MutationEnvelope, PageDescriptor, PageEnvelope } from "./protocol";
@@ -86,6 +86,7 @@ export class FluxRouter {
   private readonly hardNavigate: (url: string) => void;
   private stopHistoryListener?: () => void;
   private stopLiveEventListener?: () => void;
+  private stopLiveDiagnosticListener?: () => void;
   private liveStarted = false;
   private readonly liveBatchDelayMs: number;
   private readonly pendingLiveRefreshKeys = new Set<string>();
@@ -117,6 +118,9 @@ export class FluxRouter {
     this.clientId = this.liveManager.clientId;
     this.stopLiveEventListener = this.liveManager.subscribeEvents(event => {
       this.handleLiveEvent(event);
+    });
+    this.stopLiveDiagnosticListener = this.liveManager.subscribeDiagnostics(event => {
+      this.handleLiveDiagnostic(event);
     });
     this.hardNavigate =
       options.hardNavigate ??
@@ -570,6 +574,8 @@ export class FluxRouter {
     this.cancelPendingLiveRefresh();
     this.stopLiveEventListener?.();
     this.stopLiveEventListener = undefined;
+    this.stopLiveDiagnosticListener?.();
+    this.stopLiveDiagnosticListener = undefined;
     this.liveManager.destroy();
     this.stopHistory();
     this.history.destroy();
@@ -633,6 +639,18 @@ export class FluxRouter {
   }
 
   private handleLiveEvent(event: LiveEvent): void {
+    if (event.type === "invalidate") {
+      this.events.emit("live:invalidate", { keyCount: event.keys.length });
+    } else if (event.type === "patch") {
+      this.events.emit("live:patch", {
+        resourceCount: Object.keys(event.patches).length,
+      });
+    } else if (event.type === "resync") {
+      this.events.emit("live:resync", {
+        keyCount: event.keys.length,
+        reason: event.reason,
+      });
+    }
     if (
       (event.type === "invalidate" || event.type === "patch") &&
       event.originClientId === this.clientId
@@ -666,6 +684,49 @@ export class FluxRouter {
       keys,
       event.type === "resync" ? "live-reconnect" : "live"
     );
+  }
+
+  private handleLiveDiagnostic(event: LiveManagerDiagnostic): void {
+    switch (event.type) {
+      case "connect:start":
+        this.events.emit("live:connect:start", {
+          keyCount: event.keyCount,
+          reconnectAttempt: event.reconnectAttempt,
+        });
+        return;
+      case "connect:open":
+        this.events.emit("live:connect:open", {
+          keyCount: event.keyCount,
+          reconnectAttempt: event.reconnectAttempt,
+        });
+        return;
+      case "connect:close":
+        this.events.emit("live:connect:close", {
+          keyCount: event.keyCount,
+          reconnectAttempt: event.reconnectAttempt,
+          reason: event.reason,
+          willReconnect: event.willReconnect,
+        });
+        return;
+      case "connect:error":
+        this.events.emit("live:connect:error", {
+          keyCount: event.keyCount,
+          reconnectAttempt: event.reconnectAttempt,
+          errorType: event.errorType,
+        });
+        return;
+      case "reconnect":
+        this.events.emit("live:reconnect", {
+          keyCount: event.keyCount,
+          reconnectAttempt: event.reconnectAttempt,
+        });
+        return;
+      case "event":
+        this.events.emit("live:event", {
+          eventType: event.eventType,
+          keyCount: event.keyCount,
+        });
+    }
   }
 
   private queueLiveRefresh(

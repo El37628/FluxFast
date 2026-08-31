@@ -3,6 +3,7 @@ import type { LiveEvent } from "../src/live/protocol";
 import {
   DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS,
   LiveManager,
+  type LiveManagerDiagnostic,
   type LiveNetworkAdapter,
 } from "../src/live/manager";
 import type {
@@ -127,6 +128,7 @@ describe("LiveManager", () => {
     const transport = new ControlledTransport();
     const events: LiveEvent[] = [];
     const statuses = vi.fn();
+    const diagnostics: LiveManagerDiagnostic[] = [];
     const manager = new LiveManager({
       transport,
       clientId: "ff_tab",
@@ -134,6 +136,7 @@ describe("LiveManager", () => {
       now: () => 123,
     });
     manager.subscribe(statuses);
+    manager.subscribeDiagnostics(event => diagnostics.push(event));
     manager.updateManifest("/dashboard", ["summary", "activity", "summary"]);
 
     expect(manager.getSnapshot().status).toBe("idle");
@@ -167,6 +170,26 @@ describe("LiveManager", () => {
       reconnectAttempt: 0,
     });
     expect(statuses).toHaveBeenCalled();
+    expect(diagnostics).toEqual([
+      {
+        type: "connect:start",
+        keyCount: 2,
+        reconnectAttempt: 0,
+      },
+      {
+        type: "connect:open",
+        keyCount: 2,
+        reconnectAttempt: 0,
+      },
+      { type: "event", eventType: "ready", keyCount: 2 },
+      {
+        type: "connect:close",
+        keyCount: 2,
+        reconnectAttempt: 0,
+        reason: "lifecycle",
+        willReconnect: false,
+      },
+    ]);
   });
 
   it("keeps one connection for an identical manifest and restarts changes", () => {
@@ -297,12 +320,14 @@ describe("LiveManager", () => {
     vi.useFakeTimers();
     const transport = new ControlledTransport();
     const errors: Error[] = [];
+    const diagnostics: LiveManagerDiagnostic[] = [];
     const manager = new LiveManager({
       transport,
       onError: error => errors.push(error),
       reconnectJitter: 0,
       reconnectMaxDelayMs: 1_000,
     });
+    manager.subscribeDiagnostics(event => diagnostics.push(event));
     manager.updateManifest("/dashboard", ["summary"]);
     manager.connect();
     transport.connections[0].finish();
@@ -335,6 +360,21 @@ describe("LiveManager", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(transport.connections).toHaveLength(4);
     expect(DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS).toBe(10_000);
+    expect(diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "connect:error",
+        errorType: "transport",
+      }),
+      expect.objectContaining({
+        type: "connect:close",
+        reason: "error",
+        willReconnect: true,
+      }),
+      expect.objectContaining({
+        type: "reconnect",
+        reconnectAttempt: 1,
+      }),
+    ]));
     manager.destroy();
   });
 
@@ -410,6 +450,20 @@ describe("LiveManager", () => {
       if (manager.getSnapshot().status === "connecting") {
         manager.disconnect();
       }
+    });
+
+    manager.connect();
+
+    expect(transport.connections).toHaveLength(0);
+    expect(manager.getSnapshot().status).toBe("idle");
+  });
+
+  it("does not open a connection after a diagnostic listener disconnects", () => {
+    const transport = new ControlledTransport();
+    const manager = new LiveManager({ transport });
+    manager.updateManifest("/dashboard", ["summary"]);
+    manager.subscribeDiagnostics(event => {
+      if (event.type === "connect:start") manager.disconnect();
     });
 
     manager.connect();

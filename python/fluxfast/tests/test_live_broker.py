@@ -10,6 +10,7 @@ import pytest
 from fluxfast import (
     LiveBroker,
     LiveInvalidateEvent,
+    LiveMetrics,
     LivePatchEvent,
     LiveReadyEvent,
     LiveResyncEvent,
@@ -75,7 +76,8 @@ async def test_publish_fans_out_to_multiple_subscribers() -> None:
 
 @pytest.mark.anyio
 async def test_queue_overflow_coalesces_into_resync() -> None:
-    broker = MemoryLiveBroker(max_queue_size=2)
+    metrics = LiveMetrics()
+    broker = MemoryLiveBroker(max_queue_size=2, metrics=metrics)
     stream = broker.subscribe({"shared"})
     received: list[Any] = []
 
@@ -101,6 +103,7 @@ async def test_queue_overflow_coalesces_into_resync() -> None:
     assert broker.subscriber_count == 1
     assert broker.pending_event_count == 0
     assert broker.queue_overflow_count == 1
+    assert metrics.snapshot().live_queue_overflows == 1
     await stream.aclose()
     assert broker.subscriber_count == 0
 

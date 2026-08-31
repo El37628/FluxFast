@@ -13,6 +13,7 @@ from .events import (
     LiveResyncReason,
 )
 from .memory import DEFAULT_LIVE_QUEUE_SIZE, MemoryLiveBroker
+from .metrics import LiveMetrics, LiveMetricsSnapshot
 from .redis import (
     DEFAULT_REDIS_CHANNEL_PREFIX,
     DEFAULT_REDIS_MAX_MESSAGE_BYTES,
@@ -39,6 +40,8 @@ __all__ = [
     "LiveCoordinator",
     "LiveEvent",
     "LiveInvalidateEvent",
+    "LiveMetrics",
+    "LiveMetricsSnapshot",
     "LivePatchEvent",
     "LiveReadyEvent",
     "LiveResyncEvent",

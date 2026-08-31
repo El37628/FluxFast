@@ -25,6 +25,7 @@ from .headers import (
     HEADER_FLUXFAST,
     HEADER_KNOWN,
     HEADER_LIVE_KEYS,
+    HEADER_LIVE_RESOURCES,
     HEADER_ONLY,
     HEADER_PROTOCOL,
     HEADER_SERVER_TIMING,
@@ -292,6 +293,8 @@ class FluxRouter(APIRouter):
                         HEADER_DEFERRED_PENDING: str(len(resolution.deferred)),
                         HEADER_DEFERRED_ERRORS: str(len(resolution.errors)),
                     }
+                    if supports_live:
+                        headers[HEADER_LIVE_RESOURCES] = str(len(live_keys))
 
                     return JSONResponse(
                         content=payload,
