@@ -1,5 +1,6 @@
 """FluxFast FastAPI application integration and lifecycle management."""
 
+import inspect
 import math
 from collections.abc import Callable
 from typing import Any
@@ -68,6 +69,7 @@ class FluxFast:
         self.debug = debug
         self.live_max_connection_age = float(live_max_connection_age)
         self.live_heartbeat_interval = float(live_heartbeat_interval)
+        self._closed = False
 
         # Attach cache to FastAPI app state
         self.app.state.fluxfast_cache = self.cache
@@ -76,13 +78,28 @@ class FluxFast:
         self.app.state.fluxfast_live_metrics = self.live_metrics
         self.app.state.fluxfast_live_max_connection_age = self.live_max_connection_age
         self.app.state.fluxfast_live_heartbeat_interval = self.live_heartbeat_interval
-        self.app.router.add_event_handler("shutdown", self.live.close)
+        self.app.router.add_event_handler("shutdown", self.close)
 
         # Setup exception handlers
         self._setup_exception_handlers()
 
         # Shared router
         self.router = FluxRouter()
+
+    async def close(self) -> None:
+        """Close live transport and an optionally closeable cache exactly once."""
+
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            await self.live.close()
+        finally:
+            close_cache = getattr(self.cache, "close", None)
+            if callable(close_cache):
+                result = close_cache()
+                if inspect.isawaitable(result):
+                    await result
 
     def _setup_exception_handlers(self) -> None:
         @self.app.exception_handler(RequestValidationError)
