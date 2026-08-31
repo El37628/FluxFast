@@ -4,19 +4,28 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
 from collections.abc import AsyncIterator
+from uuid import uuid4
 
 import anyio
 import anyio.lowlevel
 import pytest
+from fastapi import FastAPI
 
 from fluxfast import (
+    FluxFast,
     LiveEvent,
     LiveInvalidateEvent,
+    Page,
     RedisLiveBroker,
+    RedisResourceCache,
     derive_live_topic,
+    resource,
     scope,
 )
+from fluxfast.engine import ResourceEngine
+from fluxfast.timing import TimingMetrics
 
 REDIS_URL = os.getenv("FLUXFAST_TEST_REDIS_URL")
 REDIS_CONTAINER = os.getenv("FLUXFAST_TEST_REDIS_CONTAINER")
@@ -110,6 +119,135 @@ async def test_subscriber_cleanup_and_reconnect_receive_new_events() -> None:
     finally:
         await subscriber.close()
         await publisher.close()
+
+
+@pytest.mark.anyio
+async def test_positive_ttl_live_resource_invalidates_and_refills_shared_cache() -> None:
+    assert REDIS_URL is not None
+    deployment = uuid4().hex
+    namespace = f"test-live-cache-{deployment}"
+    channel_prefix = f"fluxfast:{namespace}:live:"
+    worker_a_cache = RedisResourceCache.from_url(
+        REDIS_URL,
+        namespace=namespace,
+    )
+    worker_b_cache = RedisResourceCache.from_url(
+        REDIS_URL,
+        namespace=namespace,
+    )
+    worker_a = FluxFast(
+        FastAPI(),
+        cache=worker_a_cache,
+        broker=RedisLiveBroker.from_url(
+            REDIS_URL,
+            channel_prefix=channel_prefix,
+        ),
+    )
+    worker_b = FluxFast(
+        FastAPI(),
+        cache=worker_b_cache,
+        broker=RedisLiveBroker.from_url(
+            REDIS_URL,
+            channel_prefix=channel_prefix,
+        ),
+    )
+    resource_scope = scope.tenant("hotel-1")
+    canonical = {"count": 1}
+    loader_calls = 0
+
+    async def load_summary() -> dict[str, int]:
+        nonlocal loader_calls
+        loader_calls += 1
+        return dict(canonical)
+
+    page = Page(
+        "Dashboard",
+        [
+            resource(
+                "summary",
+                load_summary,
+                scope=resource_scope,
+                ttl=60,
+                live=True,
+            )
+        ],
+    )
+    subscription = worker_b.live.resolve_subscription(page, {"summary"})
+    stream = worker_b.live.subscribe(subscription)
+    received: list[LiveEvent] = []
+
+    try:
+        first_metrics = TimingMetrics()
+        first = await ResourceEngine.resolve_page_resources(
+            page,
+            {},
+            None,
+            worker_a_cache,
+            first_metrics,
+        )
+        first_record = first.resources["summary"]
+        assert first_record.value == {"count": 1}
+        assert first_metrics.cache_misses == 1
+
+        warm_metrics = TimingMetrics()
+        warm = await ResourceEngine.resolve_page_resources(
+            page,
+            {},
+            None,
+            worker_b_cache,
+            warm_metrics,
+        )
+        assert warm.resources["summary"] == first_record
+        assert warm_metrics.cache_hits == 1
+        assert loader_calls == 1
+
+        canonical["count"] = 2
+        async with anyio.create_task_group() as tasks:
+            tasks.start_soon(_receive_one, stream, received)
+            await _wait_for_subscribers(worker_b.live.broker, 1)
+            await worker_a.live.invalidate(
+                "summary",
+                scope=resource_scope,
+                origin_client_id="worker-a",
+            )
+
+        assert received == [
+            LiveInvalidateEvent(
+                keys=["summary"],
+                originClientId="worker-a",
+            )
+        ]
+        cache_key = ResourceEngine.get_cache_key(page.resources[0])
+        assert await worker_b_cache.get(cache_key) is None
+
+        refill_metrics = TimingMetrics()
+        refill = await ResourceEngine.resolve_page_resources(
+            page,
+            {"summary": first_record.version},
+            None,
+            worker_b_cache,
+            refill_metrics,
+        )
+        refill_record = refill.resources["summary"]
+        assert refill_record.value == {"count": 2}
+        assert refill_record.version != first_record.version
+        assert refill_metrics.cache_misses == 1
+        assert loader_calls == 2
+
+        shared_refill = await worker_a_cache.get(cache_key)
+        assert shared_refill is not None
+        assert shared_refill.value == {"count": 2}
+        assert shared_refill.version == refill_record.version
+        assert shared_refill.expires_at > time.monotonic()
+    finally:
+        await stream.aclose()
+        try:
+            await worker_a_cache.clear()
+        finally:
+            try:
+                await worker_b.close()
+            finally:
+                await worker_a.close()
 
 
 @pytest.mark.anyio
