@@ -191,8 +191,8 @@ jobs:
           publish_package "@fluxfast/next" "${GITHUB_REF_NAME#v}" "${next_tarballs[0]}"
 
   verify-published-mixed-version:
-    name: Verify published Python 0.3 + Next 0.2
-    needs: publish-pypi
+    name: Verify published 0.4/0.3 package pairings
+    needs: [publish-pypi, publish-npm]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -207,10 +207,19 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - name: Install and run the actual registry packages
+      - name: Install Chromium
+        run: npx --yes playwright@1.62.1 install --with-deps chromium
+      - name: Verify current Python with previous JavaScript packages
         env:
           FLUXFAST_E2E_PYTHON: python
-          FLUXFAST_PYTHON_VERSION: ${{ github.ref_name }}
+          FLUXFAST_PAIRING: python-current
+          FLUXFAST_RELEASE_VERSION: ${{ github.ref_name }}
+        run: node scripts/test-published-mixed-consumer.mjs
+      - name: Verify previous Python with current JavaScript packages
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_PAIRING: javascript-current
+          FLUXFAST_RELEASE_VERSION: ${{ github.ref_name }}
         run: node scripts/test-published-mixed-consumer.mjs
 
   github-release:
