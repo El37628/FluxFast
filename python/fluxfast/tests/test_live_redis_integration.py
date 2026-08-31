@@ -14,6 +14,7 @@ import pytest
 from fastapi import FastAPI
 
 from fluxfast import (
+    CachedResource,
     FluxFast,
     LiveCoordinator,
     LiveEvent,
@@ -21,6 +22,7 @@ from fluxfast import (
     Page,
     RedisLiveBroker,
     RedisResourceCache,
+    ResourceCacheUnavailableError,
     derive_live_topic,
     resource,
     scope,
@@ -360,16 +362,45 @@ async def test_pubsub_connection_loss_ends_stream_for_browser_resync() -> None:
     reason="set FLUXFAST_TEST_REDIS_CONTAINER to test an actual broker restart",
 )
 @pytest.mark.anyio
-async def test_actual_redis_restart_allows_a_fresh_subscription() -> None:
+async def test_actual_redis_restart_recovers_cache_and_fresh_subscription() -> None:
     assert REDIS_URL is not None
     assert REDIS_CONTAINER is not None
     docker = shutil.which("docker")
     if docker is None:
         pytest.skip("Docker is required to restart the Redis test service")
 
+    from redis.asyncio import Redis
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    async def wait_for_redis() -> None:
+        admin = Redis.from_url(REDIS_URL)
+        try:
+            with anyio.fail_after(10):
+                while True:
+                    try:
+                        if await admin.ping():
+                            return
+                    except RedisConnectionError:
+                        pass
+                    await anyio.sleep(0.05)
+        finally:
+            await admin.aclose()
+
+    deployment = uuid4().hex
+    namespace = f"test-restart-{deployment}"
+    writer = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    reader = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+    initial = CachedResource(
+        version="rooms-v1",
+        value=[{"id": 1}],
+        expires_at=time.monotonic() + 60,
+        tags=("rooms",),
+    )
     subscriber = RedisLiveBroker.from_url(REDIS_URL)
     stream = subscriber.subscribe({"opaque-restart-test"})
     ended = anyio.Event()
+    publisher = None
+    container_running = True
 
     async def wait_for_stream_end() -> None:
         async for _event in stream:
@@ -377,31 +408,57 @@ async def test_actual_redis_restart_allows_a_fresh_subscription() -> None:
         ended.set()
 
     try:
+        await writer.set("rooms", initial, ttl=60)
+        warm = await reader.get("rooms")
+        assert warm is not None
+        assert warm.version == "rooms-v1"
+        assert warm.value == [{"id": 1}]
+        assert warm.tags == ("rooms",)
+
         async with anyio.create_task_group() as tasks:
             tasks.start_soon(wait_for_stream_end)
             await _wait_for_subscribers(subscriber, 1)
             await anyio.run_process(
-                [docker, "restart", REDIS_CONTAINER],
+                [docker, "stop", REDIS_CONTAINER],
                 check=True,
             )
+            container_running = False
             with anyio.fail_after(10):
                 await ended.wait()
+        await _wait_for_subscribers(subscriber, 0)
 
-        from redis.asyncio import Redis
-        from redis.exceptions import ConnectionError as RedisConnectionError
+        with pytest.raises(ResourceCacheUnavailableError) as get_error:
+            await reader.get("rooms")
+        with pytest.raises(ResourceCacheUnavailableError) as set_error:
+            await writer.set("rooms", initial, ttl=60)
+        assert get_error.value.details == {"operation": "get"}
+        assert set_error.value.details == {"operation": "set"}
+        assert reader.metrics.snapshot().cache_errors == 1
+        assert writer.metrics.snapshot().cache_errors == 1
 
-        admin = Redis.from_url(REDIS_URL)
-        try:
-            with anyio.fail_after(10):
-                while True:
-                    try:
-                        if await admin.ping():
-                            break
-                    except RedisConnectionError:
-                        pass
-                    await anyio.sleep(0.05)
-        finally:
-            await admin.aclose()
+        await anyio.run_process([docker, "start", REDIS_CONTAINER], check=True)
+        container_running = True
+        await wait_for_redis()
+
+        recovered = await reader.get("rooms")
+        if recovered is not None:
+            assert recovered.version == "rooms-v1"
+            assert recovered.value == [{"id": 1}]
+            assert recovered.tags == ("rooms",)
+
+        await writer.delete("rooms")
+        replacement = CachedResource(
+            version="rooms-v2",
+            value=[{"id": 2}],
+            expires_at=time.monotonic() + 60,
+            tags=("rooms", "fresh"),
+        )
+        await writer.set("rooms", replacement, ttl=60)
+        fresh = await reader.get("rooms")
+        assert fresh is not None
+        assert fresh.version == "rooms-v2"
+        assert fresh.value == [{"id": 2}]
+        assert fresh.tags == ("rooms", "fresh")
 
         publisher = RedisLiveBroker.from_url(REDIS_URL)
         reconnected = subscriber.subscribe({"opaque-restart-test"})
@@ -417,7 +474,17 @@ async def test_actual_redis_restart_allows_a_fresh_subscription() -> None:
             assert received == [LiveInvalidateEvent(keys=["status"])]
         finally:
             await reconnected.aclose()
-            await publisher.close()
+            await _wait_for_subscribers(subscriber, 0)
     finally:
+        if not container_running:
+            await anyio.run_process([docker, "start", REDIS_CONTAINER], check=True)
+            await wait_for_redis()
         await stream.aclose()
-        await subscriber.close()
+        if publisher is not None:
+            await publisher.close()
+        try:
+            await writer.clear()
+        finally:
+            await subscriber.close()
+            await reader.close()
+            await writer.close()
