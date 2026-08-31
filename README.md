@@ -156,10 +156,43 @@ use the ordinary `useResource("notifications")` hook. See [Live
 Resources](docs/live-resources.md) for mutations, patches, reconnect, Redis,
 security, and deployment requirements.
 
+## Multiple workers
+
+The default resource cache is process-local. To share positive-TTL resources
+across FastAPI workers or hosts, install the Redis extra and configure an
+explicit application namespace:
+
+```bash
+pip install "fluxfast[redis]"
+```
+
+```python
+import os
+
+from fluxfast import RedisLiveBroker, RedisResourceCache
+
+redis_url = os.environ["REDIS_URL"]
+namespace = "hotel-prod"
+cache = RedisResourceCache.from_url(redis_url, namespace=namespace)
+broker = RedisLiveBroker.from_url(
+    redis_url,
+    channel_prefix=f"fluxfast:{namespace}:live:",
+)
+flux = FluxFast(app, cache=cache, broker=broker)
+```
+
+`RedisResourceCache` shares scoped values, native TTL, deletion, and tag
+invalidation. `RedisLiveBroker` independently carries ephemeral live signals;
+configure both for positive-TTL `live=True` resources across workers. FluxFast
+supports Redis Open Source 6.2 through 8.10 and tests both ends of that range.
+See [distributed resource coherence](docs/distributed-cache.md) for namespace,
+failure, serialization, metrics, lifecycle, security, and background-publisher
+guidance.
+
 ## Packages
 
-- `python/fluxfast`: FastAPI routes, resource engine, scoped server cache, and
-  mutation helpers.
+- `python/fluxfast`: FastAPI routes, resource engine, process-local and Redis
+  scoped server caches, live coordination, and mutation helpers.
 - `packages/core`: framework-neutral browser runtime with no React or Next.js
   imports.
 - `packages/next`: Next.js 16 App Router adapter, onboarding CLI, and registry
@@ -173,12 +206,14 @@ pnpm typecheck
 pnpm test
 pnpm build
 ./.venv/bin/python -m pytest -q python/fluxfast/tests
+# Requires Redis at redis://127.0.0.1:6379/15 by default.
 pnpm benchmark
 ```
 
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
-[caching](docs/caching.md), [deferred resources](docs/deferred-resources.md),
-[Live Resources](docs/live-resources.md), [Next.js
+[caching](docs/caching.md), [distributed resource
+coherence](docs/distributed-cache.md), [deferred
+resources](docs/deferred-resources.md), [Live Resources](docs/live-resources.md), [Next.js
 integration](docs/nextjs-adapter.md), and [mutations](docs/mutations.md) before
 extending a wire or cache boundary. The [compatibility and versioning
 policy](docs/versioning.md) lists supported runtimes and the deprecation policy.

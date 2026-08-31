@@ -8,6 +8,12 @@ caches.
 `MemoryResourceCache` is async-safe, monotonic-clock TTL aware, tag indexed,
 bounded to 10,000 entries by default, and LRU evicted. It is per process.
 
+`RedisResourceCache` implements the same backend contract with shared values,
+Redis-native TTL, atomic tag indexes, and explicit namespace isolation across
+workers or hosts. Install it with `pip install "fluxfast[redis]"` and pass it
+to `FluxFast(app, cache=...)`. See [distributed resource
+coherence](distributed-cache.md) for configuration and operations.
+
 Every reusable resource needs an explicit scope:
 
 ```python
@@ -20,10 +26,12 @@ scope.custom("organization", organization.id)
 The internal key is `{scope fingerprint}::{logical resource key}`. A resource
 without an explicit scope remains request-scoped even if a positive TTL is
 provided. This prevents an omitted scope from silently turning personalized
-data into public cache data.
+data into public cache data. The Redis backend hashes this complete logical
+identity before constructing its physical key; scope values are not exposed in
+Redis key names.
 
-`ttl=0` disables server reuse. Cache eviction or process-local misses only cause
-the loader to run again; they cannot change results.
+`ttl=0` disables server reuse. Cache eviction or misses only cause the loader
+to run again; they cannot change results.
 
 Mutation code must invalidate every affected scoped cache entry. A client patch
 does not by itself update the authoritative server cache:
@@ -37,6 +45,11 @@ return mutation(
     ],
 )
 ```
+
+Resource `tags=[...]` can group server entries for backend-level invalidation.
+Tag invalidation does not identify live resource keys to browsers, so publish
+the corresponding scoped resource invalidations separately when active clients
+must refresh.
 
 ## Deferred resource cache behavior
 
@@ -56,10 +69,11 @@ request and loads during every necessary follow-up. A positive TTL still does
 nothing across requests unless the resource has an explicit cacheable scope.
 Never use a public scope for user or tenant data merely to make deferral faster.
 
-The in-memory cache remains process-local. In a multi-worker deployment, one
-worker may miss a value cached by another; the scoped loader must produce the
-same authorized result. Deferral must not rely on cache affinity for
-correctness.
+With `MemoryResourceCache`, one worker may miss a value cached by another; the
+scoped loader must produce the same authorized result. With
+`RedisResourceCache`, a deferred follow-up can populate Redis and a different
+worker can reuse that value. Deferral must not rely on worker affinity in
+either topology.
 
 ## Live invalidation and canonical refresh
 
@@ -106,19 +120,35 @@ publication does not reach streams attached to another worker, so production
 with more than one FastAPI process must configure `RedisLiveBroker` in every
 worker.
 
-Redis Pub/Sub shares only invalidation/patch signals; it is not a distributed
-resource cache. Each worker may still hold its own scoped resource entries. The
-worker handling a mutation deletes its local entry before publishing, but a
-different worker can retain an older positive-TTL entry. Therefore a
-multi-worker live resource must use `ttl=0` with `MemoryResourceCache`, or the
-application must provide a shared/cross-worker-invalidation-aware
-`ResourceCacheBackend`. `RedisLiveBroker` does not turn `MemoryResourceCache`
-into Redis storage, and a built-in Redis resource cache is outside v0.4.
+Redis Pub/Sub shares only invalidation/patch signals; it does not store resource
+values. If workers retain `MemoryResourceCache`, the worker handling a mutation
+deletes only its local entry and a different worker can retain an older
+positive-TTL entry. In that topology, live resources must use `ttl=0`.
+
+`RedisResourceCache` supplies the other topology: all workers sharing its
+explicit namespace read and delete the same entries. Pair it with
+`RedisLiveBroker` to support positive-TTL live resources across workers:
+
+```python
+namespace = "hotel-prod"
+cache = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+broker = RedisLiveBroker.from_url(
+    REDIS_URL,
+    channel_prefix=f"fluxfast:{namespace}:live:",
+)
+flux = FluxFast(app, cache=cache, broker=broker)
+```
+
+The cache is strict: Redis command, connection, and serialization failures are
+public cache errors and never trigger an implicit process-local fallback.
+Simultaneous cold misses may execute duplicate loaders, but ordinary warm hits
+reuse one shared value regardless of worker count.
 
 Broker messages are ephemeral. Redis interruption causes streams to reconnect
 and reload all active live resources rather than replaying an event history.
 Business mutation success is isolated from publication failure after canonical
-cache invalidation.
+cache invalidation. If shared cache invalidation itself fails, the live signal
+is not published because other workers could otherwise refresh stale state.
 
 ## Browser caches
 

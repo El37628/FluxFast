@@ -28,7 +28,8 @@ The distributed-cache scenario uses
 its keys after every run. The manually dispatched `Benchmark` workflow starts
 Redis and retains each script's output in the `controlled-benchmark` artifact,
 so results can be compared over time without turning host-dependent timings
-into release gates.
+into release gates. The compatibility matrix, rather than this benchmark,
+establishes the [supported Redis server range](distributed-cache.md#supported-redis-versions).
 
 The command runs all controlled scenarios. The cross-page script reports
 observed duration and bytes for the initial dashboard, complete rooms props,

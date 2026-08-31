@@ -70,6 +70,13 @@ With multiple FastAPI workers, configure `RedisLiveBroker`; also follow the
 [multi-worker resource-cache rules](caching.md#multiple-workers) so a canonical
 refresh cannot read an old process-local positive-TTL entry.
 
+For positive-TTL live resources across workers, pair the broker with
+`RedisResourceCache`. Its cache failure semantics are intentionally stricter
+than broker publication: if the shared delete fails, FluxFast raises a cache
+error and does not publish a signal that could send other clients into stale
+cache entries. There is no implicit local-memory fallback. See [distributed
+resource coherence](distributed-cache.md#failure-semantics).
+
 ## Deferred resource invalidation
 
 The same invalidation contract applies at every deferred lifecycle state:

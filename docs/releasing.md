@@ -10,12 +10,17 @@ a clean temporary consumer. That consumer runs `fluxfast init`, builds a
 production Next application, launches its own FastAPI backend from the isolated
 wheel environment, and proves deferred skeleton-to-resource behavior in a real
 browser through one origin.
-After PyPI publication, the workflow also installs the new Python package from
-PyPI with the previously published `@fluxfast/core@0.2.0` and
-`@fluxfast/next@0.2.0` packages from npm. It runs their real application pairing
-and requires `defer=True` to remain blocking when the old client sends no
-capability header. The GitHub release is created only after this registry-backed
-mixed-version check passes.
+After registry publication, the workflow installs the new Python package with
+the configured previous JavaScript line, then the previous Python line with the
+new JavaScript packages. It runs both real application pairings and verifies
+that capabilities degrade safely when one side predates a feature. The GitHub
+release is created only after these registry-backed mixed-version checks pass.
+
+The normal integration workflow also exercises the real Redis cache, live
+broker, restart behavior, and independent Uvicorn workers against the oldest
+and newest [supported Redis server lines](distributed-cache.md#supported-redis-versions).
+Both matrix ends must be green before preparing a release that changes
+distributed-cache behavior.
 
 ## One-time registry setup
 
@@ -86,22 +91,24 @@ the package manifests, Python runtime version, lockfile, and dated release
 section together:
 
 ```bash
-pnpm release:prepare 0.3.0
-pnpm release:check v0.3.0
+version=0.5.0
+pnpm release:prepare "$version"
+pnpm release:check "v$version"
 ```
 
 Commit and review the generated version changes before tagging. Do not edit or
 move a tag after publishing.
 
 After the version change has passed review and reached `main`, release it from
-an up-to-date checkout. For version `0.3.0`:
+an up-to-date checkout:
 
 ```bash
 git switch main
 git pull --ff-only
-pnpm release:check v0.3.0
-git tag -a v0.3.0 -m "FluxFast 0.3.0"
-git push origin v0.3.0
+version=0.5.0
+pnpm release:check "v$version"
+git tag -a "v$version" -m "FluxFast $version"
+git push origin "v$version"
 ```
 
 Approve the `pypi` and `npm` deployment jobs in GitHub when prompted. Never

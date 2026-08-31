@@ -14,6 +14,7 @@ versioned independently; package version `1.x` does not imply protocol version
 | Node.js | Active LTS lines 22 and 24 |
 | Next.js | `>=16.3.0 <17.0.0` |
 | React and React DOM | `>=19.0.0` |
+| Redis Open Source server | 6.2 through 8.10 when Redis features are configured |
 
 The CI matrices are the authoritative compatibility gate. Support for an
 end-of-life runtime may be removed in a minor release before FluxFast 1.0 and
@@ -39,8 +40,9 @@ and wire-protocol versions. A client lists supported tokens in
 `X-FluxFast-Capabilities`; the server uses only recognized, shipped tokens and
 ignores malformed or unknown input within bounded parsing limits.
 
-FluxFast 0.3 defines one capability: `deferred-resources`. With it, a server may
-add the optional `resourceKeys`, `deferred`, and `resourceErrors` fields to a
+FluxFast 0.3 introduced `deferred-resources`; FluxFast 0.4 introduced
+`live-resources`. A capable server may add the corresponding optional
+`resourceKeys`, `deferred`, `resourceErrors`, and `live` fields to a
 `fluxfast/1` page envelope. Compatibility works in both directions:
 
 - a new client can consume an old server's ordinary v1 envelope;
