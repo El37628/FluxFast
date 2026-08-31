@@ -8,6 +8,7 @@ from .capabilities import (
     CAPABILITY_LIVE_RESOURCES,
     client_supports,
 )
+from .contract import ResourceContract
 from .errors import (
     FluxFastError,
     FluxFastLiveScopeError,
@@ -138,6 +139,7 @@ __all__ = [
     "ResourceCacheError",
     "ResourceCacheSerializationError",
     "ResourceCacheUnavailableError",
+    "ResourceContract",
     "ResourceError",
     "ResourceErrorDetail",
     "ResourceLoader",

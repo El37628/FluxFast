@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from .contract import _validate_resource_key
 from .errors import FluxFastLiveScopeError
 from .scope import CacheScope, ScopeType
 from .scope import scope as scope_builder
@@ -36,10 +37,7 @@ def resource(
     live: bool = False,
 ) -> ResourceSpec:
     """Create a ResourceSpec for a page."""
-    if not isinstance(key, str) or not key.strip() or len(key) > 128:
-        raise ValueError("resource key must be a non-empty string of at most 128 characters")
-    if "," in key or any(ord(char) < 32 for char in key):
-        raise ValueError("resource key must not contain commas or control characters")
+    key = _validate_resource_key(key)
     if not callable(loader):
         raise TypeError("resource loader must be callable")
     if not isinstance(ttl, (int, float)) or not math.isfinite(ttl) or ttl < 0:
