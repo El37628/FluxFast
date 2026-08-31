@@ -807,6 +807,56 @@ describe("FluxRouter live invalidation synchronization", () => {
     });
   });
 
+  it("drops a deferred live response after navigation changes the page", async () => {
+    const transport = new MockTransport();
+    const liveTransport = new ControlledLiveTransport();
+    let resolveDeferred!: (envelope: PageEnvelope) => void;
+    transport.visitMock.mockImplementation(request => {
+      if (request.only) {
+        return new Promise(resolve => { resolveDeferred = resolve; });
+      }
+      return Promise.resolve({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: {},
+      });
+    });
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["activity"],
+        resources: {},
+        deferred: ["activity"],
+        live: ["activity"],
+      },
+    });
+
+    router.startLive();
+    const deferred = router.startInitialDeferred();
+    const deferredSignal = transport.visitMock.mock.calls[0][0].signal;
+    await router.visit("/rooms");
+    expect(deferredSignal?.aborted).toBe(true);
+    expect(liveTransport.connections[0].signal.aborted).toBe(true);
+
+    resolveDeferred({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: { activity: { version: "old", value: ["old"] } },
+    });
+    await deferred;
+
+    expect(router.pageStore.getSnapshot()).toMatchObject({
+      component: "rooms/index",
+      url: "/rooms",
+    });
+    expect(router.resourceStore.getSnapshot("activity")).toBeUndefined();
+    expect(router.resourceStore.getStateSnapshot("activity").status).toBe("missing");
+  });
+
   it("keeps a later mutation response over an older live refresh", async () => {
     vi.useFakeTimers();
     const transport = new MockTransport();

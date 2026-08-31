@@ -31,6 +31,7 @@ CACHE_NAMESPACE = _required_environment("FLUXFAST_TEST_CACHE_NAMESPACE")
 LIVE_PREFIX = _required_environment("FLUXFAST_TEST_LIVE_PREFIX")
 STATE_KEY = _required_environment("FLUXFAST_TEST_STATE_KEY")
 LOAD_COUNT_KEY = _required_environment("FLUXFAST_TEST_LOAD_COUNT_KEY")
+ACTIVITY_TTL = float(os.getenv("FLUXFAST_TEST_ACTIVITY_TTL", "30"))
 
 app = FastAPI()
 state = Redis.from_url(REDIS_URL)
@@ -77,6 +78,14 @@ async def load_analytics() -> dict[str, int]:
     return {"visits": int(raw_value)}
 
 
+async def load_activity() -> dict[str, int]:
+    await state.incr(LOAD_COUNT_KEY)
+    raw_value = await state.get(STATE_KEY)
+    if raw_value is None:
+        raise RuntimeError("canonical activity state is missing")
+    return {"value": int(raw_value)}
+
+
 @flux.page("/counter")
 async def counter_page() -> Page:
     return Page(
@@ -109,11 +118,36 @@ async def analytics_page() -> Page:
     )
 
 
+@flux.page("/activity")
+async def activity_page() -> Page:
+    return Page(
+        "activity/index",
+        [
+            resource(
+                "activity",
+                load_activity,
+                scope=scope.tenant("org-1"),
+                ttl=ACTIVITY_TTL,
+                defer=True,
+                live=True,
+            )
+        ],
+    )
+
+
 @flux.mutation("/counter/increment", methods=["POST"])
 async def increment_counter():
     await state.incr(STATE_KEY)
     return mutation(
         invalidate=[invalidate_resource("counter", scope=scope.public())]
+    )
+
+
+@flux.mutation("/activity/increment", methods=["POST"])
+async def increment_activity():
+    await state.incr(STATE_KEY)
+    return mutation(
+        invalidate=[invalidate_resource("activity", scope=scope.tenant("org-1"))]
     )
 
 
