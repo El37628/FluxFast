@@ -13,7 +13,7 @@ import anyio
 import httpx2
 import pytest
 
-from fluxfast import RedisResourceCache
+from fluxfast import CAPABILITY_DEFERRED_RESOURCES, RedisResourceCache
 
 REDIS_URL = os.getenv("FLUXFAST_TEST_REDIS_URL")
 pytestmark = pytest.mark.skipif(
@@ -23,6 +23,10 @@ pytestmark = pytest.mark.skipif(
 
 _FIXTURE_DIRECTORY = Path(__file__).parent / "fixtures"
 _FLUXFAST_HEADERS = {"X-FluxFast": "1"}
+_DEFERRED_HEADERS = {
+    **_FLUXFAST_HEADERS,
+    "X-FluxFast-Capabilities": CAPABILITY_DEFERRED_RESOURCES,
+}
 
 
 def _available_port() -> int:
@@ -175,6 +179,91 @@ async def test_three_fastapi_workers_share_invalidation_and_refill() -> None:
             shared.raise_for_status()
             assert shared.json()["resources"]["counter"] == refill_record
             assert int(await admin.get(load_count_key)) == 2
+    finally:
+        _stop_workers(workers)
+        try:
+            await cleanup_cache.clear()
+            await admin.delete(state_key, load_count_key)
+        finally:
+            await cleanup_cache.close()
+            await admin.aclose()
+
+
+@pytest.mark.anyio
+async def test_deferred_resource_follow_up_populates_shared_worker_cache() -> None:
+    assert REDIS_URL is not None
+    from redis.asyncio import Redis
+
+    deployment = uuid4().hex
+    namespace = f"test-deferred-workers-{deployment}"
+    state_key = f"fluxfast:test:{deployment}:analytics"
+    load_count_key = f"fluxfast:test:{deployment}:analytics-loads"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "FLUXFAST_TEST_REDIS_URL": REDIS_URL,
+            "FLUXFAST_TEST_CACHE_NAMESPACE": namespace,
+            "FLUXFAST_TEST_LIVE_PREFIX": f"fluxfast:{namespace}:live:",
+            "FLUXFAST_TEST_STATE_KEY": state_key,
+            "FLUXFAST_TEST_LOAD_COUNT_KEY": load_count_key,
+        }
+    )
+    ports: list[int] = []
+    while len(ports) < 3:
+        port = _available_port()
+        if port not in ports:
+            ports.append(port)
+    workers = [(port, _start_worker(port, environment)) for port in ports]
+    assert len({process.pid for _port, process in workers}) == 3
+    admin = Redis.from_url(REDIS_URL)
+    cleanup_cache = RedisResourceCache.from_url(REDIS_URL, namespace=namespace)
+
+    try:
+        await admin.set(state_key, 42)
+        await admin.delete(load_count_key)
+        async with httpx2.AsyncClient(timeout=5) as client:
+            await _wait_for_workers(client, workers)
+
+            cold = await client.get(
+                f"http://127.0.0.1:{ports[0]}/analytics",
+                headers=_DEFERRED_HEADERS,
+            )
+            cold.raise_for_status()
+            assert cold.json()["resources"] == {}
+            assert cold.json()["resourceKeys"] == ["analytics"]
+            assert cold.json()["deferred"] == ["analytics"]
+            assert cold.headers["X-FluxFast-Deferred-Pending"] == "1"
+            assert cold.headers["X-FluxFast-Test-Worker"] == str(
+                workers[0][1].pid
+            )
+            assert await admin.get(load_count_key) is None
+
+            follow_up = await client.get(
+                f"http://127.0.0.1:{ports[1]}/analytics",
+                headers={**_DEFERRED_HEADERS, "X-FluxFast-Only": "analytics"},
+            )
+            follow_up.raise_for_status()
+            analytics_record = follow_up.json()["resources"]["analytics"]
+            assert analytics_record["value"] == {"visits": 42}
+            assert "deferred" not in follow_up.json()
+            assert follow_up.headers["X-FluxFast-Deferred-Pending"] == "0"
+            assert follow_up.headers["X-FluxFast-Test-Worker"] == str(
+                workers[1][1].pid
+            )
+            assert int(await admin.get(load_count_key)) == 1
+
+            shared_hit = await client.get(
+                f"http://127.0.0.1:{ports[2]}/analytics",
+                headers=_DEFERRED_HEADERS,
+            )
+            shared_hit.raise_for_status()
+            assert shared_hit.json()["resources"]["analytics"] == analytics_record
+            assert "deferred" not in shared_hit.json()
+            assert shared_hit.headers["X-FluxFast-Deferred-Pending"] == "0"
+            assert shared_hit.headers["X-FluxFast-Test-Worker"] == str(
+                workers[2][1].pid
+            )
+            assert int(await admin.get(load_count_key)) == 1
     finally:
         _stop_workers(workers)
         try:
