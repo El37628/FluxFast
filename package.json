@@ -17,7 +17,7 @@
     "test:consumer:init": "node scripts/test-next-init-consumer.mjs",
     "test:consumer:mixed-published": "node scripts/test-published-mixed-consumer.mjs",
     "test:python": "./.venv/bin/python -m pytest -q python/fluxfast/tests",
-    "benchmark": "PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_cross_page.py && PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_deferred.py && PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_live.py",
+    "benchmark": "PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_cross_page.py && PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_deferred.py && PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_live.py && PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_redis_cache.py",
     "release:check": "node scripts/check-release-version.mjs",
     "release:prepare": "node scripts/set-release-version.mjs"
   },

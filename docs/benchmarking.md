@@ -15,11 +15,20 @@ Delta Response: only `room_types` and `rooms` transferred!
 ```
 
 The controlled fixture uses the same FastAPI process and synthetic dataset for a
-complete-props endpoint and the FluxFast routes. Run it on the target machine:
+complete-props endpoint and the FluxFast routes. With Redis already running,
+run it on the target machine:
 
 ```bash
 pnpm benchmark
 ```
+
+The distributed-cache scenario uses
+`FLUXFAST_BENCHMARK_REDIS_URL` when set and otherwise connects to
+`redis://127.0.0.1:6379/15`. It uses an isolated random namespace and removes
+its keys after every run. The manually dispatched `Benchmark` workflow starts
+Redis and retains each script's output in the `controlled-benchmark` artifact,
+so results can be compared over time without turning host-dependent timings
+into release gates.
 
 The command runs all controlled scenarios. The cross-page script reports
 observed duration and bytes for the initial dashboard, complete rooms props,
@@ -107,3 +116,58 @@ canonical refresh restores current state without letting memory grow with the
 number of published events. Traced-memory figures cover this controlled Python
 workload, not total process RSS. Run `pnpm benchmark` on the deployment target
 for locally meaningful timings.
+
+## Distributed Resource Cache Scenario
+
+The Redis benchmark compares `MemoryResourceCache` with
+`RedisResourceCache` for exact 1 KiB, 10 KiB, 100 KiB, and 1 MiB string
+payloads. Redis reads come from a second cache client, proving the serialized
+entry crosses a client boundary. Each payload round-trip checks its value,
+version, and tags. A separate workload fills and invalidates 100 entries under
+one tag, then verifies that every key is absent.
+
+The benchmark configures a 2 MiB value limit so the 1 MiB source string plus
+its serialized envelope fits. This does not change the production default
+guard; the reported serialized byte count is the value relevant to that guard.
+
+The process-level workload starts 1, 2, 4, and 8 independent Uvicorn workers.
+For each worker count it records:
+
+- simultaneous cold-fan-out time and loader executions;
+- 64 concurrent warm-cache responses, throughput, and request latency;
+- process-local Redis cache reads and writes aggregated across workers; and
+- one known-version request per worker, all of which must omit the resource.
+
+The cold loader sleeps for 50 ms so simultaneous misses overlap. FluxFast v0.5
+does not provide a distributed single-flight lease, so duplicate cold loads are
+expected and reported. The warm phase first seeds Redis and then requires the
+global loader count to remain exactly one regardless of worker count.
+
+### Observed Distributed-Cache Reference Run
+
+On 2026-08-31, five payload samples and 64 warm requests per worker-count run
+on Linux WSL2 x86_64, an AMD Ryzen 5 3600, Python 3.13.14, and Redis 8.10.1
+produced:
+
+| Payload | Serialized | Memory set/get median | Redis set/cross-client get median |
+| --- | ---: | ---: | ---: |
+| 1 KiB | 1,097 B | 0.028 / 0.012 ms | 0.250 / 0.243 ms |
+| 10 KiB | 10,314 B | 0.023 / 0.012 ms | 0.317 / 0.261 ms |
+| 100 KiB | 102,475 B | 0.027 / 0.012 ms | 0.541 / 0.428 ms |
+| 1 MiB | 1,048,652 B | 0.044 / 0.013 ms | 5.158 / 2.451 ms |
+
+Invalidating 100 tagged entries took 1.075 ms median and 1.215 ms p95.
+
+| Workers | Cold loaders | Warm throughput | Warm hit latency median/p95 | Redis reads/writes | Known omissions |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1 | 395.5 req/s | 141.269 / 152.432 ms | 66 / 1 | 1/1 |
+| 2 | 2 | 541.9 req/s | 105.426 / 111.027 ms | 67 / 1 | 2/2 |
+| 4 | 4 | 726.7 req/s | 70.744 / 82.285 ms | 69 / 1 | 4/4 |
+| 8 | 8 | 812.7 req/s | 57.885 / 67.877 ms | 73 / 1 | 8/8 |
+
+Warm latency includes queueing from the deliberately concurrent 64-request
+batch; it is not single-request Redis latency. Every warm run used one loader
+and one Redis write. Redis adds serialization and network work compared with
+the process-local cache, in exchange for coherence across processes. These
+numbers are a repeatable reference workload, not a performance guarantee or a
+millisecond threshold.

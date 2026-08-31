@@ -6,6 +6,16 @@ on:
 jobs:
   controlled:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -13,11 +23,18 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: python -m pip install -e 'python/fluxfast[dev]'
+      - run: python -m pip install -e 'python/fluxfast[dev,redis]'
       - run: mkdir -p benchmark-results
       - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_cross_page.py | tee benchmark-results/cross-page.txt
       - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_deferred.py | tee benchmark-results/deferred.txt
       - run: PYTHONPATH=python/fluxfast/src:. python benchmarks/scripts/benchmark_live.py | tee benchmark-results/live.txt
+      - name: Benchmark distributed resource cache
+        run: >-
+          PYTHONPATH=python/fluxfast/src:.
+          python benchmarks/scripts/benchmark_redis_cache.py
+          | tee benchmark-results/redis-cache.txt
+        env:
+          FLUXFAST_BENCHMARK_REDIS_URL: redis://127.0.0.1:6379/15
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: controlled-benchmark
