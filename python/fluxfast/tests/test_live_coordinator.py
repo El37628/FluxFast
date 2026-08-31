@@ -293,7 +293,9 @@ async def test_publish_failure_keeps_invalidated_canonical_state(
 ) -> None:
     class FailingBroker:
         async def publish(self, topic: str, event: LiveEvent) -> None:
-            raise ConnectionError("broker unavailable")
+            raise ConnectionError(
+                "redis://service-user:super-secret@example.invalid unavailable"
+            )
 
         async def subscribe(self, topics: set[str]) -> AsyncIterator[LiveEvent]:
             yield LiveInvalidateEvent(keys=[])
@@ -316,4 +318,8 @@ async def test_publish_failure_keeps_invalidated_canonical_state(
 
     assert await cache.get(cache_key) is None
     assert "publication failed" in caplog.text
+    assert "service-user" not in caplog.text
+    assert "super-secret" not in caplog.text
+    assert "example.invalid" not in caplog.text
+    assert caplog.records[-1].fluxfast_live_error_type == "ConnectionError"
     assert coordinator.metrics.snapshot().live_publish_errors == 1

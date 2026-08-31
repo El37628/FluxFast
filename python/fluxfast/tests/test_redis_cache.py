@@ -464,6 +464,35 @@ async def test_oversized_set_raises_public_serialization_error_without_writing()
 
 
 @pytest.mark.anyio
+async def test_oversized_stored_entry_is_removed_as_a_recovered_miss(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    payload = b"super-secret-value" * 8
+    client = RecordingRedisClient()
+    client.pipeline_result = [payload, 60_000]
+    cache = RedisResourceCache(
+        client,
+        namespace="hotel-prod",
+        max_value_bytes=64,
+    )
+    caplog.set_level(logging.WARNING, logger="fluxfast.cache.redis")
+
+    assert await cache.get("tenant:secret::rooms") is None
+
+    assert len(client.evals) == 1
+    assert "Removed an invalid Redis resource cache entry" in caplog.text
+    assert "super-secret-value" not in caplog.text
+    assert "tenant:secret" not in caplog.text
+    assert cache.metrics.snapshot() == RedisCacheMetricsSnapshot(
+        cache_gets=1,
+        cache_misses=1,
+        cache_deletes=1,
+        cache_errors=1,
+        cache_payload_bytes_read=len(payload),
+    )
+
+
+@pytest.mark.anyio
 async def test_get_failure_raises_public_unavailable_error_without_fallback(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

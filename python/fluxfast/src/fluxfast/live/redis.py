@@ -159,13 +159,17 @@ class RedisLiveBroker:
                         ignore_subscribe_messages=True,
                         timeout=1.0,
                     )
-                except Exception:
+                # redis-py and provider transports expose several exception
+                # families; every disconnect follows the same safe recovery.
+                except Exception as error:  # noqa: BLE001
                     async with self._lock:
                         if self._closed:
                             return
                     _LOGGER.warning(
                         "Redis live subscription disconnected; browser reconnect will resynchronize",
-                        exc_info=True,
+                        extra={
+                            "fluxfast_live_error_type": type(error).__name__,
+                        },
                     )
                     return
                 if message is None or message.get("type") != "message":

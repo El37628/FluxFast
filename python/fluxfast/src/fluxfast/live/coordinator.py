@@ -164,11 +164,16 @@ class LiveCoordinator:
     async def _publish(self, topic: str, event: LiveEvent) -> None:
         try:
             await self.broker.publish(topic, event)
-        except Exception:
+        # Brokers are user-extensible, so this boundary must contain arbitrary
+        # transport failures without exposing their potentially sensitive text.
+        except Exception as error:  # noqa: BLE001
             self.metrics.publish_error()
-            _LOGGER.exception(
+            _LOGGER.error(
                 "Live Resource publication failed; canonical cache state was invalidated",
-                extra={"fluxfast_live_event_type": event.type},
+                extra={
+                    "fluxfast_live_event_type": event.type,
+                    "fluxfast_live_error_type": type(error).__name__,
+                },
             )
         else:
             self.metrics.event_published(event.type)
