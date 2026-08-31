@@ -3,13 +3,14 @@
 import inspect
 import math
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .cache import MemoryResourceCache, ResourceCacheBackend
+from .contract import ResourceContract
 from .errors import FluxFastError, ProtocolError, ResourceError
 from .headers import HEADER_FLUXFAST, HEADER_PROTOCOL, is_fluxfast_request
 from .live import (
@@ -22,6 +23,9 @@ from .live import (
 )
 from .protocol import PROTOCOL_MEDIA_TYPE, PROTOCOL_VERSION, ErrorDetail, ErrorEnvelope
 from .router import FluxRouter
+from .schema_registry import SchemaRegistry
+
+T = TypeVar("T")
 
 
 class FluxFast:
@@ -52,6 +56,7 @@ class FluxFast:
             ):
                 raise ValueError(f"{name} must be a finite positive number")
         self.app = app
+        self.schema_registry = SchemaRegistry()
         self.cache = cache if cache is not None else MemoryResourceCache()
         self.live_metrics = LiveMetrics()
         configured_broker = (
@@ -74,6 +79,7 @@ class FluxFast:
         # Attach cache to FastAPI app state
         self.app.state.fluxfast_cache = self.cache
         self.app.state.fluxfast_debug = self.debug
+        self.app.state.fluxfast_schema_registry = self.schema_registry
         self.app.state.fluxfast_live = self.live
         self.app.state.fluxfast_live_metrics = self.live_metrics
         self.app.state.fluxfast_live_max_connection_age = self.live_max_connection_age
@@ -85,6 +91,11 @@ class FluxFast:
 
         # Shared router
         self.router = FluxRouter()
+
+    def define_resource(self, key: str, annotation: type[T]) -> ResourceContract[T]:
+        """Define the authoritative typed contract for a logical resource key."""
+
+        return self.schema_registry.define_resource(key, annotation)
 
     async def close(self) -> None:
         """Close live transport and an optionally closeable cache exactly once."""
