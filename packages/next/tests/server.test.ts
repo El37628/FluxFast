@@ -1,9 +1,27 @@
+import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HEADER_CAPABILITIES, serializeCapabilities } from "@fluxfast/core";
-import { buildFluxPath, fetchInitialEnvelope } from "../src/server";
+import {
+  buildFluxPath,
+  createFluxNextPage,
+  fetchInitialEnvelope,
+} from "../src/server";
 import { resolveInternalDestination } from "../src/link";
 
-afterEach(() => vi.unstubAllGlobals());
+const { headersMock, notFoundMock } = vi.hoisted(() => ({
+  headersMock: vi.fn(async () => new Headers()),
+  notFoundMock: vi.fn((): never => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
+}));
+
+vi.mock("next/headers", () => ({ headers: headersMock }));
+vi.mock("next/navigation", () => ({ notFound: notFoundMock }));
+
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("Next adapter paths", () => {
   it("advertises capabilities during the initial SSR request", async () => {
@@ -30,6 +48,44 @@ describe("Next adapter paths", () => {
 
   it("handles the optional catch-all root", () => {
     expect(buildFluxPath(undefined)).toBe("/");
+  });
+
+  it("resolves a not-found child before interrupting an async page", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ detail: "Not Found" }),
+      {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      }
+    )));
+    const page = createFluxNextPage({
+      backendUrl: "http://127.0.0.1:8000",
+      application: () => null,
+    });
+
+    const result = await page({ params: { flux: ["missing"] } });
+
+    expect(React.isValidElement(result)).toBe(true);
+    expect(notFoundMock).not.toHaveBeenCalled();
+    const NotFoundComponent = result.type as () => never;
+    expect(() => NotFoundComponent()).toThrow("NEXT_NOT_FOUND");
+    expect(notFoundMock).toHaveBeenCalledOnce();
+  });
+
+  it("preserves fetchInitialEnvelope not-found behavior", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ detail: "Not Found" }),
+      {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      }
+    )));
+
+    await expect(fetchInitialEnvelope({
+      backendUrl: "http://127.0.0.1:8000",
+      path: "/missing",
+    })).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(notFoundMock).toHaveBeenCalledOnce();
   });
 
   it("only normalizes same-origin application links", () => {
