@@ -11,6 +11,7 @@
     "typecheck": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm -r --if-present run typecheck",
     "test": "pnpm --filter @fluxfast/core run build && pnpm -r --if-present run test && pnpm test:release",
     "test:e2e": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --dir tests/browser/frontend run test:e2e",
+    "test:e2e:distributed": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --dir tests/browser/frontend run test:e2e:distributed",
     "test:e2e:production": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && FLUXFAST_BACKEND_URL=http://127.0.0.1:3111 pnpm --dir tests/browser/frontend run build && FLUXFAST_E2E_PRODUCTION=1 FLUXFAST_E2E_PORT=3110 FLUXFAST_E2E_BACKEND_PORT=3111 pnpm --dir tests/browser/frontend run test:e2e:production",
     "test:release": "node --test scripts/*.test.mjs",
     "test:consumer:init": "node scripts/test-next-init-consumer.mjs",

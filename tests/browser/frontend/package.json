@@ -10,6 +10,7 @@
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
     "test:e2e": "playwright test",
+    "test:e2e:distributed": "playwright test --config playwright.distributed.config.ts",
     "test:e2e:production": "playwright test e2e/live-flow.spec.ts --grep \"production build\""
   },
   "dependencies": {
