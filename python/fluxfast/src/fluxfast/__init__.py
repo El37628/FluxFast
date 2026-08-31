@@ -82,7 +82,7 @@ from .resource import ResourceLoader, ResourceSpec, resource
 from .router import FluxRouter
 from .scope import CacheScope, ScopeType, scope
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 __all__ = [
     "CAPABILITY_DEFERRED_RESOURCES",
