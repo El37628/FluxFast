@@ -69,6 +69,14 @@ async def load_counter() -> dict[str, int]:
     return {"value": int(raw_value)}
 
 
+async def load_analytics() -> dict[str, int]:
+    await state.incr(LOAD_COUNT_KEY)
+    raw_value = await state.get(STATE_KEY)
+    if raw_value is None:
+        raise RuntimeError("canonical analytics state is missing")
+    return {"visits": int(raw_value)}
+
+
 @flux.page("/counter")
 async def counter_page() -> Page:
     return Page(
@@ -80,6 +88,22 @@ async def counter_page() -> Page:
                 scope=scope.public(),
                 ttl=60,
                 live=True,
+            )
+        ],
+    )
+
+
+@flux.page("/analytics")
+async def analytics_page() -> Page:
+    return Page(
+        "analytics/index",
+        [
+            resource(
+                "analytics",
+                load_analytics,
+                scope=scope.tenant("org-1"),
+                ttl=60,
+                defer=True,
             )
         ],
     )
