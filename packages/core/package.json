@@ -1,6 +1,6 @@
 {
   "name": "@fluxfast/core",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "license": "MIT",
   "description": "Framework-neutral core client runtime for FluxFast",
   "repository": {
