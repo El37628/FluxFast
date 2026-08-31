@@ -5,6 +5,38 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-31
+
+### Added
+
+- Optional `RedisResourceCache` support for shared resource values across
+  FastAPI processes and hosts, with native Redis TTLs and independently
+  versioned cache entries.
+- Atomic distributed resource deletion, tag indexing and invalidation, and
+  bounded namespace-local clearing without `KEYS`, `FLUSHDB`, or `FLUSHALL`.
+- Redis cache metrics, strict availability errors, corrupt-entry recovery,
+  application lifecycle integration, and documented background publication
+  through `LiveCoordinator`.
+- Multi-worker, deferred, live, Redis restart, Redis 6–8 compatibility,
+  production-browser, clean built-package, and mixed-version release coverage.
+
+### Changed
+
+- Positive-TTL Live Resources can now remain coherent across workers when
+  `RedisResourceCache` is paired with `RedisLiveBroker`; application resource
+  declarations and browser APIs remain unchanged.
+- `FluxFast` now closes an owned closeable cache during application shutdown
+  while preserving externally injected client ownership.
+
+### Security
+
+- Redis cache namespaces are explicit and validated; logical resource and tag
+  identities are stored as opaque BLAKE2b digests, and cache payloads use
+  bounded, schema-versioned JSON rather than executable serialization.
+- Invalid or oversized stored payloads self-remove as cache misses, and Redis
+  cache/live diagnostics omit credential-bearing URLs, resource identities,
+  scopes, and cached values.
+
 ## [0.4.3] - 2026-08-31
 
 ### Fixed
@@ -117,7 +149,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.5.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
@@ -125,3 +157,4 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 [0.4.1]: https://github.com/El37628/FluxFast/releases/tag/v0.4.1
 [0.4.2]: https://github.com/El37628/FluxFast/releases/tag/v0.4.2
 [0.4.3]: https://github.com/El37628/FluxFast/releases/tag/v0.4.3
+[0.5.0]: https://github.com/El37628/FluxFast/releases/tag/v0.5.0
