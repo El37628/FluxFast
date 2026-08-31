@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_serializer
 
 from fluxfast import FluxFast, MemoryResourceCache, Page, resource, scope
 from fluxfast.engine import ResourceEngine
-from fluxfast.errors import ResourceError
+from fluxfast.errors import ResourceContractError
 from fluxfast.serialization import compute_version
 from fluxfast.timing import TimingMetrics
 
@@ -48,6 +48,14 @@ class CollectionShape(BaseModel):
     ordered: list[str]
     unordered: set[str]
     nested: dict[str, set[int]]
+
+
+class BrokenSerialization(BaseModel):
+    id: int
+
+    @field_serializer("id")
+    def serialize_id(self, value: int) -> int:
+        raise ValueError(f"could not serialize internal value {value}")
 
 
 async def resolve(
@@ -185,8 +193,33 @@ async def test_invalid_typed_loader_output_fails_resource_resolution() -> None:
         ],
     )
 
-    with pytest.raises(ResourceError, match="Error loading resource 'rooms'"):
+    with pytest.raises(ResourceContractError) as error:
         await resolve(page)
+
+    assert error.value.message == 'Resource "rooms" failed its declared contract.'
+    assert error.value.details == {
+        "rooms.0.id": [
+            "Input should be a valid integer, unable to parse string as an integer"
+        ]
+    }
+    assert "not-an-int" not in str(error.value.details)
+
+
+@pytest.mark.anyio
+async def test_typed_serialization_failure_uses_contract_error() -> None:
+    flux = FluxFast(FastAPI())
+    rooms = flux.define_resource("rooms", list[BrokenSerialization])
+    page = Page(
+        component="rooms/index",
+        resources=[resource(rooms, lambda: [{"id": 8675309}])],
+    )
+
+    with pytest.raises(ResourceContractError) as error:
+        await resolve(page)
+
+    assert error.value.message == 'Resource "rooms" failed its declared contract.'
+    assert error.value.details is not None
+    assert "could not serialize internal value" in str(error.value.details)
 
 
 @pytest.mark.anyio
@@ -235,7 +268,40 @@ async def test_typed_deferred_follow_up_uses_contract_validation() -> None:
     assert initial.deferred == ["rooms"]
     assert follow_up.resources == {}
     assert follow_up.errors["rooms"].model_dump() == {
-        "type": "ResourceError",
+        "type": "ResourceContractError",
         "message": "A deferred resource could not be resolved",
         "details": None,
+    }
+
+
+@pytest.mark.anyio
+async def test_typed_deferred_debug_error_includes_contract_field_paths() -> None:
+    flux = FluxFast(FastAPI())
+    rooms = flux.define_resource("rooms", list[Room])
+    page = Page(
+        component="rooms/index",
+        resources=[
+            resource(
+                rooms,
+                lambda: [{"id": "bad", "number": "101", "status": "available"}],
+                defer=True,
+            )
+        ],
+    )
+
+    follow_up = await resolve(
+        page,
+        only_keys={"rooms"},
+        client_supports_deferred=True,
+        debug=True,
+    )
+
+    assert follow_up.errors["rooms"].model_dump() == {
+        "type": "ResourceContractError",
+        "message": 'Resource "rooms" failed its declared contract.',
+        "details": {
+            "rooms.0.id": [
+                "Input should be a valid integer, unable to parse string as an integer"
+            ]
+        },
     }

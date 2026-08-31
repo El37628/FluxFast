@@ -20,6 +20,10 @@ class ResourceError(FluxFastError):
     """Raised when a resource loader fails during execution."""
 
 
+class ResourceContractError(ResourceError):
+    """Raised when a typed resource violates its declared contract."""
+
+
 class ResourceCacheError(FluxFastError):
     """Base error for configured resource-cache backend failures."""
 

@@ -8,7 +8,7 @@ from typing import Any
 import anyio
 
 from .cache import CachedResource, ResourceCacheBackend
-from .errors import ResourceError
+from .errors import ResourceContractError, ResourceError
 from .page import Page
 from .protocol import ResourceErrorDetail, ResourceWireRecord
 from .resource import ResourceSpec
@@ -112,6 +112,24 @@ class ResourceEngine:
                     if spec.defer and only_keys is not None:
                         metrics.deferred_resolved += 1
                     miss_results[spec.key] = (ver, wire_value, spec)
+                except ResourceContractError as error:
+                    if (
+                        spec.defer
+                        and client_supports_deferred
+                        and only_keys is not None
+                    ):
+                        metrics.deferred_errors += 1
+                        resource_errors[spec.key] = ResourceErrorDetail(
+                            type="ResourceContractError",
+                            message=(
+                                error.message
+                                if debug
+                                else "A deferred resource could not be resolved"
+                            ),
+                            details=error.details if debug else None,
+                        )
+                        return
+                    raise
                 except Exception as e:
                     if (
                         spec.defer
