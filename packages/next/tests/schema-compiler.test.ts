@@ -266,6 +266,39 @@ declare module "@fluxfast/core" {
     ).toThrow(/collides .* as TypeScript constant resourceKeys\.roomTypes/);
   });
 
+  it("handles prototype-sensitive resource and definition names from JSON", () => {
+    const input = JSON.parse(`{
+      "schema": "fluxfast-schema/1",
+      "producer": "0.6.0",
+      "fingerprint": "${fingerprint}",
+      "resources": {
+        "__proto__": {
+          "schema": {
+            "$defs": {
+              "__proto__": {
+                "title": "SafeModel",
+                "type": "object",
+                "properties": { "constructor": { "type": "string" } },
+                "required": ["constructor"]
+              }
+            },
+            "type": "array",
+            "items": { "$ref": "#/$defs/__proto__" }
+          }
+        }
+      },
+      "pages": [],
+      "mutations": []
+    }`);
+
+    const output = compileFluxFastResourceTypes(input);
+    expect(output).toContain('proto: "__proto__",');
+    expect(output).toContain("export interface SafeModel");
+    expect(output).toContain("constructor: string;");
+    expect(output).toContain("export type ProtoResource = SafeModel[];");
+    expectValidTypeScript(output);
+  });
+
   it("is deterministic and rejects normalized model collisions", () => {
     const input = manifest({
       beta: { schema: { type: "boolean" } },

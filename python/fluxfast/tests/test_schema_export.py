@@ -240,13 +240,21 @@ def test_export_does_not_execute_pages_loaders_dependencies_or_runtime_scopes() 
     flux = FluxFast(app)
     rooms = flux.define_resource("rooms", list[Summary])
     calls = {"page": 0, "loader": 0, "dependency": 0}
+    runtime_values = {
+        "secret": "session-secret-should-never-be-exported",
+        "cache": "tenant-cache-identifier-should-never-be-exported",
+        "scope": "private-tenant-id",
+        "redis": "redis://runtime-user:runtime-password@cache.internal:6379/4",
+    }
 
     def dependency() -> str:
         calls["dependency"] += 1
-        return "private-user-id"
+        return runtime_values["secret"]
 
     def loader() -> list[dict[str, int]]:
         calls["loader"] += 1
+        assert runtime_values["cache"]
+        assert runtime_values["redis"]
         return [{"total": 42}]
 
     @flux.page("/rooms")
@@ -258,7 +266,7 @@ def test_export_does_not_execute_pages_loaders_dependencies_or_runtime_scopes() 
                 resource(
                     rooms,
                     loader,
-                    scope=scope.tenant("private-tenant-id"),
+                    scope=scope.tenant(runtime_values["scope"]),
                     ttl=60,
                 )
             ],
@@ -270,8 +278,7 @@ def test_export_does_not_execute_pages_loaders_dependencies_or_runtime_scopes() 
 
     assert calls == {"page": 0, "loader": 0, "dependency": 0}
     assert list(manifest.resources) == ["rooms"]
-    assert "private-user-id" not in exported
-    assert "private-tenant-id" not in exported
+    assert all(value not in exported for value in runtime_values.values())
     assert "redis" not in exported.lower()
     assert all(route.path != "/.fluxfast/schema" for route in app.routes)
 

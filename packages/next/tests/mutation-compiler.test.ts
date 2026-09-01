@@ -242,6 +242,72 @@ mutations.updateRoom(router, {
     ).toThrow(/placeholder "missing" must have exactly one path parameter/);
   });
 
+  it("treats hostile mutation names, paths, and query keys as data", () => {
+    const queryName = 'q");globalThis.compromised=true;//';
+    const staticPath = '/rooms/";globalThis.compromised=true;/{room_id}';
+    const output = compileFluxFastMutations(
+      manifest([
+        {
+          ...updateRoom(),
+          name: 'update"); globalThis.compromised = true; //',
+          path: staticPath,
+          parameters: [
+            {
+              name: "room_id",
+              location: "path",
+              required: true,
+              schema: { type: "integer" }
+            },
+            {
+              name: queryName,
+              location: "query",
+              required: true,
+              schema: { type: "string" }
+            }
+          ]
+        }
+      ])
+    );
+    expect(output).toContain("updateGlobalThisCompromisedTrue:");
+
+    const consumer = `import type { FluxRouter } from "@fluxfast/core";
+import { mutations } from "./mutations.generated";
+
+declare const router: FluxRouter;
+mutations.updateGlobalThisCompromisedTrue(router, {
+  params: { room_id: 7 },
+  query: { ${JSON.stringify(queryName)}: "a&b" },
+  body: { status: "available" }
+});
+`;
+    const stdout = compileAndRun(
+      output,
+      consumer,
+      `globalThis.compromised = false;
+const calls = [];
+const router = {
+  mutate(url, data, options) {
+    calls.push([url, data, options]);
+    return Promise.resolve({ protocol: "fluxfast/1", mutation: {} });
+  }
+};
+mutations.updateGlobalThisCompromisedTrue(router, {
+  params: { room_id: 7 },
+  query: { [${JSON.stringify(queryName)}]: "a&b" },
+  body: { status: "available" }
+}).then(() => process.stdout.write(JSON.stringify([calls, globalThis.compromised])));`
+    );
+    const query = new URLSearchParams([[queryName, "a&b"]]).toString();
+    expect(JSON.parse(stdout)).toEqual([
+      [[
+        `${staticPath.replace("{room_id}", "7")}?${query}`,
+        { status: "available" },
+        { method: "PATCH" }
+      ]],
+      false
+    ]);
+  });
+
   it("generates a valid empty module when no typed JSON bodies exist", () => {
     const output = compileFluxFastMutations(
       manifest([
