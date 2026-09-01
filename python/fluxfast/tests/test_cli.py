@@ -18,11 +18,13 @@ from fluxfast.cli import (
     _load_schema_app,
     _type_generation_command,
     main,
+    run_build,
     run_dev,
     run_schema,
     run_types,
 )
 from fluxfast.production import (
+    ProductionBuildError,
     ProductionBuildMissingError,
     ProductionChildError,
     ProductionConfig,
@@ -409,3 +411,109 @@ def test_start_command_maps_invalid_configuration_to_exit_code_2(
 ) -> None:
     assert main(["start", "backend:app", "--workers", "0"]) == 2
     assert "workers must be an integer" in capsys.readouterr().err
+
+
+def test_build_validates_generated_files_before_package_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frontend = tmp_path / "frontend"
+    observed: list[object] = []
+    monkeypatch.setattr(
+        "fluxfast.cli.resolve_build_frontend",
+        lambda received: observed.append(("resolve", received)) or frontend,
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.check_frontend_command",
+        lambda received, command: observed.append(("check", received, command)),
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.run_frontend_build",
+        lambda received: observed.append(("build", received)) or 7,
+    )
+
+    assert run_build(frontend=Path("web")) == 7
+    assert observed == [
+        ("resolve", Path("web")),
+        ("check", frontend, "init"),
+        ("check", frontend, "generate"),
+        ("build", frontend),
+    ]
+
+
+def test_build_with_app_uses_strict_backend_contract_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frontend = tmp_path / "frontend"
+    observed: list[object] = []
+    monkeypatch.setattr(
+        "fluxfast.cli.resolve_build_frontend",
+        lambda _received: frontend,
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.check_frontend_command",
+        lambda received, command: observed.append(("check", received, command)),
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.run_types",
+        lambda app, *, frontend, check: observed.append(
+            ("types", app, frontend, check)
+        )
+        or 0,
+    )
+    monkeypatch.setattr("fluxfast.cli.run_frontend_build", lambda _frontend: 0)
+
+    assert run_build(frontend=frontend, app_import="backend:app") == 0
+    assert observed == [
+        ("check", frontend, "init"),
+        ("types", "backend:app", frontend, True),
+    ]
+
+
+def test_build_rejects_backend_contract_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "fluxfast.cli.resolve_build_frontend",
+        lambda _received: tmp_path,
+    )
+    monkeypatch.setattr("fluxfast.cli.check_frontend_command", lambda *_args: None)
+    monkeypatch.setattr("fluxfast.cli.run_types", lambda *args, **kwargs: 6)
+
+    with pytest.raises(ProductionBuildError, match="status 6"):
+        run_build(frontend=tmp_path, app_import="backend:app")
+
+
+def test_build_parser_forwards_frontend_and_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def run(*, frontend: Path | None, app_import: str | None) -> int:
+        observed.update(frontend=frontend, app_import=app_import)
+        return 0
+
+    monkeypatch.setattr("fluxfast.cli.run_build", run)
+
+    assert main(
+        ["build", "--frontend", "web", "--app", "backend.main:app"]
+    ) == 0
+    assert observed == {
+        "frontend": Path("web"),
+        "app_import": "backend.main:app",
+    }
+
+
+def test_build_validation_failure_uses_exit_code_3(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail(**_kwargs: object) -> int:
+        raise ProductionBuildError("generated files are stale")
+
+    monkeypatch.setattr("fluxfast.cli.run_build", fail)
+
+    assert main(["build"]) == 3
+    assert "generated files are stale" in capsys.readouterr().err

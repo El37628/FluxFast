@@ -9,6 +9,8 @@ import pytest
 from fluxfast.production import ProductionFrontendError
 from fluxfast.production.frontend import (
     detect_package_manager,
+    package_manager_exec_command,
+    package_manager_run_command,
     production_frontend_command,
 )
 
@@ -124,3 +126,55 @@ def test_production_frontend_command_rejects_unavailable_manager(
 
     with pytest.raises(ProductionFrontendError, match="Could not find 'pnpm'"):
         production_frontend_command(tmp_path, "127.0.0.1", 3000)
+
+
+@pytest.mark.parametrize(
+    ("manager", "expected_prefix"),
+    [
+        ("npm", ["/tools/npm", "exec", "--no", "--"]),
+        ("pnpm", ["/tools/pnpm", "exec"]),
+        ("yarn", ["/tools/yarn", "exec"]),
+        ("bun", ["/tools/bun", "x", "--no-install"]),
+    ],
+)
+def test_package_manager_exec_never_uses_download_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+    expected_prefix: list[str],
+) -> None:
+    (tmp_path / "package.json").write_text(
+        f'{{"packageManager":"{manager}@1.2.3"}}\n',
+        encoding="utf8",
+    )
+    monkeypatch.setattr(
+        "fluxfast.production.frontend.shutil.which",
+        lambda name: f"/tools/{name}",
+    )
+
+    assert package_manager_exec_command(
+        tmp_path,
+        "fluxfast",
+        "init",
+        "--check",
+    ) == [*expected_prefix, "fluxfast", "init", "--check"]
+
+
+def test_package_manager_build_script_has_no_argument_separator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"scripts":{"build":"next build"}}\n',
+        encoding="utf8",
+    )
+    monkeypatch.setattr(
+        "fluxfast.production.frontend.shutil.which",
+        lambda name: f"/tools/{name}",
+    )
+
+    assert package_manager_run_command(tmp_path, "build") == [
+        "/tools/npm",
+        "run",
+        "build",
+    ]
