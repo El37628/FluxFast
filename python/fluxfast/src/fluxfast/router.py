@@ -398,6 +398,18 @@ class FluxRouter(APIRouter):
                 return result
 
             mutation_wrapper.__signature__ = wrapper_sig  # type: ignore
+            normalized_methods = tuple(
+                sorted({method.upper() for method in methods})
+            )
+            mark_fluxfast_route(
+                mutation_wrapper,
+                FluxRouteMetadata(
+                    kind="mutation",
+                    name=kwargs.get("name") or func.__name__,
+                    path=path,
+                    methods=normalized_methods,
+                ),
+            )
 
             self.add_api_route(
                 path,

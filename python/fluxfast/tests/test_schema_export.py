@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Literal
 
 import pytest
-from fastapi import Depends, FastAPI, Query
+from fastapi import Body, Depends, FastAPI, Query
 from pydantic import BaseModel, Field, field_serializer
 
 from fluxfast import FluxFast, FluxRouter, Page, resource, scope
@@ -33,6 +33,11 @@ class Summary(BaseModel):
 class RoomStatus(str, Enum):
     AVAILABLE = "available"
     OCCUPIED = "occupied"
+
+
+class UpdateRoom(BaseModel):
+    status: RoomStatus
+    note: str | None = Field(default=None, validation_alias="inputNote")
 
 
 def test_export_uses_pydantic_serialization_mode_wire_schema() -> None:
@@ -241,6 +246,139 @@ def test_page_metadata_changes_manifest_fingerprint() -> None:
     @second.page("/rooms/{room_id}", name="rooms")
     async def second_rooms(room_id: str) -> Page:
         return Page(component="rooms/index", meta={"room": room_id})
+
+    first_manifest = build_app_schema_manifest(first_app, producer="0.6.0")
+    second_manifest = build_app_schema_manifest(second_app, producer="0.6.0")
+
+    assert first_manifest.fingerprint != second_manifest.fingerprint
+
+
+def test_app_export_includes_typed_json_mutation_metadata_without_execution() -> None:
+    app = FastAPI()
+    flux = FluxFast(app)
+    calls = {"mutation": 0, "dependency": 0}
+
+    def filters_dependency(dry_run: bool = False) -> None:
+        calls["dependency"] += 1
+
+    @flux.mutation(
+        "/rooms/{room_id}",
+        methods=["PATCH"],
+        name="update_room",
+        include_in_schema=False,
+    )
+    async def update_room(
+        room_id: int,
+        payload: UpdateRoom,
+        notify: bool = True,
+        filters: None = Depends(filters_dependency),
+    ) -> dict[str, bool]:
+        calls["mutation"] += 1
+        return {"ok": True}
+
+    manifest = build_app_schema_manifest(app, producer="0.6.0")
+
+    assert calls == {"mutation": 0, "dependency": 0}
+    assert len(manifest.mutations) == 1
+    mutation = manifest.mutations[0]
+    assert (mutation.name, mutation.path, mutation.method) == (
+        "update_room",
+        "/rooms/{room_id}",
+        "PATCH",
+    )
+    assert [
+        (parameter.location, parameter.name, parameter.required)
+        for parameter in mutation.parameters
+    ] == [
+        ("path", "room_id", True),
+        ("query", "dry_run", False),
+        ("query", "notify", False),
+    ]
+    assert mutation.body_schema is not None
+    assert mutation.body_schema["type"] == "object"
+    assert mutation.body_schema["required"] == ["status"]
+    assert "inputNote" in mutation.body_schema["properties"]
+    assert "note" not in mutation.body_schema["properties"]
+
+
+def test_app_export_splits_multi_method_mutations_and_resolves_router_prefixes() -> None:
+    app = FastAPI()
+    FluxFast(app)
+    router = FluxRouter(prefix="/workspace")
+
+    @router.mutation(
+        "/rooms/{room_id}",
+        methods=["PUT", "PATCH", "POST"],
+        name="save_room",
+    )
+    async def save_room(room_id: int, payload: UpdateRoom) -> dict[str, int]:
+        return {"room_id": room_id}
+
+    app.include_router(router, prefix="/api")
+
+    manifest = build_app_schema_manifest(app, producer="0.6.0")
+
+    assert [
+        (mutation.name, mutation.path, mutation.method)
+        for mutation in manifest.mutations
+    ] == [
+        ("save_room", "/api/workspace/rooms/{room_id}", "PATCH"),
+        ("save_room", "/api/workspace/rooms/{room_id}", "POST"),
+        ("save_room", "/api/workspace/rooms/{room_id}", "PUT"),
+    ]
+
+
+def test_app_export_omits_non_json_mutation_body_metadata() -> None:
+    app = FastAPI()
+    flux = FluxFast(app)
+
+    @flux.mutation("/notes", name="save_note")
+    async def save_note(
+        note: str = Body(media_type="text/plain"),
+    ) -> dict[str, str]:
+        return {"note": note}
+
+    manifest = build_app_schema_manifest(app, producer="0.6.0")
+
+    assert len(manifest.mutations) == 1
+    assert manifest.mutations[0].body_schema is None
+
+
+def test_app_export_uses_fastapi_combined_json_body_shape() -> None:
+    app = FastAPI()
+    flux = FluxFast(app)
+
+    @flux.mutation("/rooms", name="create_room")
+    async def create_room(
+        number: int = Body(),
+        status: RoomStatus = Body(),
+    ) -> dict[str, int]:
+        return {"number": number}
+
+    manifest = build_app_schema_manifest(app, producer="0.6.0")
+
+    body = manifest.mutations[0].body_schema
+    assert body is not None
+    assert body["type"] == "object"
+    assert body["required"] == ["number", "status"]
+    assert body["properties"]["number"] == {"title": "Number", "type": "integer"}
+    assert body["properties"]["status"]["$ref"] == "#/$defs/RoomStatus"
+
+
+def test_mutation_metadata_changes_manifest_fingerprint() -> None:
+    first_app = FastAPI()
+    first = FluxFast(first_app)
+
+    @first.mutation("/rooms/{room_id}", methods=["PATCH"], name="update_room")
+    async def first_update(room_id: int, payload: UpdateRoom) -> dict[str, int]:
+        return {"room_id": room_id}
+
+    second_app = FastAPI()
+    second = FluxFast(second_app)
+
+    @second.mutation("/rooms/{room_id}", methods=["PUT"], name="update_room")
+    async def second_update(room_id: int, payload: UpdateRoom) -> dict[str, int]:
+        return {"room_id": room_id}
 
     first_manifest = build_app_schema_manifest(first_app, producer="0.6.0")
     second_manifest = build_app_schema_manifest(second_app, producer="0.6.0")
