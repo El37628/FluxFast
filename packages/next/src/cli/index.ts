@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import {
   checkFluxFastProject,
   generateFluxFastProject,
@@ -33,7 +35,7 @@ const defaultIo: CliIo = {
 const USAGE = `Usage:
   fluxfast init [--dry-run] [--yes] [--force]
   fluxfast init --check
-  fluxfast generate [--check]
+  fluxfast generate [--check] [--schema-file PATH]
   fluxfast doctor
   fluxfast --help`;
 
@@ -243,13 +245,33 @@ function runDoctor(args: string[], io: CliIo): number {
 }
 
 function runGenerate(args: string[], io: CliIo): number {
-  const unknown = args.find(argument => argument !== "--check");
-  if (unknown) {
-    io.stderr(`Unknown option: ${unknown}\n\n${USAGE}`);
-    return 2;
-  }
-  if (args.length > 1) {
-    io.stderr(`--check may only be provided once.\n\n${USAGE}`);
+  let check = false;
+  let schemaSourceFile: string | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--check") {
+      if (check) {
+        io.stderr(`--check may only be provided once.\n\n${USAGE}`);
+        return 2;
+      }
+      check = true;
+      continue;
+    }
+    if (argument === "--schema-file") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        io.stderr(`--schema-file requires a path.\n\n${USAGE}`);
+        return 2;
+      }
+      if (schemaSourceFile !== undefined) {
+        io.stderr(`--schema-file may only be provided once.\n\n${USAGE}`);
+        return 2;
+      }
+      schemaSourceFile = path.resolve(io.cwd, value);
+      index += 1;
+      continue;
+    }
+    io.stderr(`Unknown option: ${argument}\n\n${USAGE}`);
     return 2;
   }
   const project = detectFluxProject(io.cwd);
@@ -258,21 +280,31 @@ function runGenerate(args: string[], io: CliIo): number {
     outputFile: project.registryPath,
     generatedDir: project.generatedDir,
     log: false,
+    schemaContent: schemaSourceFile === undefined
+      ? undefined
+      : fs.readFileSync(schemaSourceFile, "utf8"),
   };
 
-  if (args[0] === "--check") {
+  if (check) {
     const result = checkFluxFastProject(options);
     if (result.current) {
       io.stdout("✓ Generated FluxFast files are current.");
       return 0;
     }
     io.stdout(
-      "✗ Generated FluxFast types are out of date.\n\nRun:\n\n  npx fluxfast generate"
+      schemaSourceFile === undefined
+        ? "✗ Generated FluxFast types are out of date.\n\nRun:\n\n  npx fluxfast generate"
+        : "✗ Generated FluxFast types are out of date.\n\nRerun the full-stack type generation command without --check."
     );
     return 1;
   }
 
   const result = generateFluxFastProject(options);
+  if (schemaSourceFile !== undefined && result.schemaFile) {
+    io.stdout(
+      `✓ Generated FluxFast schema at ${relativeProjectPath(project, result.schemaFile).replace(/\\/g, "/")}`
+    );
+  }
   io.stdout(
     `✓ Generated FluxFast registry at ${relativeProjectPath(project, project.registryPath).replace(/\\/g, "/")}`
   );

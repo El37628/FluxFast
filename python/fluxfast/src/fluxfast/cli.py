@@ -11,6 +11,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +46,43 @@ class SchemaCommandError(RuntimeError):
     """Raised when an application schema cannot be loaded or exported."""
 
 
+class TypeGenerationError(RuntimeError):
+    """Raised when full-stack type generation cannot be started."""
+
+
+_PACKAGE_MANAGER_CANDIDATES = (
+    ("pnpm-lock.yaml", "pnpm"),
+    ("yarn.lock", "yarn"),
+    ("bun.lock", "bun"),
+    ("bun.lockb", "bun"),
+    ("package-lock.json", "npm"),
+)
+
+
+def _frontend_package_manager(frontend: Path) -> str:
+    manager = next(
+        (
+            name
+            for lockfile, name in _PACKAGE_MANAGER_CANDIDATES
+            if (frontend / lockfile).exists()
+        ),
+        None,
+    )
+    if manager is None:
+        try:
+            manifest = json.loads(
+                (frontend / "package.json").read_text(encoding="utf8")
+            )
+        except (OSError, json.JSONDecodeError):
+            manifest = {}
+        declared_manager = manifest.get("packageManager")
+        if isinstance(declared_manager, str):
+            candidate = declared_manager.split("@", 1)[0]
+            if candidate in {name for _lock, name in _PACKAGE_MANAGER_CANDIDATES}:
+                manager = candidate
+    return manager or "npm"
+
+
 def _available_port(host: str) -> int:
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as sock:
@@ -53,25 +91,7 @@ def _available_port(host: str) -> int:
 
 
 def _frontend_command(frontend: Path, host: str, port: int) -> list[str]:
-    candidates = (
-        ("pnpm-lock.yaml", "pnpm"),
-        ("yarn.lock", "yarn"),
-        ("bun.lock", "bun"),
-        ("bun.lockb", "bun"),
-        ("package-lock.json", "npm"),
-    )
-    manager = next((name for lock, name in candidates if (frontend / lock).exists()), None)
-    if manager is None:
-        try:
-            manifest = json.loads((frontend / "package.json").read_text(encoding="utf8"))
-        except (OSError, json.JSONDecodeError):
-            manifest = {}
-        declared_manager = manifest.get("packageManager")
-        if isinstance(declared_manager, str):
-            candidate = declared_manager.split("@", 1)[0]
-            if candidate in {name for _lock, name in candidates}:
-                manager = candidate
-    manager = manager or "npm"
+    manager = _frontend_package_manager(frontend)
     if shutil.which(manager) is None:
         raise DevServerError(
             f"Could not find '{manager}' on PATH for frontend directory {frontend}"
@@ -87,6 +107,35 @@ def _frontend_command(frontend: Path, host: str, port: int) -> list[str]:
         "--port",
         str(port),
     ]
+
+
+def _type_generation_command(
+    frontend: Path,
+    schema_file: Path,
+    *,
+    check: bool,
+) -> list[str]:
+    manager = _frontend_package_manager(frontend)
+    if shutil.which(manager) is None:
+        raise TypeGenerationError(
+            f"Could not find '{manager}' on PATH for frontend directory {frontend}"
+        )
+    prefix = {
+        "npm": ["npm", "exec", "--no", "--"],
+        "pnpm": ["pnpm", "exec"],
+        "yarn": ["yarn", "exec"],
+        "bun": ["bun", "x", "--no-install"],
+    }[manager]
+    command = [
+        *prefix,
+        "fluxfast",
+        "generate",
+        "--schema-file",
+        str(schema_file),
+    ]
+    if check:
+        command.append("--check")
+    return command
 
 
 def _process_kwargs() -> dict[str, object]:
@@ -285,6 +334,30 @@ def run_schema(
     return 0
 
 
+def run_types(
+    app_import: str,
+    *,
+    frontend: Path,
+    check: bool = False,
+) -> int:
+    """Export the backend schema and compose it with frontend generation."""
+
+    frontend = frontend.resolve()
+    if not (frontend / "package.json").is_file():
+        raise TypeGenerationError(
+            f"No package.json found in frontend directory {frontend}"
+        )
+
+    app = _load_schema_app(app_import)
+    manifest_text = _schema_manifest_text(app)
+    with tempfile.TemporaryDirectory(prefix="fluxfast-types-") as directory:
+        schema_file = Path(directory) / "schema.generated.json"
+        schema_file.write_text(manifest_text, encoding="utf8")
+        command = _type_generation_command(frontend, schema_file, check=check)
+        result = subprocess.run(command, cwd=frontend, check=False)
+    return int(result.returncode)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fluxfast")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -319,6 +392,21 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="exit non-zero when the output manifest is missing or stale",
     )
+
+    types = subparsers.add_parser(
+        "types",
+        help="export the backend schema and generate frontend TypeScript",
+    )
+    types.add_argument(
+        "app",
+        help="FastAPI application import, for example backend:app",
+    )
+    types.add_argument("--frontend", type=Path, default=Path.cwd())
+    types.add_argument(
+        "--check",
+        action="store_true",
+        help="check the schema and generated frontend files without writing",
+    )
     return parser
 
 
@@ -351,6 +439,16 @@ def main(argv: list[str] | None = None) -> int:
                 check=args.check,
             )
         except (SchemaCommandError, OSError) as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 1
+    if args.command == "types":
+        try:
+            return run_types(
+                args.app,
+                frontend=args.frontend,
+                check=args.check,
+            )
+        except (SchemaCommandError, TypeGenerationError, OSError) as error:
             print(f"[fluxfast] {error}", file=sys.stderr)
             return 1
     return 1

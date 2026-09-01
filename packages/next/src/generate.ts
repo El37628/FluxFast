@@ -21,6 +21,8 @@ export interface PagesRegistrySnapshot {
 
 export interface FluxFastGenerationOptions extends GenerateOptions {
   generatedDir?: string;
+  /** Manifest content to validate and persist at `schemaFile`. */
+  schemaContent?: string;
   schemaFile?: string;
 }
 
@@ -48,6 +50,7 @@ interface FluxFastProjectSnapshot {
   generatedDir: string;
   pagesDir: string;
   registryPath: string;
+  schemaContent?: string;
   schemaFile?: string;
 }
 
@@ -158,15 +161,18 @@ function createFluxFastProjectSnapshot(
   const candidateSchemaFile = path.resolve(
     options.schemaFile ?? path.join(generatedDir, "schema.generated.json")
   );
-  const hasSchema = fs.existsSync(candidateSchemaFile);
+  const schemaContent = options.schemaContent ?? (
+    fs.existsSync(candidateSchemaFile)
+      ? fs.readFileSync(candidateSchemaFile, "utf8")
+      : undefined
+  );
+  const hasSchema = schemaContent !== undefined;
   const artifacts: FluxFastGeneratedArtifact[] = [
     { path: registry.outputFile, content: registry.content }
   ];
 
   if (hasSchema) {
-    const manifest = parseFluxFastSchemaManifest(
-      fs.readFileSync(candidateSchemaFile, "utf8")
-    );
+    const manifest = parseFluxFastSchemaManifest(schemaContent);
     artifacts.push(
       {
         path: path.join(generatedDir, "types.generated.ts"),
@@ -188,6 +194,7 @@ function createFluxFastProjectSnapshot(
     generatedDir,
     pagesDir: registry.pagesDir,
     registryPath: registry.outputFile,
+    schemaContent: options.schemaContent,
     schemaFile: hasSchema ? candidateSchemaFile : undefined
   };
 }
@@ -201,6 +208,10 @@ export function generateFluxFastProject(
   // Compile every artifact before writing any of them so an invalid manifest
   // cannot leave the generated directory partially updated.
   fs.mkdirSync(snapshot.pagesDir, { recursive: true });
+  if (snapshot.schemaContent !== undefined && snapshot.schemaFile) {
+    fs.mkdirSync(path.dirname(snapshot.schemaFile), { recursive: true });
+    fs.writeFileSync(snapshot.schemaFile, snapshot.schemaContent, "utf8");
+  }
   for (const artifact of snapshot.artifacts) {
     fs.mkdirSync(path.dirname(artifact.path), { recursive: true });
     fs.writeFileSync(artifact.path, artifact.content, "utf8");
@@ -223,6 +234,7 @@ export function checkFluxFastProject(
   options: FluxFastGenerationOptions = {}
 ): FluxFastGenerationCheckResult {
   const snapshot = createFluxFastProjectSnapshot(options);
+  const checkedFiles = snapshot.artifacts.map(artifact => artifact.path);
   const staleFiles = snapshot.artifacts
     .filter(artifact => {
       try {
@@ -232,9 +244,21 @@ export function checkFluxFastProject(
       }
     })
     .map(artifact => artifact.path);
+  if (snapshot.schemaContent !== undefined && snapshot.schemaFile) {
+    checkedFiles.unshift(snapshot.schemaFile);
+    try {
+      if (
+        fs.readFileSync(snapshot.schemaFile, "utf8") !== snapshot.schemaContent
+      ) {
+        staleFiles.unshift(snapshot.schemaFile);
+      }
+    } catch {
+      staleFiles.unshift(snapshot.schemaFile);
+    }
+  }
 
   return {
-    checkedFiles: snapshot.artifacts.map(artifact => artifact.path),
+    checkedFiles,
     current: staleFiles.length === 0,
     registryPath: snapshot.registryPath,
     schemaFile: snapshot.schemaFile,
