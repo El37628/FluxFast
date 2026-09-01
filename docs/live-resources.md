@@ -10,13 +10,16 @@ from fastapi import Depends
 from fluxfast import Page, resource, scope
 
 
+NOTIFICATIONS = flux.define_resource("notifications", list[Notification])
+
+
 @flux.page("/dashboard")
 async def dashboard(user=Depends(current_user)):
     return Page(
         component="dashboard/index",
         resources=[
             resource(
-                "notifications",
+                NOTIFICATIONS,
                 lambda: load_notifications(user.id),
                 scope=scope.user(user.id),
                 ttl=30,
@@ -30,9 +33,10 @@ async def dashboard(user=Depends(current_user)):
 "use client";
 
 import { useResource } from "@fluxfast/next";
+import { resourceKeys } from "@/.fluxfast/types.generated";
 
 export default function DashboardPage() {
-  const notifications = useResource<Notification[]>("notifications");
+  const notifications = useResource(resourceKeys.notifications);
   return <NotificationList items={notifications} />;
 }
 ```
@@ -41,6 +45,12 @@ When another request invalidates that same scoped resource, connected clients
 mark their current value stale, request only the resource from the canonical
 FastAPI page, and render the fresh loader result. There is no polling, page
 reload, duplicate endpoint, or custom browser event handler.
+
+The optional `ResourceContract` adds Pydantic validation at the server wire
+boundary and generated hook inference at build time. It does not change live
+scope authorization, broker topics, invalidation, or the browser protocol.
+String-key live resources and explicit hook generics remain supported. See
+[typed resource contracts and code generation](type-safety.md).
 
 ## How synchronization works
 
@@ -215,8 +225,10 @@ startup and close them during worker shutdown.
 `defer=True` and `live=True` compose on one resource:
 
 ```python
+ACTIVITY = flux.define_resource("activity", list[ActivityItem])
+
 resource(
-    "activity",
+    ACTIVITY,
     lambda: load_activity(organization.id),
     scope=scope.tenant(organization.id),
     ttl=10,
@@ -226,7 +238,7 @@ resource(
 ```
 
 ```tsx
-const activity = useDeferredResource<Activity[]>("activity");
+const activity = useDeferredResource(resourceKeys.activity);
 ```
 
 The live stream can connect while the deferred loader is pending. A newer live,

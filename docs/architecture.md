@@ -55,6 +55,29 @@ Redis adds no browser capability or wire field. A shared warm entry can be read
 through any worker. Simultaneous cold misses may still execute several loaders;
 v0.5 deliberately does not add a distributed loader lease.
 
+Typed resource contracts add a developer-tooling path without changing either
+runtime protocol:
+
+```text
+FastAPI-owned ResourceContract + registered page/mutation metadata
+          ↓ offline export; application handlers are not executed
+fluxfast-schema/1 manifest + deterministic fingerprint
+          ↓ validated Node compilation
+generated resource types, keys, routes, mutations, and page registry
+          ↓ TypeScript module augmentation
+@fluxfast/core FluxResourceMap → adapter hook inference
+```
+
+The Python application remains the source of truth. On a typed resource cache
+miss, Pydantic validates and serializes the loader value before versioning and
+caching; the exported schema describes that same JSON wire representation.
+The manifest is a build-time artifact, not a production endpoint. It is
+versioned independently from both the `fluxfast/1` browser envelope and the
+internal Redis cache encoding, so typed generation requires no browser
+capability or runtime schema delivery. See [typed resource contracts and code
+generation](type-safety.md) and
+[ADR-0006](decisions/0006-typed-resource-contracts.md).
+
 ## Blocking and deferred resource flow
 
 A page may divide its resource graph without changing ownership:
@@ -175,8 +198,11 @@ application route and resource definition.
 
 `@fluxfast/core` has no React or Next.js imports. The Next adapter supplies
 React external-store hooks, normal-anchor link interception, server bootstrap,
-and generated component resolution. This keeps future frontend adapters from
-depending on Next-specific behavior.
+generated component resolution, and the current TypeScript schema compiler.
+Generated resource types augment the framework-neutral `FluxResourceMap`; the
+core package does not import Pydantic, generated application modules, React, or
+Next.js. This keeps future frontend adapters from depending on Next-specific
+behavior.
 
 The in-memory backend resource cache is per process. Its cache misses do not
 cross an isolation boundary, but scoped invalidation deletes only the current
