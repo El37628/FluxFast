@@ -1,10 +1,13 @@
 """Internal production runtime support for FluxFast applications."""
 
 from .config import ProductionConfig, ProductionConfigError, resolve_production_config
+from .errors import (
+    ProductionBuildMissingError,
+    ProductionFrontendError,
+    ProductionValidationError,
+)
 from .process import ManagedProcess, ManagedProcessError
 from .runtime import (
-    ProductionBuildMissingError,
-    ProductionValidationError,
     create_production_supervisor,
     run_production,
 )
@@ -24,6 +27,7 @@ __all__ = [
     "ProductionChildError",
     "ProductionConfig",
     "ProductionConfigError",
+    "ProductionFrontendError",
     "ProductionStartupError",
     "ProductionSupervisor",
     "ProductionSupervisorError",
