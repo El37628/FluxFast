@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fluxfast"
-version = "0.5.0"
+version = "0.6.0"
 description = "High-performance server-driven application runtime for FastAPI"
 readme = "README.md"
 requires-python = ">=3.11"

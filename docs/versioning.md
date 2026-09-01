@@ -92,8 +92,8 @@ contracts and code generation](type-safety.md) for the build-time workflow and
 Add user-facing entries beneath `Unreleased`, then run:
 
 ```bash
-pnpm release:prepare 0.2.0
-pnpm release:check v0.2.0
+pnpm release:prepare 0.6.0
+pnpm release:check v0.6.0
 ```
 
 The preparation command synchronizes every package manifest, the Python runtime
