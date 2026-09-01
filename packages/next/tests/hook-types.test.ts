@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { compileFluxFastResourceTypes } from "../src/schema-compiler";
 
 describe("generated resource hook types", () => {
   it("infers registered keys while preserving dynamic and explicit types", () => {
@@ -13,23 +14,38 @@ describe("generated resource hook types", () => {
 
     fs.writeFileSync(
       generatedFile,
-      `import type {} from "@fluxfast/core";
-
-export interface Room {
-  id: number;
-}
-
-export interface Analytics {
-  revenue: number;
-}
-
-declare module "@fluxfast/core" {
-  interface FluxResourceMap {
-    rooms: Room[];
-    analytics: Analytics;
-  }
-}
-`,
+      compileFluxFastResourceTypes({
+        schema: "fluxfast-schema/1",
+        producer: "0.6.0",
+        fingerprint: "f".repeat(64),
+        resources: {
+          rooms: {
+            schema: {
+              type: "array",
+              items: { $ref: "#/$defs/Room" },
+              $defs: {
+                Room: {
+                  type: "object",
+                  properties: {
+                    id: { type: "integer" },
+                    number: { type: "string" }
+                  },
+                  required: ["id", "number"]
+                }
+              }
+            }
+          },
+          analytics: {
+            schema: {
+              type: "object",
+              properties: { revenue: { type: "number" } },
+              required: ["revenue"]
+            }
+          }
+        },
+        pages: [],
+        mutations: []
+      }),
       "utf8"
     );
     fs.writeFileSync(
@@ -69,7 +85,7 @@ type StateContract = Assert<Equal<
 >>;
 type DeferredContract = Assert<Equal<
   typeof analytics,
-  DeferredResourceResult<import("./types.generated").Analytics>
+  DeferredResourceResult<import("./types.generated").AnalyticsResource>
 >>;
 type DynamicContract = Assert<Equal<typeof dynamic, unknown>>;
 type DynamicStateContract = Assert<Equal<
@@ -90,8 +106,21 @@ type ExplicitDeferredContract = Assert<Equal<
   DeferredResourceResult<ManualResource>
 >>;
 
+rooms[0].number.toUpperCase();
+roomsState.data?.[0].number.toUpperCase();
+analytics.data?.revenue.toFixed(2);
+explicit.label.toUpperCase();
+explicitState.data?.label.toUpperCase();
+explicitDeferred.data?.label.toUpperCase();
+
 // @ts-expect-error inferred room identifiers are numeric
 rooms[0].id = "wrong";
+// @ts-expect-error inferred room records reject fields absent from the contract
+rooms[0].nonexistent;
+// @ts-expect-error resource state data retains the generated room contract
+roomsState.data?.[0].nonexistent;
+// @ts-expect-error deferred data retains the generated analytics contract
+analytics.data?.nonexistent;
 // @ts-expect-error unknown dynamic resources must be narrowed or explicitly typed
 dynamic.label;
 
