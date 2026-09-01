@@ -96,6 +96,10 @@ describe("FluxFast JSON Schema compiler", () => {
 
 import type {} from "@fluxfast/core";
 
+export const resourceKeys = {
+  rooms: "rooms",
+} as const;
+
 export interface Room {
   createdAt?: string;
   id: number;
@@ -156,6 +160,10 @@ declare module "@fluxfast/core" {
     );
     expect(output).toContain("settings: SettingsResource;");
     expect(output).toContain("totals: TotalsResource;");
+    expect(output).toContain(`export const resourceKeys = {
+  settings: "settings",
+  totals: "totals",
+} as const;`);
     expect(output).not.toContain("any");
   });
 
@@ -233,7 +241,32 @@ declare module "@fluxfast/core" {
     ).toThrow(/only local \$defs references are supported/);
   });
 
-  it("is deterministic and rejects normalized resource and model collisions", () => {
+  it("generates safe camel-cased keys and rejects normalized collisions", () => {
+    const output = compileFluxFastResourceTypes(
+      manifest({
+        "room-types": { schema: { type: "string" } },
+        "unsafe key; globalThis.compromised = true": {
+          schema: { type: "number" }
+        }
+      })
+    );
+    expect(output).toContain('roomTypes: "room-types",');
+    expect(output).toMatch(
+      /unsafeKeyGlobalThisCompromisedTrue: "unsafe key; globalThis\.compromised = true",/
+    );
+    expectValidTypeScript(output);
+
+    expect(() =>
+      compileFluxFastResourceTypes(
+        manifest({
+          "room-types": { schema: { type: "string" } },
+          room_types: { schema: { type: "number" } }
+        })
+      )
+    ).toThrow(/collides .* as TypeScript constant resourceKeys\.roomTypes/);
+  });
+
+  it("is deterministic and rejects normalized model collisions", () => {
     const input = manifest({
       beta: { schema: { type: "boolean" } },
       alpha: { schema: { type: "string" } }
@@ -244,15 +277,6 @@ declare module "@fluxfast/core" {
     expect(compileFluxFastResourceTypes(input)).toContain(
       "export type AlphaResource = string;\n\nexport type BetaResource = boolean;"
     );
-
-    expect(() =>
-      compileFluxFastResourceTypes(
-        manifest({
-          "room-types": { schema: { type: "string" } },
-          room_types: { schema: { type: "number" } }
-        })
-      )
-    ).toThrow(/collides .* as TypeScript name RoomTypesResource/);
 
     expect(() =>
       compileFluxFastResourceTypes(
