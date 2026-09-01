@@ -126,6 +126,87 @@ describe("FluxFast CLI", () => {
     expect(stdout.join("\n")).toContain("Generated FluxFast registry");
   });
 
+  it("generates schema-backed types, routes, and mutations when a manifest exists", () => {
+    createTestProject(tmpDir);
+    writeTestFile(
+      tmpDir,
+      "src/.fluxfast/schema.generated.json",
+      `${JSON.stringify({
+        schema: "fluxfast-schema/1",
+        producer: "0.6.0",
+        fingerprint: "e".repeat(64),
+        resources: {
+          rooms: {
+            schema: {
+              type: "array",
+              items: { type: "string" }
+            }
+          }
+        },
+        pages: [
+          {
+            name: "hotel_rooms",
+            path: "/hotels/{hotel_id}/rooms",
+            parameters: [
+              {
+                name: "hotel_id",
+                location: "path",
+                required: true,
+                schema: { type: "integer" }
+              }
+            ]
+          }
+        ],
+        mutations: [
+          {
+            name: "create_room",
+            path: "/rooms",
+            method: "POST",
+            parameters: [],
+            body: {
+              type: "object",
+              properties: { number: { type: "integer" } },
+              required: ["number"]
+            }
+          }
+        ]
+      }, null, 2)}\n`
+    );
+
+    expect(runCli(["generate"], io)).toBe(0);
+
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    expect(
+      fs.readFileSync(path.join(generatedDir, "types.generated.ts"), "utf8")
+    ).toContain('rooms: "rooms"');
+    expect(
+      fs.readFileSync(path.join(generatedDir, "routes.generated.ts"), "utf8")
+    ).toContain("hotelRooms:");
+    expect(
+      fs.readFileSync(path.join(generatedDir, "mutations.generated.ts"), "utf8")
+    ).toContain("createRoom:");
+    expect(stdout.join("\n")).toContain(
+      "Generated FluxFast types from src/.fluxfast/schema.generated.json"
+    );
+  });
+
+  it("does not partially update generated files when the manifest is invalid", () => {
+    createTestProject(tmpDir);
+    const project = detectFluxProject(tmpDir);
+    writeTestFile(tmpDir, "src/flux-pages/home.tsx", "export default null;\n");
+    writeTestFile(tmpDir, "src/.fluxfast/pages.generated.ts", "previous registry\n");
+    writeTestFile(tmpDir, "src/.fluxfast/schema.generated.json", "{}\n");
+
+    expect(runCli(["generate"], io)).toBe(1);
+    expect(stderr.join("\n")).toContain("Invalid schema manifest");
+    expect(fs.readFileSync(project.registryPath, "utf8")).toBe(
+      "previous registry\n"
+    );
+    expect(
+      fs.existsSync(path.join(project.generatedDir, "types.generated.ts"))
+    ).toBe(false);
+  });
+
   it("checks an initialized project without writing", () => {
     createTestProject(tmpDir);
     expect(runCli(["init"], io)).toBe(0);

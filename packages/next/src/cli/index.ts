@@ -1,4 +1,4 @@
-import { generatePagesRegistry } from "../generate";
+import { generateFluxFastProject } from "../generate";
 import { applyInitPlan } from "./apply";
 import {
   validateFluxProject,
@@ -244,14 +244,26 @@ function runGenerate(args: string[], io: CliIo): number {
     return 2;
   }
   const project = detectFluxProject(io.cwd);
-  generatePagesRegistry({
+  const result = generateFluxFastProject({
     pagesDir: project.fluxPagesDir,
     outputFile: project.registryPath,
+    generatedDir: project.generatedDir,
     log: false,
   });
   io.stdout(
     `✓ Generated FluxFast registry at ${relativeProjectPath(project, project.registryPath).replace(/\\/g, "/")}`
   );
+  if (result.schemaFile) {
+    const schemaArtifacts = result.generatedFiles
+      .filter(file => file !== result.registryPath)
+      .map(file => relativeProjectPath(project, file).replace(/\\/g, "/"));
+    io.stdout(
+      `✓ Generated FluxFast types from ${relativeProjectPath(project, result.schemaFile).replace(/\\/g, "/")}`
+    );
+    for (const file of schemaArtifacts) {
+      io.stdout(`  ${file}`);
+    }
+  }
   return 0;
 }
 
