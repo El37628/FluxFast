@@ -113,6 +113,11 @@ function pascalIdentifier(value: string, fallback: string): string {
   return identifier;
 }
 
+function camelIdentifier(value: string): string {
+  const identifier = pascalIdentifier(value, "ResourceKey");
+  return `${identifier[0].toLowerCase()}${identifier.slice(1)}`;
+}
+
 function propertyName(value: string): string {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value)
     ? value
@@ -433,6 +438,7 @@ function canRenderInterface(schema: JsonSchema): boolean {
 
 class ResourceTypeCompiler {
   private readonly definitions = new Map<string, NamedDefinition>();
+  private readonly resourceKeyNames = new Map<string, string>();
   private readonly resourceNames = new Map<string, string>();
   private readonly resources: ResourceAlias[] = [];
 
@@ -444,6 +450,7 @@ class ResourceTypeCompiler {
       compareText(left.context.resourceKey, right.context.resourceKey)
     );
     const declarations = [
+      this.renderResourceKeys(resources),
       ...[...this.definitions.values()]
         .sort((left, right) => compareText(left.name, right.name))
         .map(definition => this.renderDefinition(definition)),
@@ -467,6 +474,17 @@ class ResourceTypeCompiler {
       `// Fingerprint: ${this.manifest.fingerprint}`
     ];
     return `${header.join("\n")}\n\nimport type {} from "@fluxfast/core";\n\n${declarations.join("\n\n")}\n`;
+  }
+
+  private renderResourceKeys(resources: ResourceAlias[]): string {
+    if (resources.length === 0) {
+      return "export const resourceKeys = {} as const;";
+    }
+    const entries = resources.map(resource => {
+      const resourceKey = resource.context.resourceKey;
+      return `  ${camelIdentifier(resourceKey)}: ${JSON.stringify(resourceKey)},`;
+    });
+    return `export const resourceKeys = {\n${entries.join("\n")}\n} as const;`;
   }
 
   private renderResourceMap(resources: ResourceAlias[]): string {
@@ -494,6 +512,17 @@ class ResourceTypeCompiler {
       const resourcePath = childPath("$.resources", resourceKey);
       const path = `${resourcePath}.schema`;
       const schema = this.manifest.resources[resourceKey].schema;
+      const keyName = camelIdentifier(resourceKey);
+      const existingKey = this.resourceKeyNames.get(keyName);
+      if (existingKey !== undefined) {
+        fail(
+          resourcePath,
+          `resource key ${JSON.stringify(resourceKey)} collides with ${JSON.stringify(
+            existingKey
+          )} as TypeScript constant resourceKeys.${keyName}`
+        );
+      }
+      this.resourceKeyNames.set(keyName, resourceKey);
       const alias = `${pascalIdentifier(resourceKey, "Resource")}Resource`;
       const existingResource = this.resourceNames.get(alias);
       if (existingResource) {
