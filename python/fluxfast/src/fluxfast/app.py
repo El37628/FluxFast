@@ -21,6 +21,7 @@ from .live import (
     LiveMetrics,
     MemoryLiveBroker,
 )
+from .production.health import install_production_health
 from .protocol import PROTOCOL_MEDIA_TYPE, PROTOCOL_VERSION, ErrorDetail, ErrorEnvelope
 from .router import FluxRouter
 from .schema_registry import SchemaRegistry
@@ -75,6 +76,11 @@ class FluxFast:
         self.live_max_connection_age = float(live_max_connection_age)
         self.live_heartbeat_interval = float(live_heartbeat_interval)
         self._closed = False
+        self.health = install_production_health(
+            self.app,
+            self.cache,
+            configured_broker,
+        )
 
         # Attach cache to FastAPI app state
         self.app.state.fluxfast_cache = self.cache
@@ -103,6 +109,7 @@ class FluxFast:
         if self._closed:
             return
         self._closed = True
+        await self.health.shutdown()
         try:
             await self.live.close()
         finally:

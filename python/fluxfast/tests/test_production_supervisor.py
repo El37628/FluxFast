@@ -4,6 +4,7 @@ import signal
 import socket
 import subprocess
 from pathlib import Path
+from typing import Self
 
 import pytest
 
@@ -14,6 +15,7 @@ from fluxfast.production import (
     ProductionSupervisor,
     ProductionSupervisorError,
     SupervisorState,
+    http_readiness_probe,
     tcp_readiness_probe,
 )
 
@@ -343,6 +345,48 @@ def test_tcp_readiness_probe_reports_open_and_closed_ports() -> None:
     assert tcp_readiness_probe(host, port, connection_timeout=0.01)() is False
 
 
+def test_http_readiness_probe_requires_successful_health_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    class Response:
+        status = 200
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def open_url(url: str, *, timeout: float) -> Response:
+        observed.update(url=url, timeout=timeout)
+        return Response()
+
+    monkeypatch.setattr("fluxfast.production.supervisor.urlopen", open_url)
+    probe = http_readiness_probe(
+        "http://127.0.0.1:8123/_fluxfast/readyz",
+        connection_timeout=0.3,
+    )
+
+    assert probe() is True
+    assert observed == {
+        "url": "http://127.0.0.1:8123/_fluxfast/readyz",
+        "timeout": 0.3,
+    }
+
+
+def test_http_readiness_probe_contains_connection_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise OSError("private connection failed")
+
+    monkeypatch.setattr("fluxfast.production.supervisor.urlopen", fail)
+
+    assert http_readiness_probe("http://127.0.0.1:8123/_fluxfast/readyz")() is False
+
+
 @pytest.mark.parametrize("invalid", [0, -1, float("inf"), float("nan")])
 def test_supervisor_rejects_invalid_poll_and_connection_timeouts(
     invalid: float,
@@ -360,3 +404,15 @@ def test_supervisor_rejects_invalid_poll_and_connection_timeouts(
 
     with pytest.raises(ProductionSupervisorError, match="connection_timeout"):
         tcp_readiness_probe("127.0.0.1", 3000, connection_timeout=invalid)
+
+    with pytest.raises(ProductionSupervisorError, match="connection_timeout"):
+        http_readiness_probe(
+            "http://127.0.0.1:8123/_fluxfast/readyz",
+            connection_timeout=invalid,
+        )
+
+
+@pytest.mark.parametrize("url", ["", "https://example.com/readyz", "relative"])
+def test_http_readiness_probe_rejects_non_private_http_shape(url: str) -> None:
+    with pytest.raises(ProductionSupervisorError, match="absolute http"):
+        http_readiness_probe(url)

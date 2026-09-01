@@ -19,6 +19,10 @@ class RecordingRedisClient:
     def __init__(self) -> None:
         self.published: list[tuple[str, bytes]] = []
         self.closed = False
+        self.ping_result = True
+
+    async def ping(self) -> bool:
+        return self.ping_result
 
     async def publish(self, channel: str, message: bytes) -> int:
         self.published.append((channel, message))
@@ -96,6 +100,18 @@ async def test_owned_redis_client_closes_and_publish_after_close_fails() -> None
     assert client.closed is True
     with pytest.raises(RuntimeError, match="closed"):
         await broker.publish("topic", LiveInvalidateEvent(keys=["summary"]))
+
+
+@pytest.mark.anyio
+async def test_redis_broker_healthcheck_tracks_connectivity_and_close() -> None:
+    client = RecordingRedisClient()
+    broker = RedisLiveBroker(client)
+
+    assert await broker.healthcheck() is True
+    client.ping_result = False
+    assert await broker.healthcheck() is False
+    await broker.close()
+    assert await broker.healthcheck() is False
 
 
 @pytest.mark.anyio

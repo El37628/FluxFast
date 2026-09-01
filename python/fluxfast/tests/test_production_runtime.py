@@ -39,12 +39,17 @@ def test_production_runtime_builds_safe_child_commands_and_private_environment(
     monkeypatch.setenv("NEXT_PUBLIC_FLUXFAST_BACKEND_URL", "https://public.invalid")
     monkeypatch.setenv("APPLICATION_SECRET", "kept-private")
     probe_addresses: list[tuple[str, int]] = []
+    readiness_urls: list[str] = []
 
     def probe(host: str, port: int):  # type: ignore[no-untyped-def]
         probe_addresses.append((host, port))
         return lambda: False
 
     monkeypatch.setattr("fluxfast.production.runtime.tcp_readiness_probe", probe)
+    monkeypatch.setattr(
+        "fluxfast.production.runtime.http_readiness_probe",
+        lambda url: readiness_urls.append(url) or (lambda: False),
+    )
     config = ProductionConfig(
         app="backend.main:app",
         frontend=frontend,
@@ -89,7 +94,8 @@ def test_production_runtime_builds_safe_child_commands_and_private_environment(
     )
     assert "NEXT_PUBLIC_FLUXFAST_BACKEND_URL" not in supervisor.frontend.environment
     assert supervisor.frontend.environment["APPLICATION_SECRET"] == "kept-private"
-    assert probe_addresses == [("::1", 8124), ("127.0.0.1", 3100)]
+    assert readiness_urls == ["http://[::1]:8124/_fluxfast/readyz"]
+    assert probe_addresses == [("127.0.0.1", 3100)]
 
 
 def test_production_runtime_requires_frontend_package(tmp_path: Path) -> None:
