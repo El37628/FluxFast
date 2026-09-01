@@ -17,13 +17,13 @@ reused from the shared cache by another, invalidated by a mutation on a third,
 synchronized over Redis Pub/Sub, and then reused at its new value without
 running another loader.
 Before publication, the release-artifact workflow also combines the built
-current Python package with the published 0.4.1 JavaScript packages, then the
-published Python 0.4.1 package with the built current JavaScript packages.
+current Python package with the published 0.5.0 JavaScript packages, then the
+published Python 0.5.0 package with the built current JavaScript packages.
 After registry publication, the release workflow repeats both pairings using
 only registry packages. The current-Python pairing must pass the full deferred,
-live, and distributed Redis browser scenario; the current-JavaScript pairing
-must preserve v0.4 behavior. The GitHub release is created only after these
-registry-backed mixed-version checks pass.
+live, typed, and distributed Redis browser scenario; the current-JavaScript
+pairing must preserve v0.5 behavior. The GitHub release is created only after
+these registry-backed mixed-version checks pass.
 
 A release that changes typed contracts or code generation must also prove the
 developer-tooling path from built artifacts: install the wheel and npm
@@ -111,7 +111,7 @@ the package manifests, Python runtime version, lockfile, and dated release
 section together:
 
 ```bash
-version=0.5.0
+version=0.6.0
 pnpm release:prepare "$version"
 pnpm release:check "v$version"
 ```
@@ -125,7 +125,7 @@ an up-to-date checkout:
 ```bash
 git switch main
 git pull --ff-only
-version=0.5.0
+version=0.6.0
 pnpm release:check "v$version"
 git tag -a "v$version" -m "FluxFast $version"
 git push origin "v$version"

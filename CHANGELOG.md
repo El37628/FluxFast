@@ -5,6 +5,50 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-01
+
+### Added
+
+- Server-owned generic `ResourceContract` declarations through
+  `FluxFast.define_resource()`, backed by Pydantic serialization schemas and
+  runtime validation of blocking, deferred, live, cached, and Redis-backed
+  resource values.
+- The independent `fluxfast-schema/1` developer manifest with deterministic
+  fingerprints plus offline `fluxfast schema` export and drift checking.
+- Generated TypeScript resource models and key constants, typed page-route
+  builders, typed JSON mutation helpers, and inferred `useResource`,
+  `useResourceState`, and `useDeferredResource` values.
+- Schema-aware `fluxfast generate`, read-only `generate --check`, type-aware
+  `fluxfast doctor` diagnostics, and the one-command `fluxfast types` workflow
+  for npm, pnpm, Yarn, and Bun projects.
+- Advanced Pydantic schema, recursive model, generated inference, real browser,
+  packed consumer, adjacent mixed-version, and repeatable code-generation
+  benchmark coverage.
+
+### Changed
+
+- Existing string resource keys, explicit hook generics, the `fluxfast/1`
+  browser protocol, and JavaScript-only generation remain compatible while
+  typed projects can make the FastAPI contract authoritative.
+- Project generation now compiles and validates every schema-backed artifact
+  before writing, and generated files include manifest provenance and
+  fingerprint headers.
+
+### Security
+
+- Developer manifests are strictly validated before code generation, including
+  manifest identity, fingerprints, resource and route metadata, mutation
+  methods, and recursive JSON Schema structure.
+- Generated identifiers, property names, route paths, query values, resource
+  keys, and model names are escaped or normalized so untrusted manifest text
+  remains inert data.
+- Generated artifacts are confined to the configured FluxFast output directory
+  and refuse path or symbolic-link traversal; prototype-sensitive schema keys
+  are handled without object-prototype mutation.
+- Offline schema export excludes loaders, dependencies, cache identifiers,
+  scope identities, Redis metadata, and other runtime secrets, while production
+  contract errors remain redacted.
+
 ## [0.5.0] - 2026-08-31
 
 ### Added
@@ -149,7 +193,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.6.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
@@ -158,3 +202,4 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 [0.4.2]: https://github.com/El37628/FluxFast/releases/tag/v0.4.2
 [0.4.3]: https://github.com/El37628/FluxFast/releases/tag/v0.4.3
 [0.5.0]: https://github.com/El37628/FluxFast/releases/tag/v0.5.0
+[0.6.0]: https://github.com/El37628/FluxFast/releases/tag/v0.6.0
