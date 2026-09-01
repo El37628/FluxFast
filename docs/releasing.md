@@ -25,6 +25,17 @@ live, and distributed Redis browser scenario; the current-JavaScript pairing
 must preserve v0.4 behavior. The GitHub release is created only after these
 registry-backed mixed-version checks pass.
 
+A release that changes typed contracts or code generation must also prove the
+developer-tooling path from built artifacts: install the wheel and npm
+tarballs into a clean consumer, run `fluxfast types`, run its read-only
+`--check`, typecheck and production-build the generated application, and verify
+that no source checkout is required. Review generated manifest fingerprints
+and TypeScript files as release artifacts of the authoritative Python schema,
+not as hand-maintained package source. The mixed-version jobs must continue to
+prove that an older JavaScript client can consume the unchanged browser
+protocol from a typed Python server and that current JavaScript still supports
+an older Python server without a developer manifest.
+
 The normal integration workflow also exercises the real Redis cache, live
 broker, restart behavior, and independent Uvicorn workers against the oldest
 and newest [supported Redis server lines](distributed-cache.md#supported-redis-versions).

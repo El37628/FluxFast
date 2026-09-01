@@ -21,6 +21,46 @@ the browser what became stale. If that key has active subscribers, the last
 value remains visible while FluxFast requests only the invalidated active keys.
 Inactive keys are removed without a request.
 
+## Generated JSON mutation helpers
+
+FastAPI request models, path parameters, query parameters, the registered route
+name, and the declared HTTP method can generate a typed frontend helper:
+
+```python
+from pydantic import BaseModel
+
+
+class RoomInput(BaseModel):
+    name: str
+
+
+@flux.mutation("/hotels/{hotel_id}/rooms", name="add_room")
+async def add_room(hotel_id: int, body: RoomInput):
+    ...
+```
+
+After running `fluxfast types`, call it through the existing router:
+
+```tsx
+import { mutations } from "@/.fluxfast/mutations.generated";
+import { useRouter } from "@fluxfast/next";
+
+const router = useRouter();
+
+await mutations.addRoom(router, {
+  params: { hotel_id: 42 },
+  body: { name: "Garden Suite" },
+});
+```
+
+The helper encodes path and query values, fixes the server-declared method, and
+returns the normal `MutationEnvelope`; invalidation, patches, redirects, form
+errors, and live propagation therefore keep the behavior described below.
+Only mutations with JSON body schemas generate helpers. Multipart uploads,
+streams, and non-JSON endpoints continue to use application-owned clients. See
+[typed resource contracts and code generation](type-safety.md) for naming,
+generation, and drift checks.
+
 ## Live propagation to other clients
 
 When an invalidation descriptor has an explicit reusable scope, FluxFast also

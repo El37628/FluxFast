@@ -15,6 +15,9 @@ from fastapi import Depends
 from fluxfast import Page, resource, scope
 
 
+REPORT_CHART = flux.define_resource("report-chart", Chart)
+
+
 @flux.page("/reports")
 async def reports(tenant=Depends(current_tenant)):
     return Page(
@@ -22,7 +25,7 @@ async def reports(tenant=Depends(current_tenant)):
         resources=[
             resource("report-summary", load_summary),
             resource(
-                "report-chart",
+                REPORT_CHART,
                 load_expensive_chart,
                 scope=scope.tenant(tenant.id),
                 ttl=120,
@@ -61,9 +64,10 @@ render:
 "use client";
 
 import { useDeferredResource } from "@fluxfast/next";
+import { resourceKeys } from "@/.fluxfast/types.generated";
 
 export default function ReportPage() {
-  const chart = useDeferredResource<Chart>("report-chart");
+  const chart = useDeferredResource(resourceKeys.reportChart);
 
   if (chart.error && !chart.data) {
     return (
@@ -89,6 +93,13 @@ export default function ReportPage() {
 ```
 
 The hook returns `{ data, status, error, stale, retry }`.
+
+`REPORT_CHART` is an optional server-owned `ResourceContract`. After running
+`fluxfast types`, the generated key carries the Pydantic serialization type
+into `useDeferredResource`; no duplicate `Chart` interface or explicit hook
+generic is required. An untyped string resource still works and can retain an
+explicit generic during incremental migration. See [typed resource contracts
+and code generation](type-safety.md).
 
 | Status | Meaning |
 | --- | --- |
@@ -239,3 +250,8 @@ add `resourceKeys`, `deferred`, and `resourceErrors`. Missing capability headers
 keep `defer=True` resources blocking, so old clients continue receiving a
 complete traditional page envelope. Unknown capabilities and optional unknown
 fields do not alter v1 behavior.
+
+Typed contracts do not add another capability or field. Validation happens on
+the FastAPI wire value before the existing deferred lifecycle, and generated
+TypeScript is build-time only; older clients continue receiving the same
+resource envelope.

@@ -90,6 +90,20 @@ A stale or missing manifest or generated file returns a nonzero status and is
 left untouched. The helper selects npm, pnpm, Yarn, or Bun from the frontend
 lockfile or `packageManager` field and runs its local FluxFast executable.
 
+The detected `.fluxfast` directory contains:
+
+| Generated file | Frontend API |
+| --- | --- |
+| `schema.generated.json` | Validated `fluxfast-schema/1` manifest and fingerprint. |
+| `types.generated.ts` | Resource models, `resourceKeys`, and hook inference. |
+| `routes.generated.ts` | Typed FastAPI page URL builders. |
+| `mutations.generated.ts` | Typed JSON helpers that reuse `FluxRouter.mutate()`. |
+| `pages.generated.ts` | Allowlisted lazy page-component registry. |
+
+Do not edit these files manually. The complete declaration, generation,
+frontend usage, compatibility, and drift workflow is documented in [typed
+resource contracts and code generation](type-safety.md).
+
 ## Development
 
 From the directory that can import the FastAPI application, run:
@@ -173,7 +187,9 @@ same-origin destinations with `_self` targeting and no download attribute.
 `useRouter`, and `useFlux` consume the stable client runtime. Use
 `useDeferredResource` when a key may be pending or failed; its lifecycle and
 targeted retry behavior are documented in the [deferred resources
-guide](deferred-resources.md).
+guide](deferred-resources.md). When `types.generated.ts` is present, the three
+resource hooks infer known literal keys through `FluxResourceMap`; dynamic keys
+remain `unknown`, and explicit generic overrides remain supported.
 
 ## Troubleshooting
 

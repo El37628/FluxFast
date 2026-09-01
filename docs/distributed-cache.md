@@ -104,14 +104,23 @@ That client version is separate from the Redis server version.
 Resource declarations do not change:
 
 ```python
+ROOMS = flux.define_resource("rooms", list[Room])
+
 resource(
-    "rooms",
+    ROOMS,
     load_rooms,
     scope=scope.tenant(hotel.id),
     ttl=60,
     tags=[f"hotel:{hotel.id}:inventory"],
 )
 ```
+
+The contract is optional; `resource("rooms", ...)` remains supported. On a
+typed cache miss, Pydantic validates and serializes the loader result before
+Redis receives it. A hit returns that already-canonical JSON value without
+rerunning the loader or validator. Typing never changes the logical cache key,
+scope identity, tags, TTL, or browser protocol. See [typed resource contracts
+and code generation](type-safety.md).
 
 An explicit reusable scope is still required for cross-request caching.
 Request-scoped resources are never reused merely because Redis is configured.
@@ -172,7 +181,13 @@ Redis entries use compact UTF-8 JSON with an internal schema version. Pickle
 and executable serialization formats are not used. Values must satisfy the
 same JSON conversion rules as FluxFast responses. Cached data contains the
 resource value, version, and tags, but never a process-local monotonic
-timestamp.
+timestamp. Typed entries likewise contain no Pydantic models, adapters, Python
+annotations, or developer-schema metadata.
+
+Redis cache entries are not revalidated merely because application code now
+declares a different resource contract. When a deployment makes an incompatible
+wire-shape change to a positive-TTL resource, invalidate the affected scoped
+entries or rotate the application cache namespace during rollout.
 
 The default `max_value_bytes` is 1 MiB for the complete encoded cache entry,
 not only the source value. Set a different positive bound only from measured
@@ -297,6 +312,8 @@ resource-specific publisher, not an arbitrary Redis Pub/Sub API or task queue.
 - Use a supported Redis patch release and test provider-specific behavior.
 - Monitor strict cache errors and never hide them with local-memory fallback.
 - Keep loaders idempotent because simultaneous cold misses can duplicate work.
+- Invalidate cached values or rotate the namespace for incompatible typed wire
+  contract changes.
 - Verify cross-worker warm hits, invalidation, restart recovery, and tenant
   isolation in the real deployment.
 

@@ -61,6 +61,32 @@ or depend on names for planned features until their request, response, fallback,
 and security behavior are implemented and documented. See
 [`protocol.md`](protocol.md) for the current token and field contract.
 
+## Developer schema and generated files
+
+Typed resource tooling uses the independent `fluxfast-schema/1` developer
+manifest. Its version is not the package version, the `fluxfast/1` browser
+protocol, or the Redis cache schema. A breaking manifest-format change requires
+a new schema identifier even when the package change is otherwise a normal
+minor release.
+
+Resource contracts, schema export, and generated TypeScript add no browser
+capability or runtime envelope field. Compatibility therefore remains
+directional and additive:
+
+- a current typed Python server can serve an older JavaScript client through
+  the unchanged browser protocol;
+- current JavaScript packages can serve an older Python application and still
+  generate the existing page registry when no manifest exists;
+- string-key resources and explicit frontend hook generics remain supported;
+  and
+- generated files should be regenerated with the package versions under test
+  rather than treated as a stable cross-version API by themselves.
+
+Stable releases continue synchronizing all three package versions, and the
+release gates test both adjacent mixed-package directions. See [typed resource
+contracts and code generation](type-safety.md) for the build-time workflow and
+[the release guide](releasing.md) for clean-consumer requirements.
+
 ## Preparing a release
 
 Add user-facing entries beneath `Unreleased`, then run:

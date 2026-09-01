@@ -105,10 +105,31 @@ why `init` reports a manual action instead of rewriting it.
 
 ## 5. Generate and validate
 
-Run from the frontend root:
+When the FastAPI application has typed resources, registered page parameters,
+or JSON mutations, run from a Python environment that can import it:
+
+```bash
+fluxfast types backend.main:app --frontend frontend
+cd frontend
+npx fluxfast doctor
+npm run build
+```
+
+This writes the backend manifest, generated resource models and key constants,
+typed route and mutation helpers, and the page registry into the layout's
+`.fluxfast` directory. To fail CI on either backend-contract or frontend-page
+drift without modifying files, run from the parent directory:
+
+```bash
+fluxfast types backend.main:app --frontend frontend --check
+```
+
+For an untyped application or a deliberately split backend/frontend pipeline,
+the frontend-only commands remain available from the frontend root:
 
 ```bash
 npx fluxfast generate
+npx fluxfast generate --check
 npx fluxfast doctor
 npm run build
 ```
@@ -119,8 +140,12 @@ with the current template using `npx fluxfast init --force`. The flag changes
 only how an existing catch-all is handled; the rest of the normal initialization
 plan still applies.
 
-The registry is deterministic. Regenerate it whenever pages are added, removed,
-or renamed; `withFluxFast()` also generates it when Next loads the config.
+Every generated artifact is deterministic. Regenerate after changing contracts,
+registered FastAPI page or mutation signatures, or frontend pages;
+`withFluxFast()` also refreshes the page registry when Next loads the config.
+Do not edit `.fluxfast` output manually. See [typed resource contracts and code
+generation](type-safety.md) for the lower-level schema-export workflow and
+generated frontend APIs.
 
 ## Common failures
 
@@ -133,6 +158,10 @@ relocate the conflicting route after preserving its component.
 
 Run `npx fluxfast generate`. Never patch
 `.fluxfast/pages.generated.ts` manually.
+
+If `doctor` reports stale types, routes, mutations, or a schema fingerprint,
+run `fluxfast types backend.main:app --frontend frontend` from the directory
+that can import the backend application.
 
 ### Initial envelope returns 404
 

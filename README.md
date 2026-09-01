@@ -94,6 +94,15 @@ FastAPI page handlers can resolve independently cached resources:
 ```python
 from fastapi import Depends
 from fluxfast import Page, resource, scope
+from pydantic import BaseModel
+
+
+class Room(BaseModel):
+    id: int
+    number: str
+
+
+ROOMS = flux.define_resource("rooms", list[Room])
 
 
 @flux.page("/rooms")
@@ -108,7 +117,7 @@ async def rooms(user=Depends(current_user)):
                 ttl=300,
             ),
             resource(
-                "rooms",
+                ROOMS,
                 load_rooms,
                 scope=scope.tenant(user.hotel_id),
                 ttl=10,
@@ -123,18 +132,27 @@ The matching client page reads resources by name:
 "use client";
 
 import { useResource } from "@fluxfast/next";
+import { resourceKeys } from "@/.fluxfast/types.generated";
 
 export default function RoomsPage() {
-  const rooms = useResource<Room[]>("rooms");
+  const rooms = useResource(resourceKeys.rooms);
   return rooms.map(room => <div key={room.id}>{room.number}</div>);
 }
 ```
 
+The Pydantic contract validates the loader's serialized wire value and
+generates the `Room[]` hook type. String-key resources and explicit frontend
+generics remain supported for incremental migration. See [typed resource
+contracts and code generation](docs/type-safety.md) for serialization rules,
+generated routes and mutations, and CI drift checks.
+
 Secondary resources can load after the page shell:
 
 ```python
+ANALYTICS = flux.define_resource("analytics", Analytics)
+
 resource(
-    "analytics",
+    ANALYTICS,
     load_analytics,
     scope=scope.tenant(user.hotel_id),
     ttl=60,
@@ -143,7 +161,7 @@ resource(
 ```
 
 ```tsx
-const analytics = useDeferredResource<Analytics>("analytics");
+const analytics = useDeferredResource(resourceKeys.analytics);
 
 if (!analytics.data) return <AnalyticsSkeleton />;
 return <AnalyticsChart value={analytics.data} />;
@@ -157,8 +175,10 @@ on which data must remain blocking.
 A resource can remain synchronized after hydration:
 
 ```python
+NOTIFICATIONS = flux.define_resource("notifications", list[Notification])
+
 resource(
-    "notifications",
+    NOTIFICATIONS,
     load_notifications,
     scope=scope.user(user.id),
     live=True,
@@ -228,9 +248,10 @@ pnpm benchmark
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
 [caching](docs/caching.md), [distributed resource
 coherence](docs/distributed-cache.md), [deferred
-resources](docs/deferred-resources.md), [Live Resources](docs/live-resources.md), [Next.js
+resources](docs/deferred-resources.md), [Live Resources](docs/live-resources.md),
+[typed resource contracts](docs/type-safety.md), [Next.js
 integration](docs/nextjs-adapter.md), and [mutations](docs/mutations.md) before
-extending a wire or cache boundary. The [compatibility and versioning
+extending a wire, schema, or cache boundary. The [compatibility and versioning
 policy](docs/versioning.md) lists supported runtimes and the deprecation policy.
 Maintainers can find the registry and tag procedure in the [release
 guide](docs/releasing.md).
