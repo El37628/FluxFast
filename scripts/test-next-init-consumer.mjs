@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,7 +26,7 @@ if (runLiveConsumer && runDistributedConsumer) {
   throw new Error("Run the clean live and distributed consumers separately.");
 }
 
-function run(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
+function execute(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
   const childEnvironment = { ...process.env };
   for (const key of Object.keys(childEnvironment)) {
     const normalized = key.toLowerCase();
@@ -47,8 +48,28 @@ function run(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
     stdio: "inherit",
   });
   if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} exited with status ${result.status}`);
+  return result.status;
+}
+
+function run(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
+  const status = execute(command, args, cwd, extraEnvironment);
+  if (status !== 0) {
+    throw new Error(`${command} ${args.join(" ")} exited with status ${status}`);
+  }
+}
+
+function runExpectingFailure(
+  command,
+  args,
+  cwd = repositoryRoot,
+  extraEnvironment = {}
+) {
+  const status = execute(command, args, cwd, extraEnvironment);
+  if (status === 0) {
+    throw new Error(`${command} ${args.join(" ")} unexpectedly succeeded`);
+  }
+  if (status === null) {
+    throw new Error(`${command} ${args.join(" ")} exited without a status`);
   }
 }
 
@@ -135,6 +156,155 @@ function assertIsolatedNpmPackage(packageName) {
   }
 }
 
+function typedGenerationArgs({ check = false } = {}) {
+  const args = [
+    "-m",
+    "fluxfast.cli",
+    "types",
+    "backend:app",
+    "--frontend",
+    consumerRoot,
+  ];
+  if (check) args.push("--check");
+  return args;
+}
+
+function assertTypedConsumerArtifacts() {
+  const generatedRoot = path.join(consumerRoot, "src", ".fluxfast");
+  const expectedFiles = [
+    "schema.generated.json",
+    "types.generated.ts",
+    "routes.generated.ts",
+    "mutations.generated.ts",
+    "pages.generated.ts",
+  ];
+  for (const file of expectedFiles) {
+    assert.equal(
+      fs.existsSync(path.join(generatedRoot, file)),
+      true,
+      `${file} must be generated inside the isolated consumer`
+    );
+  }
+
+  const schema = JSON.parse(
+    fs.readFileSync(path.join(generatedRoot, "schema.generated.json"), "utf8")
+  );
+  assert.equal(schema.schema, "fluxfast-schema/1");
+  assert.deepEqual(Object.keys(schema.resources).sort(), [
+    "analytics",
+    "live-counter",
+    "live-report",
+  ]);
+  assert.equal(
+    schema.pages.some(page => page.name === "home" && page.path === "/"),
+    true
+  );
+  assert.equal(
+    schema.mutations.some(
+      mutation =>
+        mutation.name === "increment" &&
+        mutation.path === "/increment" &&
+        mutation.method === "POST"
+    ),
+    true
+  );
+
+  const types = fs.readFileSync(
+    path.join(generatedRoot, "types.generated.ts"),
+    "utf8"
+  );
+  assert.match(types, /interface Analytics/);
+  assert.match(types, /liveCounter: "live-counter"/);
+  assert.match(types, /interface FluxResourceMap/);
+
+  const mutations = fs.readFileSync(
+    path.join(generatedRoot, "mutations.generated.ts"),
+    "utf8"
+  );
+  assert.match(mutations, /increment:/);
+  assert.match(mutations, /amount: number/);
+
+  const page = fs.readFileSync(
+    path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx"),
+    "utf8"
+  );
+  assert.doesNotMatch(page, /use(?:Deferred)?Resource\s*</);
+  assert.match(page, /resourceKeys\.analytics/);
+  assert.match(page, /mutations\.increment/);
+}
+
+function verifyTypedSchemaDrift(isolatedPython) {
+  const backendPath = path.join(consumerRoot, "backend.py");
+  const schemaPath = path.join(
+    consumerRoot,
+    "src",
+    ".fluxfast",
+    "schema.generated.json"
+  );
+  const original = fs.readFileSync(backendPath, "utf8");
+  const originalFingerprint = JSON.parse(
+    fs.readFileSync(schemaPath, "utf8")
+  ).fingerprint;
+  const marker = "    load: int\n";
+  assert.equal(original.includes(marker), true);
+  const changed = original.replace(
+    marker,
+    `${marker}    currency: str = "USD"\n`
+  );
+  const environment = { PYTHONPATH: "" };
+
+  try {
+    fs.writeFileSync(backendPath, changed, "utf8");
+    runExpectingFailure(
+      isolatedPython,
+      typedGenerationArgs({ check: true }),
+      consumerRoot,
+      environment
+    );
+    assert.equal(
+      JSON.parse(fs.readFileSync(schemaPath, "utf8")).fingerprint,
+      originalFingerprint,
+      "the read-only drift check must not rewrite the generated manifest"
+    );
+    run(
+      isolatedPython,
+      typedGenerationArgs(),
+      consumerRoot,
+      environment
+    );
+    assert.notEqual(
+      JSON.parse(fs.readFileSync(schemaPath, "utf8")).fingerprint,
+      originalFingerprint,
+      "regeneration must record the changed Python contract"
+    );
+    run(
+      isolatedPython,
+      typedGenerationArgs({ check: true }),
+      consumerRoot,
+      environment
+    );
+  } finally {
+    fs.writeFileSync(backendPath, original, "utf8");
+    run(
+      isolatedPython,
+      typedGenerationArgs(),
+      consumerRoot,
+      environment
+    );
+    run(
+      isolatedPython,
+      typedGenerationArgs({ check: true }),
+      consumerRoot,
+      environment
+    );
+    assert.equal(
+      JSON.parse(fs.readFileSync(schemaPath, "utf8")).fingerprint,
+      originalFingerprint,
+      "restoring the contract must restore its deterministic fingerprint"
+    );
+  }
+}
+
 try {
   if (!configuredArtifactRoot) {
     if (process.env.FLUXFAST_SKIP_BUILD !== "1") {
@@ -186,23 +356,43 @@ try {
   run(npmCommand, ["run", "verify:init"], consumerRoot);
   const homeFixture = runDistributedConsumer
     ? "distributed-home.tsx"
-    : "deferred-home.tsx";
+    : runLiveConsumer
+      ? "typed-live-home.tsx"
+      : "deferred-home.tsx";
   fs.copyFileSync(
     path.join(consumerRoot, "fixtures", homeFixture),
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx")
   );
-  run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
+  const livePython = runLiveConsumer ? prepareIsolatedPython() : undefined;
+  if (livePython) {
+    run(
+      livePython,
+      typedGenerationArgs(),
+      consumerRoot,
+      { PYTHONPATH: "" }
+    );
+    assertTypedConsumerArtifacts();
+    run(
+      livePython,
+      typedGenerationArgs({ check: true }),
+      consumerRoot,
+      { PYTHONPATH: "" }
+    );
+    verifyTypedSchemaDrift(livePython);
+    assertTypedConsumerArtifacts();
+  } else {
+    run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
+  }
   run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "doctor"], consumerRoot);
   run(npmCommand, ["run", "typecheck"], consumerRoot);
   run(npmCommand, ["run", "build"], consumerRoot);
   if (runLiveConsumer) {
-    const isolatedPython = prepareIsolatedPython();
     run(
       process.execPath,
       [path.join(repositoryRoot, "scripts", "test-next-init-live.mjs"), consumerRoot],
       repositoryRoot,
-      { FLUXFAST_E2E_PYTHON: isolatedPython, PYTHONPATH: "" }
+      { FLUXFAST_E2E_PYTHON: livePython, PYTHONPATH: "" }
     );
   }
   if (runDistributedConsumer) {
@@ -215,7 +405,10 @@ try {
     );
   }
 
-  console.log(`Packed FluxFast initialization consumer passed with Next.js ${manifest.dependencies.next}.`);
+  const typed = runLiveConsumer ? " typed" : "";
+  console.log(
+    `Packed${typed} FluxFast initialization consumer passed with Next.js ${manifest.dependencies.next}.`
+  );
 } finally {
   if (process.env.FLUXFAST_KEEP_TEMP === "1") {
     console.log(`Preserved consumer at ${consumerRoot}`);
