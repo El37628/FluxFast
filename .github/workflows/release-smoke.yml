@@ -110,7 +110,7 @@ jobs:
           npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-clean-live/artifacts"
       - name: Install Chromium
         run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
-      - name: Verify two-client live synchronization from packed artifacts
+      - name: Verify typed generation and two-client live synchronization from packed artifacts
         env:
           FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-clean-live/artifacts
           FLUXFAST_E2E_PYTHON: python
