@@ -5,61 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../../src/cli/index";
 import { desiredCatchAllPath, renderCatchAll } from "../../src/cli/files";
 import { detectFluxProject } from "../../src/cli/project";
-import { createTestProject, writeTestFile } from "./helpers";
-
-function writeSchemaManifest(
-  root: string,
-  fingerprint = "e".repeat(64)
-): string {
-  return writeTestFile(
-    root,
-    "src/.fluxfast/schema.generated.json",
-    `${JSON.stringify(
-      {
-        schema: "fluxfast-schema/1",
-        producer: "0.6.0",
-        fingerprint,
-        resources: {
-          rooms: {
-            schema: {
-              type: "array",
-              items: { type: "string" },
-            },
-          },
-        },
-        pages: [
-          {
-            name: "hotel_rooms",
-            path: "/hotels/{hotel_id}/rooms",
-            parameters: [
-              {
-                name: "hotel_id",
-                location: "path",
-                required: true,
-                schema: { type: "integer" },
-              },
-            ],
-          },
-        ],
-        mutations: [
-          {
-            name: "create_room",
-            path: "/rooms",
-            method: "POST",
-            parameters: [],
-            body: {
-              type: "object",
-              properties: { number: { type: "integer" } },
-              required: ["number"],
-            },
-          },
-        ],
-      },
-      null,
-      2
-    )}\n`
-  );
-}
+import {
+  createTestProject,
+  writeSchemaManifest,
+  writeTestFile,
+} from "./helpers";
 
 describe("FluxFast CLI", () => {
   let tmpDir: string;
@@ -264,7 +214,7 @@ describe("FluxFast CLI", () => {
     const generatedBefore = generatedFiles.map(file =>
       fs.readFileSync(file, "utf8")
     );
-    writeSchemaManifest(tmpDir, "f".repeat(64));
+    writeSchemaManifest(tmpDir, { fingerprint: "f".repeat(64) });
     stdout = [];
 
     expect(runCli(["generate", "--check"], io)).toBe(1);
@@ -372,12 +322,19 @@ describe("FluxFast CLI", () => {
   it("runs doctor with grouped diagnostics and registered pages", () => {
     createTestProject(tmpDir);
     expect(runCli(["init"], io)).toBe(0);
+    writeSchemaManifest(tmpDir);
+    expect(runCli(["generate"], io)).toBe(0);
     stdout = [];
 
     expect(runCli(["doctor"], io)).toBe(0);
     const output = stdout.join("\n");
     expect(output).toContain("FluxFast Doctor");
     expect(output).toContain("Environment");
+    expect(output).toContain("Types");
+    expect(output).toContain("1 typed resource");
+    expect(output).toContain("1 page route");
+    expect(output).toContain("1 mutation operation");
+    expect(output).toContain("Generated TypeScript is current");
     expect(output).toContain("Configuration");
     expect(output).toContain("home/index");
     expect(output).toContain("No problems found.");

@@ -7,8 +7,13 @@ import { validateFluxProject } from "../../src/cli/diagnostics";
 import { desiredCatchAllPath } from "../../src/cli/files";
 import { createInitPlan } from "../../src/cli/init";
 import { detectFluxProject } from "../../src/cli/project";
+import { generateFluxFastProject } from "../../src/generate";
 import type { FluxProjectInfo } from "../../src/cli/types";
-import { createTestProject, writeTestFile } from "./helpers";
+import {
+  createTestProject,
+  writeSchemaManifest,
+  writeTestFile,
+} from "./helpers";
 
 describe("FluxFast project diagnostics", () => {
   let tmpDir: string;
@@ -25,6 +30,20 @@ describe("FluxFast project diagnostics", () => {
     createTestProject(tmpDir);
     const project = detectFluxProject(tmpDir);
     applyInitPlan(createInitPlan(project), { logRegistry: false });
+    return detectFluxProject(tmpDir);
+  }
+
+  function initializeTyped(
+    overrides: Record<string, unknown> = {}
+  ): FluxProjectInfo {
+    const project = initialize();
+    writeSchemaManifest(tmpDir, overrides);
+    generateFluxFastProject({
+      pagesDir: project.fluxPagesDir,
+      outputFile: project.registryPath,
+      generatedDir: project.generatedDir,
+      log: false,
+    });
     return detectFluxProject(tmpDir);
   }
 
@@ -102,6 +121,160 @@ describe("FluxFast project diagnostics", () => {
       })
     );
     expect(fs.readFileSync(project.registryPath, "utf8")).toBe(before);
+  });
+
+  it("reports a valid manifest, contract counts, and current generated types", () => {
+    const report = validateFluxProject(initializeTyped(), {
+      includeTypeDiagnostics: true,
+    });
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "types.manifest",
+          status: "pass",
+          message: expect.stringContaining("fluxfast-schema/1 manifest found"),
+        }),
+        expect.objectContaining({
+          id: "types.resources",
+          status: "pass",
+          message: "1 typed resource",
+        }),
+        expect.objectContaining({
+          id: "types.routes",
+          status: "pass",
+          message: "1 page route",
+        }),
+        expect.objectContaining({
+          id: "types.mutations",
+          status: "pass",
+          message: "1 mutation operation",
+        }),
+        expect.objectContaining({
+          id: "types.generated",
+          status: "pass",
+          message: "Generated TypeScript is current",
+        }),
+      ])
+    );
+  });
+
+  it("treats a missing schema manifest as a non-blocking type warning", () => {
+    const project = initialize();
+    const report = validateFluxProject(project, {
+      includeTypeDiagnostics: true,
+    });
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "types.manifest",
+        section: "Types",
+        status: "warning",
+        message: expect.stringContaining("manifest was not found"),
+      })
+    );
+    expect(
+      fs.existsSync(path.join(project.generatedDir, "types.generated.ts"))
+    ).toBe(false);
+  });
+
+  it("warns when generated types drift without rewriting them", () => {
+    const project = initializeTyped();
+    const typesPath = path.join(project.generatedDir, "types.generated.ts");
+    const typesBefore = fs.readFileSync(typesPath, "utf8");
+    writeSchemaManifest(tmpDir, { fingerprint: "f".repeat(64) });
+
+    const report = validateFluxProject(detectFluxProject(tmpDir), {
+      includeTypeDiagnostics: true,
+    });
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "types.generated",
+        status: "warning",
+        message: expect.stringContaining("stale or missing"),
+        fix: "npx fluxfast generate",
+      })
+    );
+    expect(fs.readFileSync(typesPath, "utf8")).toBe(typesBefore);
+  });
+
+  it("warns about unsupported manifest versions without blocking runtime", () => {
+    const project = initialize();
+    writeSchemaManifest(tmpDir, { schema: "fluxfast-schema/2" });
+
+    const report = validateFluxProject(detectFluxProject(tmpDir), {
+      includeTypeDiagnostics: true,
+    });
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "types.manifest",
+        status: "warning",
+        message: expect.stringContaining("version is unsupported"),
+      })
+    );
+    expect(fs.readFileSync(project.registryPath, "utf8")).toContain(
+      "home/index"
+    );
+  });
+
+  it("warns when an unconstrained resource schema maps to unknown", () => {
+    const report = validateFluxProject(
+      initializeTyped({
+        resources: {
+          payload: { schema: {} },
+        },
+      }),
+      { includeTypeDiagnostics: true }
+    );
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "types.unknown",
+        status: "warning",
+        message: expect.stringContaining('Resource "payload"'),
+      })
+    );
+  });
+
+  it("surfaces route identifier collisions as non-blocking type warnings", () => {
+    const project = initialize();
+    writeSchemaManifest(tmpDir, {
+      pages: [
+        {
+          name: "room-types",
+          path: "/rooms",
+          parameters: [],
+        },
+        {
+          name: "room_types",
+          path: "/room-types",
+          parameters: [],
+        },
+      ],
+    });
+
+    const report = validateFluxProject(detectFluxProject(tmpDir), {
+      includeTypeDiagnostics: true,
+    });
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "types.generated",
+        status: "warning",
+        message: expect.stringContaining("collides"),
+      })
+    );
+    expect(fs.readFileSync(project.registryPath, "utf8")).toContain(
+      "home/index"
+    );
   });
 
   it("detects a root Next route that shadows FluxFast", () => {
