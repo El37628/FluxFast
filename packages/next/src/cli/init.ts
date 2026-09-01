@@ -3,10 +3,13 @@ import path from "node:path";
 import { validateInitPrerequisites } from "./diagnostics";
 import {
   desiredCatchAllPath,
+  desiredHealthRoutePath,
   desiredHomePagePath,
   isFluxCatchAll,
+  isFluxHealthRoute,
   renderCatchAll,
   renderFluxConfig,
+  renderHealthRoute,
   renderStarterPage,
 } from "./files";
 import { inspectPage, prepareMigratedPage } from "./migration";
@@ -120,6 +123,43 @@ export function createInitPlan(
       type: "create",
       path: catchAllPath,
       content: renderCatchAll(project),
+    });
+  }
+
+  const healthRoutePath = desiredHealthRoutePath(project);
+  if (isFile(healthRoutePath)) {
+    const before = fs.readFileSync(healthRoutePath, "utf8");
+    const after = renderHealthRoute();
+    if (before === after || (isFluxHealthRoute(before) && !options.force)) {
+      operations.push({
+        type: "skip",
+        path: healthRoutePath,
+        reason: "FluxFast public health route already exists",
+      });
+    } else if (options.force) {
+      operations.push({
+        type: "modify",
+        path: healthRoutePath,
+        before,
+        after,
+      });
+      warnings.push(
+        `${relativeProjectPath(project, healthRoutePath)} was replaced because --force was used.`
+      );
+    } else {
+      const displayPath = relativeProjectPath(project, healthRoutePath);
+      const warning = `${displayPath} occupies FluxFast's reserved public health route.`;
+      warnings.push(warning);
+      manualActions.push(
+        `Repair ${displayPath} manually or run npx fluxfast init --force.`
+      );
+      operations.push({ type: "skip", path: healthRoutePath, reason: warning });
+    }
+  } else {
+    operations.push({
+      type: "create",
+      path: healthRoutePath,
+      content: renderHealthRoute(),
     });
   }
 

@@ -10,6 +10,13 @@ export function isFluxCatchAll(content: string): boolean {
   );
 }
 
+export function isFluxHealthRoute(content: string): boolean {
+  return (
+    content.includes(FLUXFAST_GENERATED_MARKER) &&
+    /\bcreateFluxHealthHandler\s*\(/.test(content)
+  );
+}
+
 type RelativePathApi = Pick<typeof path, "dirname" | "relative">;
 
 function withoutSourceExtension(filePath: string): string {
@@ -45,6 +52,14 @@ export function desiredHomePagePath(project: FluxProjectInfo): string {
   return path.join(project.fluxPagesDir, "home", `index.${extension}`);
 }
 
+export function desiredHealthRoutePath(project: FluxProjectInfo): string {
+  const extension = project.language === "typescript" ? "ts" : "js";
+  // Next reserves underscore-prefixed folders as private implementation
+  // details. Its documented percent-encoding escape maps this source segment
+  // back to the public `/_fluxfast` URL.
+  return path.join(project.appDir, "%5Ffluxfast", "[probe]", `route.${extension}`);
+}
+
 function configImportForCatchAll(
   project: FluxProjectInfo,
   catchAllPath: string
@@ -63,6 +78,10 @@ function registryImportForConfig(project: FluxProjectInfo): string {
 export function renderCatchAll(project: FluxProjectInfo): string {
   const catchAllPath = desiredCatchAllPath(project);
   return `${FLUXFAST_GENERATED_MARKER}\n// Run \`fluxfast init --force\` to repair this file.\n\nimport { createFluxNextPage } from "@fluxfast/next/server";\nimport { fluxConfig } from ${JSON.stringify(configImportForCatchAll(project, catchAllPath))};\n\nexport const dynamic = "force-dynamic";\n\nexport default createFluxNextPage(fluxConfig);\n`;
+}
+
+export function renderHealthRoute(): string {
+  return `${FLUXFAST_GENERATED_MARKER}\n// Run \`fluxfast init --force\` to repair this file.\n\nimport { createFluxHealthHandler } from "@fluxfast/next/server";\n\nexport const dynamic = "force-dynamic";\nexport const GET = createFluxHealthHandler();\n`;
 }
 
 export function renderFluxConfig(project: FluxProjectInfo): string {

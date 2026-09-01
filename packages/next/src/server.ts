@@ -13,6 +13,9 @@ import {
 } from "@fluxfast/core";
 import { FluxNextConfig, resolveFluxBackendUrl } from "./config";
 
+export { createFluxHealthHandler } from "./health";
+export type { FluxHealthHandlerOptions } from "./health";
+
 export interface FetchInitialEnvelopeOptions {
   backendUrl: string;
   path: string;
