@@ -2,13 +2,8 @@
 
 import { useDeferredResource, useRouter } from "@fluxfast/next";
 
-interface LiveAnalytics {
-  generation: number;
-  revenue: number;
-}
-
 export default function DeferredMutationPage() {
-  const analytics = useDeferredResource<LiveAnalytics>("live-analytics");
+  const analytics = useDeferredResource("live-analytics");
   const router = useRouter();
 
   return (

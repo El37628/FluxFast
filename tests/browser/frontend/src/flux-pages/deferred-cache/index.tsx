@@ -2,12 +2,8 @@
 
 import { Link, useDeferredResource } from "@fluxfast/next";
 
-interface CachedAnalytics {
-  revenue: number;
-}
-
 export default function DeferredCachePage() {
-  const analytics = useDeferredResource<CachedAnalytics>("cached-analytics");
+  const analytics = useDeferredResource("cached-analytics");
 
   return (
     <main>

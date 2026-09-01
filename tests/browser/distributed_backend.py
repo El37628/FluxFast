@@ -50,6 +50,15 @@ class DistributedIdentity(BaseModel):
     client: str = Field(pattern="^[ab]$")
 
 
+class CounterValue(BaseModel):
+    """Typed value shared by every distributed worker."""
+
+    value: int
+
+
+DISTRIBUTED_COUNTER = flux.define_resource("distributed-counter", CounterValue)
+
+
 def _state_key(run: str) -> str:
     return f"{DIAGNOSTIC_PREFIX}:{run}:state"
 
@@ -104,7 +113,7 @@ async def distributed_live(request: Request) -> Page:
         "distributed-live/index",
         [
             resource(
-                "distributed-counter",
+                DISTRIBUTED_COUNTER,
                 load_counter,
                 scope=scope.custom("browser-distributed", run),
                 ttl=60,

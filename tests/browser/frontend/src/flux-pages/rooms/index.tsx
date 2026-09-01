@@ -3,18 +3,9 @@
 import { useForm, useResource, useRouter } from "@fluxfast/next";
 import { useEffect, useState } from "react";
 
-interface ApplicationDetails {
-  name: string;
-}
-
-interface Room {
-  id: number;
-  name: string;
-}
-
 export default function RoomsPage() {
-  const application = useResource<ApplicationDetails>("application");
-  const rooms = useResource<Room[]>("rooms");
+  const application = useResource("application");
+  const rooms = useResource("rooms");
   const router = useRouter();
   const form = useForm({ name: "" });
   const [hydrated, setHydrated] = useState(false);

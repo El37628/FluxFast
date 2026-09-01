@@ -2,19 +2,9 @@
 
 import { Link, useDeferredResource } from "@fluxfast/next";
 
-interface Analytics {
-  revenue: number;
-  period: string;
-}
-
-interface ActivityItem {
-  id: number;
-  message: string;
-}
-
 export default function DeferredPage() {
-  const analytics = useDeferredResource<Analytics>("analytics");
-  const activity = useDeferredResource<ActivityItem[]>("activity");
+  const analytics = useDeferredResource("analytics");
+  const activity = useDeferredResource("activity");
 
   return (
     <main>

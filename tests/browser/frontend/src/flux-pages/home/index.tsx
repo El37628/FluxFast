@@ -1,13 +1,10 @@
 "use client";
 
 import { Link, useResource } from "@fluxfast/next";
-
-interface ApplicationDetails {
-  name: string;
-}
+import { routes } from "@/.fluxfast/routes.generated";
 
 export default function HomePage() {
-  const application = useResource<ApplicationDetails>("application");
+  const application = useResource("application");
 
   return (
     <main>
@@ -15,6 +12,9 @@ export default function HomePage() {
       <h1>Control Center</h1>
       <Link href="/rooms" prefetch={false}>
         Manage rooms
+      </Link>
+      <Link href={routes.hotelRooms({ hotel_id: 101 })}>
+        View Hotel 101 rooms
       </Link>
     </main>
   );
