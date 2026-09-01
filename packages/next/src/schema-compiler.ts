@@ -556,6 +556,54 @@ class ResourceTypeCompiler {
     return `${header.join("\n")}\n\nimport type {} from "@fluxfast/core";\n\n${declarations.join("\n\n")}\n`;
   }
 
+  resourcesWithUnknownTypes(): string[] {
+    this.collectResources();
+    return [...this.resources]
+      .sort((left, right) =>
+        compareText(left.context.resourceKey, right.context.resourceKey)
+      )
+      .filter(resource =>
+        this.schemaContainsUnknown(
+          resource.schema,
+          resource.context,
+          resource.path,
+          new Set()
+        )
+      )
+      .map(resource => resource.context.resourceKey);
+  }
+
+  private schemaContainsUnknown(
+    schema: SchemaNode,
+    context: CompilationContext,
+    path: string,
+    visitedDefinitions: Set<string>
+  ): boolean {
+    const compiled = compileSchema(schema, context, path);
+    if (/\bunknown\b/.test(compiled)) return true;
+
+    const referencedNames = new Set(context.references.values());
+    if (context.rootType) referencedNames.add(context.rootType);
+    for (const name of referencedNames) {
+      if (!new RegExp(`\\b${name}\\b`).test(compiled)) continue;
+      if (visitedDefinitions.has(name)) continue;
+      const definition = this.definitions.get(name);
+      if (!definition) continue;
+      visitedDefinitions.add(name);
+      if (
+        this.schemaContainsUnknown(
+          definition.schema,
+          definition.context,
+          definition.path,
+          visitedDefinitions
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private renderResourceKeys(resources: ResourceAlias[]): string {
     if (resources.length === 0) {
       return "export const resourceKeys = {} as const;";
@@ -727,4 +775,12 @@ class ResourceTypeCompiler {
 export function compileFluxFastResourceTypes(value: unknown): string {
   const manifest = validateFluxFastSchemaManifest(value);
   return new ResourceTypeCompiler(manifest).compile();
+}
+
+/** Find resource contracts whose generated TypeScript contains `unknown`. */
+export function findFluxFastResourceKeysWithUnknownTypes(
+  value: unknown
+): string[] {
+  const manifest = validateFluxFastSchemaManifest(value);
+  return new ResourceTypeCompiler(manifest).resourcesWithUnknownTypes();
 }

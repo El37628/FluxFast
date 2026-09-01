@@ -4,7 +4,7 @@ import {
   checkFluxFastProject,
   createPagesRegistrySnapshot,
 } from "../generate";
-import { compileInlineJsonSchemaType } from "../schema-compiler";
+import { findFluxFastResourceKeysWithUnknownTypes } from "../schema-compiler";
 import {
   type FluxFastSchemaManifest,
   parseFluxFastSchemaManifest,
@@ -331,16 +331,7 @@ function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
   );
 
   try {
-    const unknownResources = Object.entries(manifest.resources)
-      .filter(([key, entry]) =>
-        /\bunknown\b/.test(
-          compileInlineJsonSchemaType(
-            entry.schema,
-            `$.resources[${JSON.stringify(key)}].schema`
-          )
-        )
-      )
-      .map(([key]) => key);
+    const unknownResources = findFluxFastResourceKeysWithUnknownTypes(manifest);
     if (unknownResources.length > 0) {
       diagnostics.push(
         diagnostic(

@@ -47,6 +47,36 @@ describe("FluxFast project diagnostics", () => {
     return detectFluxProject(tmpDir);
   }
 
+  function repeatedNestedSchema(depth: number): Record<string, unknown> {
+    const definitions: Record<string, unknown> = {};
+    for (let index = depth - 1; index >= 0; index -= 1) {
+      const name = `NestedLevel${index}`;
+      definitions[name] = index === depth - 1
+        ? {
+            title: name,
+            type: "object",
+            properties: { value: { type: "string" } },
+            required: ["value"],
+          }
+        : {
+            title: name,
+            type: "object",
+            properties: {
+              child: { $ref: `#/$defs/NestedLevel${index + 1}` },
+              siblings: {
+                type: "array",
+                items: { $ref: `#/$defs/NestedLevel${index + 1}` },
+              },
+            },
+            required: ["child", "siblings"],
+          };
+    }
+    return {
+      $defs: definitions,
+      $ref: "#/$defs/NestedLevel0",
+    };
+  }
+
   it("reports a healthy initialized project and its registered pages", () => {
     const report = validateFluxProject(initialize());
 
@@ -240,6 +270,60 @@ describe("FluxFast project diagnostics", () => {
         status: "warning",
         message: expect.stringContaining('Resource "payload"'),
       })
+    );
+  });
+
+  it("warns when a referenced model contains an unconstrained schema", () => {
+    const report = validateFluxProject(
+      initializeTyped({
+        resources: {
+          payload: {
+            schema: {
+              $defs: {
+                Payload: {
+                  type: "object",
+                  properties: { value: {} },
+                  required: ["value"],
+                },
+              },
+              $ref: "#/$defs/Payload",
+            },
+          },
+        },
+      }),
+      { includeTypeDiagnostics: true }
+    );
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "types.unknown",
+        status: "warning",
+        message: expect.stringContaining('Resource "payload"'),
+      })
+    );
+  });
+
+  it("checks deeply repeated references without expanding them inline", () => {
+    const report = validateFluxProject(
+      initializeTyped({
+        resources: {
+          nested: { schema: repeatedNestedSchema(24) },
+        },
+      }),
+      { includeTypeDiagnostics: true }
+    );
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "types.generated",
+        status: "pass",
+        message: "Generated TypeScript is current",
+      })
+    );
+    expect(report.diagnostics).not.toContainEqual(
+      expect.objectContaining({ id: "types.unknown" })
     );
   });
 
