@@ -202,6 +202,7 @@ function runInit(args: string[], io: CliIo): number {
 const DOCTOR_SECTIONS: DiagnosticSection[] = [
   "Environment",
   "Packages",
+  "Types",
   "Project",
   "Configuration",
   "Pages",
@@ -214,7 +215,7 @@ function runDoctor(args: string[], io: CliIo): number {
     return 2;
   }
   const project = detectFluxProject(io.cwd);
-  const report = validateFluxProject(project);
+  const report = validateFluxProject(project, { includeTypeDiagnostics: true });
   io.stdout("FluxFast Doctor");
   for (const section of DOCTOR_SECTIONS) {
     const items = report.diagnostics.filter(item => item.section === section);

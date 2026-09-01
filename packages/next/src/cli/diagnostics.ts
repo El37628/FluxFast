@@ -1,6 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createPagesRegistrySnapshot } from "../generate";
+import {
+  checkFluxFastProject,
+  createPagesRegistrySnapshot,
+} from "../generate";
+import { compileInlineJsonSchemaType } from "../schema-compiler";
+import {
+  type FluxFastSchemaManifest,
+  parseFluxFastSchemaManifest,
+  SchemaManifestValidationError,
+} from "../schema-manifest";
 import { desiredCatchAllPath, isFluxCatchAll } from "./files";
 import { transformNextConfig } from "./next-config";
 import type {
@@ -12,6 +21,7 @@ import type {
 export type DiagnosticSection =
   | "Environment"
   | "Packages"
+  | "Types"
   | "Project"
   | "Configuration"
   | "Pages"
@@ -35,6 +45,7 @@ export interface FluxValidationReport {
 }
 
 export interface ValidationOptions {
+  includeTypeDiagnostics?: boolean;
   nodeVersion?: string;
 }
 
@@ -239,6 +250,151 @@ function routeForAppPage(appDir: string, pageFile: string): string {
   return routeSegments.length > 0 ? `/${routeSegments.join("/")}` : "/";
 }
 
+function countMessage(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
+  const diagnostics: FluxDiagnostic[] = [];
+  const schemaFile = path.join(project.generatedDir, "schema.generated.json");
+  const relativeSchemaFile = path.relative(project.root, schemaFile);
+  const source = readFile(schemaFile);
+  if (source === undefined) {
+    diagnostics.push(
+      diagnostic(
+        "types.manifest",
+        "Types",
+        "warning",
+        fs.existsSync(schemaFile)
+          ? `Schema manifest could not be read at ${relativeSchemaFile}.`
+          : `fluxfast-schema/1 manifest was not found at ${relativeSchemaFile}.`
+      )
+    );
+    return diagnostics;
+  }
+
+  let manifest: FluxFastSchemaManifest;
+  try {
+    manifest = parseFluxFastSchemaManifest(source);
+  } catch (error) {
+    const unsupportedVersion =
+      error instanceof SchemaManifestValidationError &&
+      error.path === "$.schema" &&
+      error.message.includes("unsupported version");
+    const message = error instanceof Error ? error.message : String(error);
+    diagnostics.push(
+      diagnostic(
+        "types.manifest",
+        "Types",
+        "warning",
+        unsupportedVersion
+          ? `Schema manifest version is unsupported. ${message}`
+          : `Schema manifest is invalid. ${message}`
+      )
+    );
+    return diagnostics;
+  }
+
+  diagnostics.push(
+    diagnostic(
+      "types.manifest",
+      "Types",
+      "pass",
+      `fluxfast-schema/1 manifest found at ${relativeSchemaFile}`
+    ),
+    diagnostic(
+      "types.resources",
+      "Types",
+      "pass",
+      countMessage(
+        Object.keys(manifest.resources).length,
+        "typed resource",
+        "typed resources"
+      )
+    ),
+    diagnostic(
+      "types.routes",
+      "Types",
+      "pass",
+      countMessage(manifest.pages.length, "page route", "page routes")
+    ),
+    diagnostic(
+      "types.mutations",
+      "Types",
+      "pass",
+      countMessage(
+        manifest.mutations.length,
+        "mutation operation",
+        "mutation operations"
+      )
+    )
+  );
+
+  try {
+    const unknownResources = Object.entries(manifest.resources)
+      .filter(([key, entry]) =>
+        /\bunknown\b/.test(
+          compileInlineJsonSchemaType(
+            entry.schema,
+            `$.resources[${JSON.stringify(key)}].schema`
+          )
+        )
+      )
+      .map(([key]) => key);
+    if (unknownResources.length > 0) {
+      diagnostics.push(
+        diagnostic(
+          "types.unknown",
+          "Types",
+          "warning",
+          unknownResources.length === 1
+            ? `Resource ${JSON.stringify(unknownResources[0])} contains an unconstrained schema and maps to unknown.`
+            : `${unknownResources.length} resources contain unconstrained schemas and map to unknown: ${unknownResources.map(key => JSON.stringify(key)).join(", ")}.`
+        )
+      );
+    }
+
+    const result = checkFluxFastProject({
+      pagesDir: project.fluxPagesDir,
+      outputFile: project.registryPath,
+      generatedDir: project.generatedDir,
+      schemaFile,
+      log: false,
+    });
+    const staleTypeFiles = result.staleFiles.filter(
+      file => file !== result.registryPath
+    );
+    diagnostics.push(
+      staleTypeFiles.length === 0
+        ? diagnostic(
+            "types.generated",
+            "Types",
+            "pass",
+            "Generated TypeScript is current"
+          )
+        : diagnostic(
+            "types.generated",
+            "Types",
+            "warning",
+            `${countMessage(staleTypeFiles.length, "generated TypeScript file is", "generated TypeScript files are")} stale or missing.`,
+            { fix: "npx fluxfast generate" }
+          )
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    diagnostics.push(
+      diagnostic(
+        "types.generated",
+        "Types",
+        "warning",
+        `Generated TypeScript could not be verified. ${message}`
+      )
+    );
+  }
+
+  return diagnostics;
+}
+
 export function validateFluxProject(
   project: FluxProjectInfo,
   options: ValidationOptions = {}
@@ -425,6 +581,10 @@ export function validateFluxProject(
         fix: "Resolve duplicate or invalid files in flux-pages",
       })
     );
+  }
+
+  if (options.includeTypeDiagnostics) {
+    diagnostics.push(...validateTypeGeneration(project));
   }
 
   return {

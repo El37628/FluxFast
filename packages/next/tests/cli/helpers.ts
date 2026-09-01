@@ -54,3 +54,58 @@ export function createTestProject(
     '{"name":"@fluxfast/core","version":"0.1.0"}\n'
   );
 }
+
+export function writeSchemaManifest(
+  root: string,
+  overrides: Record<string, unknown> = {}
+): string {
+  return writeTestFile(
+    root,
+    "src/.fluxfast/schema.generated.json",
+    `${JSON.stringify(
+      {
+        schema: "fluxfast-schema/1",
+        producer: "0.6.0",
+        fingerprint: "e".repeat(64),
+        resources: {
+          rooms: {
+            schema: {
+              type: "array",
+              items: { type: "string" },
+            },
+          },
+        },
+        pages: [
+          {
+            name: "hotel_rooms",
+            path: "/hotels/{hotel_id}/rooms",
+            parameters: [
+              {
+                name: "hotel_id",
+                location: "path",
+                required: true,
+                schema: { type: "integer" },
+              },
+            ],
+          },
+        ],
+        mutations: [
+          {
+            name: "create_room",
+            path: "/rooms",
+            method: "POST",
+            parameters: [],
+            body: {
+              type: "object",
+              properties: { number: { type: "integer" } },
+              required: ["number"],
+            },
+          },
+        ],
+        ...overrides,
+      },
+      null,
+      2
+    )}\n`
+  );
+}
