@@ -51,6 +51,7 @@ from .protocol import (
     PageDescriptor,
     PageEnvelope,
 )
+from .route_metadata import FluxRouteMetadata, mark_fluxfast_route
 from .timing import TimingMetrics
 
 _DEFAULT_CACHE = MemoryResourceCache()
@@ -313,6 +314,15 @@ class FluxRouter(APIRouter):
                 return result
 
             endpoint_wrapper.__signature__ = wrapper_sig  # type: ignore
+            mark_fluxfast_route(
+                endpoint_wrapper,
+                FluxRouteMetadata(
+                    kind="page",
+                    name=kwargs.get("name") or func.__name__,
+                    path=path,
+                    methods=("GET",),
+                ),
+            )
 
             # Register with standard FastAPI router
             self.add_api_route(

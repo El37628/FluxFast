@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from enum import Enum
 from typing import Literal
 
-from fastapi import Depends, FastAPI
+import pytest
+from fastapi import Depends, FastAPI, Query
 from pydantic import BaseModel, Field, field_serializer
 
-from fluxfast import FluxFast, Page, resource, scope
-from fluxfast.schema_export import build_schema_manifest
+from fluxfast import FluxFast, FluxRouter, Page, resource, scope
+from fluxfast.schema_export import build_app_schema_manifest, build_schema_manifest
 
 
 class Booking(BaseModel):
@@ -26,6 +28,11 @@ class Booking(BaseModel):
 
 class Summary(BaseModel):
     total: int
+
+
+class RoomStatus(str, Enum):
+    AVAILABLE = "available"
+    OCCUPIED = "occupied"
 
 
 def test_export_uses_pydantic_serialization_mode_wire_schema() -> None:
@@ -139,3 +146,108 @@ def test_export_uses_only_the_given_application_registry() -> None:
 
     assert list(first_manifest.resources) == ["bookings"]
     assert list(second_manifest.resources) == ["summary"]
+
+
+def test_app_export_includes_typed_page_path_query_and_dependency_parameters() -> None:
+    app = FastAPI()
+    flux = FluxFast(app)
+    calls = {"page": 0, "dependency": 0}
+
+    def filters_dependency(limit: int = 25) -> None:
+        calls["dependency"] += 1
+
+    @flux.page(
+        "/hotels/{hotel_id}/rooms",
+        name="hotel_rooms",
+        include_in_schema=False,
+    )
+    async def hotel_rooms_page(
+        hotel_id: int,
+        page: int = 1,
+        status: RoomStatus | None = None,
+        search: str = Query(min_length=2),
+        filters: None = Depends(filters_dependency),
+    ) -> Page:
+        calls["page"] += 1
+        return Page(component="rooms/index", meta={"filters": filters})
+
+    @app.get("/ordinary/{value}")
+    async def ordinary_api(value: str) -> dict[str, str]:
+        return {"value": value}
+
+    manifest = build_app_schema_manifest(app, producer="0.6.0")
+
+    assert calls == {"page": 0, "dependency": 0}
+    assert [page.name for page in manifest.pages] == ["hotel_rooms"]
+    page_route = manifest.pages[0]
+    assert page_route.path == "/hotels/{hotel_id}/rooms"
+    assert [
+        (parameter.location, parameter.name, parameter.required)
+        for parameter in page_route.parameters
+    ] == [
+        ("path", "hotel_id", True),
+        ("query", "limit", False),
+        ("query", "page", False),
+        ("query", "search", True),
+        ("query", "status", False),
+    ]
+    schemas = {
+        parameter.name: parameter.json_schema for parameter in page_route.parameters
+    }
+    assert schemas["hotel_id"] == {"type": "integer"}
+    assert schemas["page"] == {"default": 1, "type": "integer"}
+    assert schemas["search"] == {"minLength": 2, "type": "string"}
+    assert schemas["status"]["anyOf"][0]["$ref"] == "#/$defs/RoomStatus"
+    assert schemas["status"]["$defs"]["RoomStatus"]["enum"] == [
+        "available",
+        "occupied",
+    ]
+
+
+def test_app_export_resolves_included_router_prefixes_and_sorts_pages() -> None:
+    app = FastAPI()
+    FluxFast(app)
+    router = FluxRouter(prefix="/workspace")
+
+    @router.page("/zeta", name="zeta")
+    async def zeta_page() -> Page:
+        return Page(component="zeta/index")
+
+    @router.page("/alpha/{slug}", name="alpha")
+    async def alpha_page(slug: str) -> Page:
+        return Page(component="alpha/index")
+
+    app.include_router(router, prefix="/api")
+
+    manifest = build_app_schema_manifest(app, producer="0.6.0")
+
+    assert [(page.name, page.path) for page in manifest.pages] == [
+        ("alpha", "/api/workspace/alpha/{slug}"),
+        ("zeta", "/api/workspace/zeta"),
+    ]
+
+
+def test_page_metadata_changes_manifest_fingerprint() -> None:
+    first_app = FastAPI()
+    first = FluxFast(first_app)
+
+    @first.page("/rooms/{room_id}", name="rooms")
+    async def first_rooms(room_id: int) -> Page:
+        return Page(component="rooms/index", meta={"room": room_id})
+
+    second_app = FastAPI()
+    second = FluxFast(second_app)
+
+    @second.page("/rooms/{room_id}", name="rooms")
+    async def second_rooms(room_id: str) -> Page:
+        return Page(component="rooms/index", meta={"room": room_id})
+
+    first_manifest = build_app_schema_manifest(first_app, producer="0.6.0")
+    second_manifest = build_app_schema_manifest(second_app, producer="0.6.0")
+
+    assert first_manifest.fingerprint != second_manifest.fingerprint
+
+
+def test_app_export_requires_fluxfast_integration() -> None:
+    with pytest.raises(TypeError, match="not configured with FluxFast"):
+        build_app_schema_manifest(FastAPI(), producer="0.6.0")
