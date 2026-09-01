@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import shutil
@@ -14,6 +15,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
+
+from fastapi import FastAPI
+
+from . import __version__
+from .schema_export import build_app_schema_manifest
+from .serialization import canonical_json
 
 
 @dataclass(frozen=True)
@@ -32,6 +39,10 @@ class DevConfig:
 
 class DevServerError(RuntimeError):
     """Raised when the local development processes cannot be started."""
+
+
+class SchemaCommandError(RuntimeError):
+    """Raised when an application schema cannot be loaded or exported."""
 
 
 def _available_port(host: str) -> int:
@@ -200,6 +211,80 @@ def run_dev(config: DevConfig) -> int:
         signal.signal(signal.SIGTERM, previous_sigterm)
 
 
+def _load_schema_app(app_import: str) -> FastAPI:
+    """Import and resolve a FastAPI application from ``module:attribute``."""
+
+    module_name, separator, attribute_path = app_import.partition(":")
+    if not separator or not module_name or not attribute_path:
+        raise SchemaCommandError(
+            "Application import must use module:attribute format, for example backend:app"
+        )
+
+    try:
+        value: object = importlib.import_module(module_name)
+    except Exception as error:
+        raise SchemaCommandError(
+            f"Could not import application module '{module_name}': {error}"
+        ) from error
+
+    try:
+        for attribute in attribute_path.split("."):
+            value = getattr(value, attribute)
+    except AttributeError as error:
+        raise SchemaCommandError(
+            f"Application import '{app_import}' does not resolve to an attribute"
+        ) from error
+
+    if not isinstance(value, FastAPI):
+        raise SchemaCommandError(
+            f"Application import '{app_import}' must resolve to a FastAPI application"
+        )
+    return value
+
+
+def _schema_manifest_text(app: FastAPI) -> str:
+    """Build stable JSON bytes for one application's developer schema manifest."""
+
+    try:
+        manifest = build_app_schema_manifest(app, producer=__version__)
+    except TypeError as error:
+        raise SchemaCommandError(str(error)) from error
+    payload = manifest.model_dump(mode="json", by_alias=True, exclude_none=True)
+    return f"{canonical_json(payload)}\n"
+
+
+def run_schema(
+    app_import: str,
+    *,
+    output: Path | None = None,
+    check: bool = False,
+) -> int:
+    """Export or verify the deterministic developer schema manifest."""
+
+    app = _load_schema_app(app_import)
+    manifest_text = _schema_manifest_text(app)
+    manifest_bytes = manifest_text.encode("utf-8")
+
+    if check:
+        if output is None:
+            raise SchemaCommandError("--check requires --output")
+        if not output.is_file():
+            print(f"[fluxfast] schema manifest is missing: {output}", file=sys.stderr)
+            return 1
+        if output.read_bytes() != manifest_bytes:
+            print(f"[fluxfast] schema manifest is stale: {output}", file=sys.stderr)
+            return 1
+        return 0
+
+    if output is None:
+        sys.stdout.write(manifest_text)
+        return 0
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(manifest_bytes)
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fluxfast")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -215,6 +300,25 @@ def _parser() -> argparse.ArgumentParser:
     dev.add_argument("--frontend-port", type=int, default=3000)
     dev.add_argument("--no-reload", action="store_true")
     dev.add_argument("--startup-timeout", type=float, default=15.0)
+
+    schema = subparsers.add_parser(
+        "schema",
+        help="export the offline FluxFast schema manifest",
+    )
+    schema.add_argument(
+        "app",
+        help="FastAPI application import, for example backend:app",
+    )
+    schema.add_argument(
+        "--output",
+        type=Path,
+        help="write the manifest to this path instead of stdout",
+    )
+    schema.add_argument(
+        "--check",
+        action="store_true",
+        help="exit non-zero when the output manifest is missing or stale",
+    )
     return parser
 
 
@@ -237,6 +341,16 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         except DevServerError as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 1
+    if args.command == "schema":
+        try:
+            return run_schema(
+                args.app,
+                output=args.output,
+                check=args.check,
+            )
+        except (SchemaCommandError, OSError) as error:
             print(f"[fluxfast] {error}", file=sys.stderr)
             return 1
     return 1
