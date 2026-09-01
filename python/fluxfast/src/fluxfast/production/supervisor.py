@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import math
+import signal
 import socket
+import subprocess
 import time
 from collections.abc import Callable
 from enum import Enum
+from types import FrameType
 
 from .config import ProductionConfig
 from .process import ManagedProcess
@@ -47,6 +50,10 @@ class ProductionChildError(ProductionSupervisorError):
 ReadinessProbe = Callable[[], bool]
 
 
+class _ShutdownRequested(RuntimeError):
+    """Internal control flow for a signal received during startup."""
+
+
 class ProductionSupervisor:
     """Start, ready, and monitor one FastAPI and one Next.js child."""
 
@@ -76,6 +83,7 @@ class ProductionSupervisor:
         self._monotonic = monotonic
         self._sleep = sleep
         self.state = SupervisorState.INITIALIZING
+        self._shutdown_requested = False
 
     def start(self) -> None:
         """Start FastAPI, wait for it, then start and ready Next.js."""
@@ -95,12 +103,15 @@ class ProductionSupervisor:
             self.frontend.start()
             self._wait_until_ready(self.frontend, self.frontend_ready)
             self.state = SupervisorState.READY
+        except _ShutdownRequested:
+            self.shutdown()
+            raise
         except Exception:
             self._fail()
             raise
 
-    def monitor(self) -> None:
-        """Block until either ready child exits unexpectedly."""
+    def monitor(self) -> int:
+        """Block until requested shutdown or an unexpected child exit."""
 
         if self.state != SupervisorState.READY:
             raise ProductionSupervisorError(
@@ -108,6 +119,9 @@ class ProductionSupervisor:
             )
 
         while True:
+            if self._shutdown_requested:
+                self.shutdown()
+                return 0
             for child in (self.backend, self.frontend):
                 return_code = child.poll()
                 if return_code is not None:
@@ -115,11 +129,23 @@ class ProductionSupervisor:
                     raise ProductionChildError(child.name, return_code)
             self._sleep(self.poll_interval)
 
-    def run(self) -> None:
-        """Start and monitor the production runtime."""
+    def run(self) -> int:
+        """Run with temporary SIGTERM/SIGINT handlers until clean shutdown."""
 
-        self.start()
-        self.monitor()
+        handled_signals = (signal.SIGTERM, signal.SIGINT)
+        previous_handlers = {
+            signum: signal.getsignal(signum) for signum in handled_signals
+        }
+        for signum in handled_signals:
+            signal.signal(signum, self._request_shutdown)
+        try:
+            self.start()
+            return self.monitor()
+        except _ShutdownRequested:
+            return 0
+        finally:
+            for signum, previous_handler in previous_handlers.items():
+                signal.signal(signum, previous_handler)
 
     def shutdown(self) -> None:
         """Request termination of both children in reverse startup order."""
@@ -127,11 +153,11 @@ class ProductionSupervisor:
         if self.state == SupervisorState.STOPPED:
             return
         if self.state == SupervisorState.FAILED:
-            self._terminate_started_children()
+            self._stop_started_children()
             return
 
         self.state = SupervisorState.SHUTTING_DOWN
-        self._terminate_started_children()
+        self._stop_started_children()
         self.state = SupervisorState.STOPPED
 
     def _wait_until_ready(
@@ -141,6 +167,8 @@ class ProductionSupervisor:
     ) -> None:
         deadline = self._monotonic() + self.config.startup_timeout
         while True:
+            if self._shutdown_requested:
+                raise _ShutdownRequested
             return_code = child.poll()
             if return_code is not None:
                 raise ProductionStartupError(
@@ -160,12 +188,28 @@ class ProductionSupervisor:
 
     def _fail(self) -> None:
         self.state = SupervisorState.FAILED
-        self._terminate_started_children()
+        self._stop_started_children()
 
-    def _terminate_started_children(self) -> None:
+    def _stop_started_children(self) -> None:
+        deadline = self._monotonic() + self.config.shutdown_timeout
         for child in (self.frontend, self.backend):
-            if child.process is not None:
-                child.terminate()
+            if child.process is None or child.poll() is not None:
+                continue
+
+            child.terminate()
+            remaining = max(0.0, deadline - self._monotonic())
+            try:
+                child.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=1.0)
+
+    def _request_shutdown(
+        self,
+        _signum: int,
+        _frame: FrameType | None,
+    ) -> None:
+        self._shutdown_requested = True
 
 
 def tcp_readiness_probe(
