@@ -1,6 +1,8 @@
 """Tests for ordered FastAPI and Next.js production supervision."""
 
+import signal
 import socket
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,9 @@ class FakeProcess:
         self.process: object | None = None
         self.return_code: int | None = None
         self.terminate_calls = 0
+        self.kill_calls = 0
+        self.wait_timeouts: list[float | None] = []
+        self.ignore_terminate = False
 
     def start(self) -> object:
         self.events.append(f"{self.name}.start")
@@ -36,6 +41,20 @@ class FakeProcess:
     def terminate(self) -> None:
         self.events.append(f"{self.name}.terminate")
         self.terminate_calls += 1
+        if not self.ignore_terminate:
+            self.return_code = 0
+
+    def kill(self) -> None:
+        self.events.append(f"{self.name}.kill")
+        self.kill_calls += 1
+        self.return_code = -9
+
+    def wait(self, timeout: float | None = None) -> int:
+        self.events.append(f"{self.name}.wait")
+        self.wait_timeouts.append(timeout)
+        if self.return_code is None:
+            raise subprocess.TimeoutExpired(self.name, timeout)
+        return self.return_code
 
 
 class FakeClock:
@@ -185,7 +204,119 @@ def test_supervisor_shutdown_is_reverse_order_and_idempotent() -> None:
     supervisor.shutdown()
 
     assert supervisor.state == SupervisorState.STOPPED
-    assert events == ["frontend.terminate", "backend.terminate"]
+    assert events == [
+        "frontend.poll",
+        "frontend.terminate",
+        "frontend.wait",
+        "backend.poll",
+        "backend.terminate",
+        "backend.wait",
+    ]
+
+
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT])
+def test_supervisor_run_handles_shutdown_signals_and_restores_handlers(
+    signum: signal.Signals,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    backend = FakeProcess("backend", events)
+    frontend = FakeProcess("frontend", events)
+    handlers: dict[signal.Signals, object] = {}
+    restored = object()
+
+    monkeypatch.setattr(
+        "fluxfast.production.supervisor.signal.getsignal",
+        lambda _signum: restored,
+    )
+
+    def register(received: signal.Signals, handler: object) -> None:
+        handlers[received] = handler
+
+    monkeypatch.setattr("fluxfast.production.supervisor.signal.signal", register)
+
+    def request_shutdown(_duration: float) -> None:
+        handler = handlers[signum]
+        assert callable(handler)
+        handler(signum, None)
+
+    supervisor = ProductionSupervisor(
+        _config(),
+        backend,  # type: ignore[arg-type]
+        frontend,  # type: ignore[arg-type]
+        backend_ready=lambda: True,
+        frontend_ready=lambda: True,
+        sleep=request_shutdown,
+    )
+
+    assert supervisor.run() == 0
+    assert supervisor.state == SupervisorState.STOPPED
+    assert backend.terminate_calls == 1
+    assert frontend.terminate_calls == 1
+    assert handlers[signal.SIGTERM] is restored
+    assert handlers[signal.SIGINT] is restored
+
+
+def test_supervisor_signal_during_startup_stops_started_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    backend = FakeProcess("backend", events)
+    frontend = FakeProcess("frontend", events)
+    handlers: dict[signal.Signals, object] = {}
+    monkeypatch.setattr(
+        "fluxfast.production.supervisor.signal.getsignal",
+        lambda _signum: signal.SIG_DFL,
+    )
+    monkeypatch.setattr(
+        "fluxfast.production.supervisor.signal.signal",
+        lambda signum, handler: handlers.__setitem__(signum, handler),
+    )
+
+    def request_during_readiness() -> bool:
+        handler = handlers[signal.SIGTERM]
+        assert callable(handler)
+        handler(signal.SIGTERM, None)
+        return False
+
+    supervisor = ProductionSupervisor(
+        _config(),
+        backend,  # type: ignore[arg-type]
+        frontend,  # type: ignore[arg-type]
+        backend_ready=request_during_readiness,
+        frontend_ready=lambda: True,
+    )
+
+    assert supervisor.run() == 0
+    assert supervisor.state == SupervisorState.STOPPED
+    assert backend.terminate_calls == 1
+    assert frontend.process is None
+
+
+def test_supervisor_kills_children_that_ignore_shutdown_timeout() -> None:
+    events: list[str] = []
+    backend = FakeProcess("backend", events)
+    frontend = FakeProcess("frontend", events)
+    backend.ignore_terminate = True
+    frontend.ignore_terminate = True
+    supervisor = ProductionSupervisor(
+        _config(shutdown_timeout=0.1),
+        backend,  # type: ignore[arg-type]
+        frontend,  # type: ignore[arg-type]
+        backend_ready=lambda: True,
+        frontend_ready=lambda: True,
+    )
+    supervisor.start()
+    events.clear()
+
+    supervisor.shutdown()
+
+    assert supervisor.state == SupervisorState.STOPPED
+    assert frontend.kill_calls == 1
+    assert backend.kill_calls == 1
+    assert events.index("frontend.kill") < events.index("backend.terminate")
+    assert frontend.wait_timeouts[-1] == 1.0
+    assert backend.wait_timeouts[-1] == 1.0
 
 
 def test_supervisor_rejects_monitor_before_readiness() -> None:
