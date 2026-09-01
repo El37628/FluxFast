@@ -30,6 +30,27 @@ export interface FluxFastGenerationResult {
   schemaFile?: string;
 }
 
+export interface FluxFastGenerationCheckResult {
+  checkedFiles: string[];
+  current: boolean;
+  registryPath: string;
+  schemaFile?: string;
+  staleFiles: string[];
+}
+
+interface FluxFastGeneratedArtifact {
+  content: string;
+  path: string;
+}
+
+interface FluxFastProjectSnapshot {
+  artifacts: FluxFastGeneratedArtifact[];
+  generatedDir: string;
+  pagesDir: string;
+  registryPath: string;
+  schemaFile?: string;
+}
+
 const PAGE_EXTENSION = /\.(tsx|jsx)$/;
 const IGNORED_PAGE = /\.(test|spec|stories)\.(tsx|jsx)$/;
 const SAFE_PAGE_FILE =
@@ -126,55 +147,97 @@ export function generatePagesRegistry(options: GenerateOptions = {}): void {
   }
 }
 
-/** Generate the page registry and any schema-backed developer artifacts. */
-export function generateFluxFastProject(
+/** Compile every project artifact in memory without modifying the project. */
+function createFluxFastProjectSnapshot(
   options: FluxFastGenerationOptions = {}
-): FluxFastGenerationResult {
+): FluxFastProjectSnapshot {
   const registry = createPagesRegistrySnapshot(options);
   const generatedDir = path.resolve(
     options.generatedDir ?? path.dirname(registry.outputFile)
   );
-  const schemaFile = path.resolve(
+  const candidateSchemaFile = path.resolve(
     options.schemaFile ?? path.join(generatedDir, "schema.generated.json")
   );
-  const artifacts = new Map<string, string>([
-    [registry.outputFile, registry.content]
-  ]);
+  const hasSchema = fs.existsSync(candidateSchemaFile);
+  const artifacts: FluxFastGeneratedArtifact[] = [
+    { path: registry.outputFile, content: registry.content }
+  ];
 
-  if (fs.existsSync(schemaFile)) {
+  if (hasSchema) {
     const manifest = parseFluxFastSchemaManifest(
-      fs.readFileSync(schemaFile, "utf8")
+      fs.readFileSync(candidateSchemaFile, "utf8")
     );
-    artifacts.set(
-      path.join(generatedDir, "types.generated.ts"),
-      compileFluxFastResourceTypes(manifest)
-    );
-    artifacts.set(
-      path.join(generatedDir, "routes.generated.ts"),
-      compileFluxFastPageRoutes(manifest)
-    );
-    artifacts.set(
-      path.join(generatedDir, "mutations.generated.ts"),
-      compileFluxFastMutations(manifest)
+    artifacts.push(
+      {
+        path: path.join(generatedDir, "types.generated.ts"),
+        content: compileFluxFastResourceTypes(manifest)
+      },
+      {
+        path: path.join(generatedDir, "routes.generated.ts"),
+        content: compileFluxFastPageRoutes(manifest)
+      },
+      {
+        path: path.join(generatedDir, "mutations.generated.ts"),
+        content: compileFluxFastMutations(manifest)
+      }
     );
   }
 
+  return {
+    artifacts,
+    generatedDir,
+    pagesDir: registry.pagesDir,
+    registryPath: registry.outputFile,
+    schemaFile: hasSchema ? candidateSchemaFile : undefined
+  };
+}
+
+/** Generate the page registry and any schema-backed developer artifacts. */
+export function generateFluxFastProject(
+  options: FluxFastGenerationOptions = {}
+): FluxFastGenerationResult {
+  const snapshot = createFluxFastProjectSnapshot(options);
+
   // Compile every artifact before writing any of them so an invalid manifest
   // cannot leave the generated directory partially updated.
-  fs.mkdirSync(registry.pagesDir, { recursive: true });
-  for (const [target, content] of artifacts) {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, content, "utf8");
+  fs.mkdirSync(snapshot.pagesDir, { recursive: true });
+  for (const artifact of snapshot.artifacts) {
+    fs.mkdirSync(path.dirname(artifact.path), { recursive: true });
+    fs.writeFileSync(artifact.path, artifact.content, "utf8");
   }
 
   if (options.log !== false) {
     console.log(
-      `[fluxfast] Generated ${artifacts.size} file${artifacts.size === 1 ? "" : "s"} in ${generatedDir}`
+      `[fluxfast] Generated ${snapshot.artifacts.length} file${snapshot.artifacts.length === 1 ? "" : "s"} in ${snapshot.generatedDir}`
     );
   }
   return {
-    generatedFiles: [...artifacts.keys()],
-    registryPath: registry.outputFile,
-    schemaFile: fs.existsSync(schemaFile) ? schemaFile : undefined
+    generatedFiles: snapshot.artifacts.map(artifact => artifact.path),
+    registryPath: snapshot.registryPath,
+    schemaFile: snapshot.schemaFile
+  };
+}
+
+/** Check deterministic project artifacts without creating or modifying files. */
+export function checkFluxFastProject(
+  options: FluxFastGenerationOptions = {}
+): FluxFastGenerationCheckResult {
+  const snapshot = createFluxFastProjectSnapshot(options);
+  const staleFiles = snapshot.artifacts
+    .filter(artifact => {
+      try {
+        return fs.readFileSync(artifact.path, "utf8") !== artifact.content;
+      } catch {
+        return true;
+      }
+    })
+    .map(artifact => artifact.path);
+
+  return {
+    checkedFiles: snapshot.artifacts.map(artifact => artifact.path),
+    current: staleFiles.length === 0,
+    registryPath: snapshot.registryPath,
+    schemaFile: snapshot.schemaFile,
+    staleFiles
   };
 }
