@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from typing import Literal
 
 from fastapi import FastAPI, Request, Response
 from fluxfast import (
@@ -48,6 +49,30 @@ class DistributedIdentity(BaseModel):
     client: str = Field(pattern="^[abc]$")
 
 
+class DistributedCounter(BaseModel):
+    """Typed deferred/live value consumed by both current and previous clients."""
+
+    value: int
+    loadedBy: str
+
+
+class DistributedSummary(BaseModel):
+    """Typed blocking value reused across workers and page navigation."""
+
+    mode: Literal["typed-blocking"]
+    loadedBy: str
+
+
+DISTRIBUTED_COUNTER = flux.define_resource(
+    "distributed-counter",
+    DistributedCounter,
+)
+DISTRIBUTED_SUMMARY = flux.define_resource(
+    "distributed-summary",
+    DistributedSummary,
+)
+
+
 def _state_key(run: str) -> str:
     return f"{DIAGNOSTIC_PREFIX}:{run}:state"
 
@@ -60,6 +85,19 @@ async def _record(run: str, role: str) -> None:
     key = _record_key(run, role)
     await state.sadd(key, f"{WORKER_NAME}:{os.getpid()}")
     await state.expire(key, 300)
+
+
+def _summary_resource(run: str):
+    async def load_summary() -> DistributedSummary:
+        await _record(run, "summary-loader")
+        return DistributedSummary(mode="typed-blocking", loadedBy=WORKER_NAME)
+
+    return resource(
+        DISTRIBUTED_SUMMARY,
+        load_summary,
+        scope=scope.tenant(run),
+        ttl=60,
+    )
 
 
 @app.middleware("http")
@@ -86,7 +124,7 @@ async def home(request: Request) -> Page:
         role = f"page:{client}"
     await _record(run, role)
 
-    async def load_counter() -> dict[str, int | str]:
+    async def load_counter() -> DistributedCounter:
         await _record(run, f"loader:{client}")
         key = _state_key(run)
         await state.set(key, 0, nx=True)
@@ -95,13 +133,14 @@ async def home(request: Request) -> Page:
         raw_value = await state.get(key)
         if raw_value is None:
             raise RuntimeError("distributed consumer state is missing")
-        return {"value": int(raw_value), "loadedBy": WORKER_NAME}
+        return DistributedCounter(value=int(raw_value), loadedBy=WORKER_NAME)
 
     return Page(
         component="home/index",
         resources=[
+            _summary_resource(run),
             resource(
-                "distributed-counter",
+                DISTRIBUTED_COUNTER,
                 load_counter,
                 scope=scope.tenant(run),
                 ttl=60,
@@ -109,6 +148,17 @@ async def home(request: Request) -> Page:
                 live=True,
             )
         ],
+    )
+
+
+@flux.page("/details")
+async def details(request: Request) -> Page:
+    run = request.query_params.get("run", "default")
+    client = request.query_params.get("client", "a")
+    await _record(run, f"details:{client}")
+    return Page(
+        component="details/index",
+        resources=[_summary_resource(run)],
     )
 
 
@@ -130,7 +180,10 @@ _DIAGNOSTIC_ROLES = tuple(
     f"{role}:{client}"
     for role in ("page", "stream", "refresh", "loader")
     for client in ("a", "b", "c")
-) + ("mutation",)
+) + tuple(f"details:{client}" for client in ("a", "b", "c")) + (
+    "mutation",
+    "summary-loader",
+)
 
 
 @app.get("/diagnostics")

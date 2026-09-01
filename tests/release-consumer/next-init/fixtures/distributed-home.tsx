@@ -2,9 +2,11 @@
 
 import { useMemo } from "react";
 import {
+  Link,
   useDeferredResource,
   useLiveStatus,
   usePage,
+  useResource,
   useRouter,
 } from "@fluxfast/next";
 
@@ -16,6 +18,11 @@ interface CounterValue {
 interface DistributedIdentity {
   run: string;
   client: string;
+}
+
+interface DistributedSummary {
+  mode: "typed-blocking";
+  loadedBy: string;
 }
 
 function identityFromUrl(url: string): DistributedIdentity {
@@ -31,11 +38,15 @@ export default function HomePage() {
   const router = useRouter();
   const live = useLiveStatus();
   const identity = useMemo(() => identityFromUrl(page.url), [page.url]);
+  const summary = useResource<DistributedSummary>("distributed-summary");
   const counter = useDeferredResource<CounterValue>("distributed-counter");
 
   return (
     <main>
       <h1>Clean distributed consumer</h1>
+      <p data-testid="distributed-summary-value">
+        {summary.mode} loaded by {summary.loadedBy}
+      </p>
       <p data-testid="distributed-live-status">{live.status}</p>
       {counter.data ? (
         <p data-testid="distributed-counter-value">
@@ -50,6 +61,15 @@ export default function HomePage() {
       >
         Increment distributed counter
       </button>
+      <Link
+        href={`/details?${new URLSearchParams({
+          run: identity.run,
+          client: identity.client,
+        })}`}
+        prefetch={false}
+      >
+        View compatibility details
+      </Link>
     </main>
   );
 }

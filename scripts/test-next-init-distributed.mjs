@@ -208,6 +208,7 @@ try {
   const readyResponse = await waitForUrl(firstUrl, frontend);
   const readyHtml = await readyResponse.text();
   assert.match(readyHtml, /Clean distributed consumer/);
+  assert.match(readyHtml, /typed-blocking(?:<!-- -->)? loaded by (?:<!-- -->)?A/);
   assert.match(readyHtml, /Loading counter/);
 
   browser = await chromium.launch({ headless: true });
@@ -235,6 +236,10 @@ try {
   const first = await newPage();
   await first.goto(firstUrl);
   await first.getByTestId("distributed-counter-loading").waitFor();
+  assert.equal(
+    await first.getByTestId("distributed-summary-value").textContent(),
+    "typed-blocking loaded by A"
+  );
   await first.getByTestId("distributed-counter-value").waitFor({ timeout: 15_000 });
   assert.equal(
     await first.getByTestId("distributed-counter-value").textContent(),
@@ -255,9 +260,24 @@ try {
   await second.goto(secondUrl);
   await second.getByTestId("distributed-counter-value").waitFor({ timeout: 15_000 });
   assert.equal(
+    await second.getByTestId("distributed-summary-value").textContent(),
+    "typed-blocking loaded by A"
+  );
+  assert.equal(
     await second.getByTestId("distributed-counter-value").textContent(),
     "0 loaded by A"
   );
+
+  await first.getByRole("link", { name: "View compatibility details" }).click();
+  await first.getByRole("heading", { name: "Compatibility details" }).waitFor();
+  assert.equal(new URL(first.url()).pathname, "/details");
+  assert.equal(
+    await first.getByTestId("distributed-details-summary").textContent(),
+    "typed-blocking loaded by A"
+  );
+  await first.getByRole("link", { name: "Back to distributed consumer" }).click();
+  await first.getByRole("heading", { name: "Clean distributed consumer" }).waitFor();
+  assert.equal(new URL(first.url()).pathname, "/");
   await second.getByTestId("distributed-live-status").filter({ hasText: "connected" }).waitFor();
 
   diagnosticsResponse = await fetch(diagnosticsUrl);
@@ -294,6 +314,8 @@ try {
   assert.match(records["stream:b"][0], /^B:\d+$/);
   assert.match(records["refresh:b"][0], /^B:\d+$/);
   assert.match(records.mutation[0], /^C:\d+$/);
+  assert.match(records["details:a"][0], /^A:\d+$/);
+  assert.deepEqual(records["summary-loader"], [records["page:a"][0]]);
   assert.deepEqual(records["loader:c"], []);
   assert.equal(
     new Set([records["page:a"][0], records["page:b"][0], records["page:c"][0]]).size,

@@ -363,6 +363,14 @@ try {
     path.join(consumerRoot, "fixtures", homeFixture),
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx")
   );
+  if (runDistributedConsumer) {
+    const detailsRoot = path.join(consumerRoot, "src", "flux-pages", "details");
+    fs.mkdirSync(detailsRoot, { recursive: true });
+    fs.copyFileSync(
+      path.join(consumerRoot, "fixtures", "distributed-details.tsx"),
+      path.join(detailsRoot, "index.tsx")
+    );
+  }
   const livePython = runLiveConsumer ? prepareIsolatedPython() : undefined;
   if (livePython) {
     run(
