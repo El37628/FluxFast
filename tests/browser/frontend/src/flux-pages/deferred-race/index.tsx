@@ -2,12 +2,8 @@
 
 import { Link, useDeferredResource } from "@fluxfast/next";
 
-interface RaceAnalytics {
-  revenue: number;
-}
-
 export default function DeferredRacePage() {
-  const analytics = useDeferredResource<RaceAnalytics>("race-analytics");
+  const analytics = useDeferredResource("race-analytics");
 
   return (
     <main>

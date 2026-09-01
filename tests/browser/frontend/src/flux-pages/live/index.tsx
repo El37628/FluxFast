@@ -10,10 +10,7 @@ import {
   useResourceState,
   useRouter,
 } from "@fluxfast/next";
-
-interface CounterValue {
-  value: number;
-}
+import { mutations } from "@/.fluxfast/mutations.generated";
 
 interface LiveIdentity {
   run: string;
@@ -35,10 +32,10 @@ export default function LivePage() {
   const router = useRouter();
   const live = useLiveStatus();
   const identity = useMemo(() => identityFromUrl(page.url), [page.url]);
-  const counter = useResource<CounterValue>("live-counter");
-  const notifications = useResource<CounterValue>("live-notifications");
-  const deferred = useDeferredResource<CounterValue>("live-deferred");
-  const patched = useResourceState<CounterValue>("live-patched");
+  const counter = useResource("live-counter");
+  const notifications = useResource("live-notifications");
+  const deferred = useDeferredResource("live-deferred");
+  const patched = useResourceState("live-patched");
 
   return (
     <main>
@@ -63,25 +60,33 @@ export default function LivePage() {
 
       <button
         type="button"
-        onClick={() => void router.mutate("/live/counter", identity)}
+        onClick={() =>
+          void mutations.incrementLiveCounter(router, { body: identity })
+        }
       >
         Increment tenant counter
       </button>
       <button
         type="button"
-        onClick={() => void router.mutate("/live/notifications", identity)}
+        onClick={() =>
+          void mutations.incrementLiveNotifications(router, { body: identity })
+        }
       >
         Add user notification
       </button>
       <button
         type="button"
-        onClick={() => void router.mutate("/live/deferred", identity)}
+        onClick={() =>
+          void mutations.incrementLiveDeferred(router, { body: identity })
+        }
       >
         Update deferred live value
       </button>
       <button
         type="button"
-        onClick={() => void router.mutate("/live/patch", identity)}
+        onClick={() =>
+          void mutations.patchLiveResource(router, { body: identity })
+        }
       >
         Publish live patch
       </button>

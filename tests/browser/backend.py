@@ -28,6 +28,59 @@ live_deferred_values: dict[tuple[str, str], int] = {}
 live_patch_values: dict[tuple[str, str], int] = {}
 
 
+class ApplicationDetails(BaseModel):
+    """Public application metadata rendered by blocking resources."""
+
+    name: str
+
+
+class Room(BaseModel):
+    """Room data shared by the index and dynamic hotel route."""
+
+    id: int
+    name: str
+
+
+class HotelDetails(BaseModel):
+    """Typed path-derived data for the dynamic browser route."""
+
+    id: int
+    name: str
+
+
+class Analytics(BaseModel):
+    """Deferred analytics payload."""
+
+    revenue: int
+    period: str
+
+
+class ActivityItem(BaseModel):
+    """One deferred activity entry."""
+
+    id: int
+    message: str
+
+
+class RevenueAnalytics(BaseModel):
+    """Minimal analytics shape used by cache and race fixtures."""
+
+    revenue: int
+
+
+class LiveAnalytics(BaseModel):
+    """Versioned analytics payload refreshed by a mutation."""
+
+    generation: int
+    revenue: int
+
+
+class CounterValue(BaseModel):
+    """Counter payload shared by local and distributed live resources."""
+
+    value: int
+
+
 class RoomInput(BaseModel):
     """Validated payload used to exercise browser-side form errors."""
 
@@ -40,6 +93,23 @@ class LiveIdentity(BaseModel):
     run: str = Field(min_length=1, max_length=80)
     tenant: str = Field(min_length=1, max_length=80)
     user: str = Field(min_length=1, max_length=80)
+
+
+APPLICATION = flux.define_resource("application", ApplicationDetails)
+ROOMS = flux.define_resource("rooms", list[Room])
+HOTEL = flux.define_resource("hotel", HotelDetails)
+ANALYTICS = flux.define_resource("analytics", Analytics)
+ACTIVITY = flux.define_resource("activity", list[ActivityItem])
+CACHED_ANALYTICS = flux.define_resource("cached-analytics", RevenueAnalytics)
+RACE_ANALYTICS = flux.define_resource("race-analytics", RevenueAnalytics)
+LIVE_ANALYTICS = flux.define_resource("live-analytics", LiveAnalytics)
+LIVE_COUNTER = flux.define_resource("live-counter", CounterValue)
+LIVE_NOTIFICATIONS = flux.define_resource("live-notifications", CounterValue)
+LIVE_DEFERRED = flux.define_resource("live-deferred", CounterValue)
+LIVE_PATCHED = flux.define_resource("live-patched", CounterValue)
+# This contract is consumed by the separate Redis-backed FastAPI fixture, but
+# remains in the shared manifest used to generate the one browser frontend.
+DISTRIBUTED_COUNTER = flux.define_resource("distributed-counter", CounterValue)
 
 
 def application_details() -> dict[str, str]:
@@ -96,7 +166,7 @@ async def home() -> Page:
         component="home/index",
         resources=[
             resource(
-                "application",
+                APPLICATION,
                 application_details,
                 scope=scope.public(),
                 ttl=60,
@@ -111,12 +181,26 @@ async def room_index() -> Page:
         component="rooms/index",
         resources=[
             resource(
-                "application",
+                APPLICATION,
                 application_details,
                 scope=scope.public(),
                 ttl=60,
             ),
-            resource("rooms", current_rooms),
+            resource(ROOMS, current_rooms),
+        ],
+    )
+
+
+@flux.page("/hotels/{hotel_id}/rooms")
+async def hotel_rooms(hotel_id: int) -> Page:
+    return Page(
+        component="hotel-rooms/index",
+        resources=[
+            resource(
+                HOTEL,
+                lambda: {"id": hotel_id, "name": f"Hotel {hotel_id}"},
+            ),
+            resource(ROOMS, current_rooms),
         ],
     )
 
@@ -130,8 +214,8 @@ async def deferred_index(request: Request) -> Page:
     return Page(
         component="deferred/index",
         resources=[
-            resource("analytics", slow_analytics, defer=True),
-            resource("activity", flaky_activity, defer=True),
+            resource(ANALYTICS, slow_analytics, defer=True),
+            resource(ACTIVITY, flaky_activity, defer=True),
         ],
     )
 
@@ -143,7 +227,7 @@ async def deferred_cache(request: Request) -> Page:
         component="deferred-cache/index",
         resources=[
             resource(
-                "cached-analytics",
+                CACHED_ANALYTICS,
                 cached_analytics,
                 scope=scope.custom("browser-cache", run_id),
                 ttl=60,
@@ -158,7 +242,7 @@ async def deferred_race() -> Page:
     return Page(
         component="deferred-race/index",
         resources=[
-            resource("race-analytics", race_analytics, defer=True),
+            resource(RACE_ANALYTICS, race_analytics, defer=True),
         ],
     )
 
@@ -169,7 +253,7 @@ async def deferred_mutation() -> Page:
         component="deferred-mutation/index",
         resources=[
             resource(
-                "live-analytics",
+                LIVE_ANALYTICS,
                 live_analytics,
                 scope=scope.public(),
                 defer=True,
@@ -210,21 +294,21 @@ async def live_resources(request: Request) -> Page:
         component="live/index",
         resources=[
             resource(
-                "live-counter",
+                LIVE_COUNTER,
                 counter,
                 scope=scope.tenant(tenant_scope_id),
                 ttl=60,
                 live=True,
             ),
             resource(
-                "live-notifications",
+                LIVE_NOTIFICATIONS,
                 notifications,
                 scope=scope.user(user_scope_id),
                 ttl=60,
                 live=True,
             ),
             resource(
-                "live-deferred",
+                LIVE_DEFERRED,
                 deferred_live,
                 scope=scope.custom("browser-live-deferred", tenant_scope_id),
                 ttl=60,
@@ -232,7 +316,7 @@ async def live_resources(request: Request) -> Page:
                 live=True,
             ),
             resource(
-                "live-patched",
+                LIVE_PATCHED,
                 patched_live,
                 scope=scope.custom("browser-live-patch", tenant_scope_id),
                 ttl=60,

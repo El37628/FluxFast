@@ -1,5 +1,47 @@
 import { expect, test } from "@playwright/test";
 
+test("uses generated types through dynamic prefetch, navigation, history, and reload", async ({
+  page,
+}) => {
+  const browserErrors: string[] = [];
+  const dynamicVisits: string[] = [];
+  page.on("pageerror", error => browserErrors.push(error.message));
+  page.on("console", message => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  page.on("request", request => {
+    if (
+      request.headers()["x-fluxfast"] === "1" &&
+      new URL(request.url()).pathname === "/hotels/101/rooms"
+    ) {
+      dynamicVisits.push(request.url());
+    }
+  });
+
+  await page.goto("/");
+  const typedRoute = page.getByRole("link", { name: "View Hotel 101 rooms" });
+  await typedRoute.hover();
+  await expect.poll(() => dynamicVisits.length).toBe(1);
+
+  await typedRoute.click();
+  await expect(page).toHaveURL(/\/hotels\/101\/rooms$/);
+  await expect(page.getByRole("heading", { name: "Hotel 101 rooms" })).toBeVisible();
+  await expect(page.getByTestId("typed-hotel-id")).toHaveText("Hotel ID 101");
+  await expect(page.getByRole("list", { name: "Typed hotel room list" })).toContainText(
+    "Garden Suite"
+  );
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Control Center" })).toBeVisible();
+
+  await page.goto("/hotels/101/rooms");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Hotel 101 rooms" })).toBeVisible();
+  await expect(page.getByTestId("typed-hotel-id")).toHaveText("Hotel ID 101");
+  expect(browserErrors).toEqual([]);
+});
+
 test("navigates, validates, mutates, and redirects through one browser origin", async ({
   page,
   baseURL,

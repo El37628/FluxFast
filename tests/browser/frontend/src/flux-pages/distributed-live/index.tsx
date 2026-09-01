@@ -3,10 +3,6 @@
 import { useMemo } from "react";
 import { useLiveStatus, usePage, useResource, useRouter } from "@fluxfast/next";
 
-interface CounterValue {
-  value: number;
-}
-
 interface DistributedIdentity {
   run: string;
   client: string;
@@ -25,7 +21,7 @@ export default function DistributedLivePage() {
   const router = useRouter();
   const live = useLiveStatus();
   const identity = useMemo(() => identityFromUrl(page.url), [page.url]);
-  const counter = useResource<CounterValue>("distributed-counter");
+  const counter = useResource("distributed-counter");
 
   return (
     <main>
