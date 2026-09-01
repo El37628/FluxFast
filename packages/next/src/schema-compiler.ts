@@ -440,22 +440,23 @@ class ResourceTypeCompiler {
 
   compile(): string {
     this.collectResources();
+    const resources = [...this.resources].sort((left, right) =>
+      compareText(left.context.resourceKey, right.context.resourceKey)
+    );
     const declarations = [
       ...[...this.definitions.values()]
         .sort((left, right) => compareText(left.name, right.name))
         .map(definition => this.renderDefinition(definition)),
-      ...this.resources
-        .sort((left, right) =>
-          compareText(left.context.resourceKey, right.context.resourceKey)
-        )
-        .map(resource => {
-          const type = resource.context.rootType ?? compileSchema(
-            resource.schema,
-            resource.context,
-            resource.path
-          );
-          return `export type ${resource.name} = ${type};`;
-        })
+      ...resources.map(resource => {
+        const type = resource.context.rootType ?? compileSchema(
+          resource.schema,
+          resource.context,
+          resource.path
+        );
+        return `export type ${resource.name} = ${type};`;
+      }),
+      this.renderResourceMap(resources),
+      this.renderResourceMapAugmentation(resources)
     ];
 
     const header = [
@@ -465,7 +466,27 @@ class ResourceTypeCompiler {
       `// Producer: ${this.manifest.producer}`,
       `// Fingerprint: ${this.manifest.fingerprint}`
     ];
-    return `${header.join("\n")}\n\n${declarations.join("\n\n")}\n`;
+    return `${header.join("\n")}\n\nimport type {} from "@fluxfast/core";\n\n${declarations.join("\n\n")}\n`;
+  }
+
+  private renderResourceMap(resources: ResourceAlias[]): string {
+    if (resources.length === 0) {
+      return "export interface GeneratedFluxResourceMap {}";
+    }
+    const entries = resources.map(
+      resource => `  ${propertyName(resource.context.resourceKey)}: ${resource.name};`
+    );
+    return `export interface GeneratedFluxResourceMap {\n${entries.join("\n")}\n}`;
+  }
+
+  private renderResourceMapAugmentation(resources: ResourceAlias[]): string {
+    if (resources.length === 0) {
+      return 'declare module "@fluxfast/core" {\n  interface FluxResourceMap {}\n}';
+    }
+    const entries = resources.map(
+      resource => `    ${propertyName(resource.context.resourceKey)}: ${resource.name};`
+    );
+    return `declare module "@fluxfast/core" {\n  interface FluxResourceMap {\n${entries.join("\n")}\n  }\n}`;
   }
 
   private collectResources(): void {
