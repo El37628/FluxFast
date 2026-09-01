@@ -164,6 +164,8 @@ class _RedisClient(Protocol):
 
     async def unlink(self, *keys: str | bytes) -> Any: ...
 
+    async def ping(self) -> Any: ...
+
     async def aclose(self) -> None: ...
 
 
@@ -412,6 +414,16 @@ class RedisResourceCache:
                 await self._client.aclose()
             except Exception as error:
                 raise self._unavailable("close") from error
+
+    async def healthcheck(self) -> bool:
+        """Return whether the external Redis cache is currently reachable."""
+
+        if self._closed:
+            return False
+        try:
+            return bool(await self._client.ping())
+        except Exception:  # noqa: BLE001
+            return False
 
     def _ensure_open(self) -> None:
         if self._closed:

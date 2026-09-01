@@ -35,6 +35,8 @@ class _RedisPubSub(Protocol):
 
 
 class _RedisClient(Protocol):
+    async def ping(self) -> Any: ...
+
     async def publish(self, channel: str, message: bytes) -> Any: ...
 
     def pubsub(self, **kwargs: Any) -> _RedisPubSub: ...
@@ -213,6 +215,17 @@ class RedisLiveBroker:
                 await pubsub.aclose()
         if self._owns_client:
             await self._client.aclose()
+
+    async def healthcheck(self) -> bool:
+        """Return whether the external Redis broker is currently reachable."""
+
+        async with self._lock:
+            if self._closed:
+                return False
+        try:
+            return bool(await self._client.ping())
+        except Exception:  # noqa: BLE001
+            return False
 
     def _channel(self, topic: str) -> str:
         return f"{self.channel_prefix}{topic}"

@@ -64,6 +64,7 @@ class RecordingRedisClient:
         self.scans: list[tuple[int, str, int]] = []
         self.unlinks: list[tuple[str | bytes, ...]] = []
         self.closed = False
+        self.ping_result = True
 
     def pipeline(self, *, transaction: bool) -> RecordingPipeline:
         self.pipeline_transactions.append(transaction)
@@ -99,6 +100,9 @@ class RecordingRedisClient:
     async def unlink(self, *keys: str | bytes) -> int:
         self.unlinks.append(keys)
         return len(keys)
+
+    async def ping(self) -> bool:
+        return self.ping_result
 
     async def aclose(self) -> None:
         self.closed = True
@@ -660,6 +664,18 @@ def test_cache_configuration_is_exposed_and_validated() -> None:
     assert cache.namespace == "hotel-prod"
     assert cache.max_value_bytes == 2048
     assert cache.scan_count == 25
+
+
+@pytest.mark.anyio
+async def test_redis_cache_healthcheck_tracks_connectivity_and_close() -> None:
+    client = RecordingRedisClient()
+    cache = RedisResourceCache(client, namespace="hotel-prod")
+
+    assert await cache.healthcheck() is True
+    client.ping_result = False
+    assert await cache.healthcheck() is False
+    await cache.close()
+    assert await cache.healthcheck() is False
 
 
 @pytest.mark.parametrize("scan_count", [True, False, 0, -1, 1.5, "100"])

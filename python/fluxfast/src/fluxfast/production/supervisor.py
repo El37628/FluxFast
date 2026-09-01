@@ -10,6 +10,9 @@ import time
 from collections.abc import Callable
 from enum import Enum
 from types import FrameType
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import urlopen
 
 from .config import ProductionConfig
 from .process import ManagedProcess
@@ -230,6 +233,33 @@ def tcp_readiness_probe(
             with socket.create_connection((host, port), timeout=connection_timeout):
                 return True
         except OSError:
+            return False
+
+    return ready
+
+
+def http_readiness_probe(
+    url: str,
+    *,
+    connection_timeout: float = 0.2,
+) -> ReadinessProbe:
+    """Return an HTTP 200 readiness probe for a private runtime endpoint."""
+
+    parsed = urlsplit(url)
+    if parsed.scheme != "http" or not parsed.hostname:
+        raise ProductionSupervisorError(
+            "readiness URL must be an absolute http:// URL"
+        )
+    if not math.isfinite(connection_timeout) or connection_timeout <= 0:
+        raise ProductionSupervisorError(
+            "connection_timeout must be a finite number greater than 0"
+        )
+
+    def ready() -> bool:
+        try:
+            with urlopen(url, timeout=connection_timeout) as response:
+                return response.status == 200
+        except (HTTPError, URLError, OSError, ValueError):
             return False
 
     return ready

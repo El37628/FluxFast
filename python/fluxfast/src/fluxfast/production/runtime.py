@@ -10,7 +10,12 @@ from .config import ProductionConfig
 from .errors import ProductionBuildMissingError, ProductionValidationError
 from .frontend import production_frontend_command
 from .process import ManagedProcess
-from .supervisor import ProductionSupervisor, ReadinessProbe, tcp_readiness_probe
+from .supervisor import (
+    ProductionSupervisor,
+    ReadinessProbe,
+    http_readiness_probe,
+    tcp_readiness_probe,
+)
 
 
 def create_production_supervisor(config: ProductionConfig) -> ProductionSupervisor:
@@ -56,7 +61,7 @@ def create_production_supervisor(config: ProductionConfig) -> ProductionSupervis
         frontend_process,
         backend_ready=_readiness_log(
             "FastAPI ready",
-            tcp_readiness_probe(backend_connection_host, config.backend_port),
+            http_readiness_probe(f"{backend_url}/_fluxfast/readyz"),
         ),
         frontend_ready=_readiness_log(
             "Next.js ready",
