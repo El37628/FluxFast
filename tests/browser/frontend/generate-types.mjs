@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 
 const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(frontendRoot, "../../..");
+const schemaFixture = path.join(frontendRoot, "schema.fixture.json");
 const localPython = path.join(repositoryRoot, ".venv", "bin", "python");
 const python = process.env.FLUXFAST_E2E_PYTHON ?? (
   fs.existsSync(localPython) ? localPython : "python"
@@ -33,16 +34,22 @@ function run(command, args, cwd) {
   }
 }
 
-run(
-  python,
-  [
-    "-m",
-    "fluxfast.cli",
-    "schema",
-    "tests.browser.backend:app",
-    "--output",
-    schemaFile,
-  ],
-  repositoryRoot,
-);
+if (process.argv.includes("--check-schema")) {
+  run(
+    python,
+    [
+      "-m",
+      "fluxfast.cli",
+      "schema",
+      "tests.browser.backend:app",
+      "--output",
+      schemaFixture,
+      "--check",
+    ],
+    repositoryRoot,
+  );
+}
+
+fs.mkdirSync(path.dirname(schemaFile), { recursive: true });
+fs.copyFileSync(schemaFixture, schemaFile);
 run(process.execPath, [fluxfastCli, "generate"], frontendRoot);

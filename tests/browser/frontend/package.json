@@ -6,14 +6,18 @@
   "scripts": {
     "prebuild": "pnpm run generate",
     "build": "next build",
+    "check:schema": "node ./generate-types.mjs --check-schema",
     "predev": "pnpm run generate",
     "dev": "next dev",
     "generate": "node ./generate-types.mjs",
     "start": "next start",
     "pretypecheck": "pnpm run generate",
     "typecheck": "next typegen && tsc --noEmit",
+    "pretest:e2e": "pnpm run check:schema",
     "test:e2e": "playwright test",
+    "pretest:e2e:distributed": "pnpm run check:schema",
     "test:e2e:distributed": "playwright test --config playwright.distributed.config.ts",
+    "pretest:e2e:production": "pnpm run check:schema",
     "test:e2e:production": "playwright test e2e/live-flow.spec.ts --grep \"production build\""
   },
   "dependencies": {
