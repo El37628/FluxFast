@@ -36,6 +36,70 @@ observed duration and bytes for the initial dashboard, complete rooms props,
 and the resource delta. It also asserts that the four shared values are absent
 and their loaders executed only once.
 
+Run only the offline schema and TypeScript toolchain benchmark with:
+
+```bash
+pnpm benchmark:codegen
+```
+
+Pass `--samples N` after `--` to select the measured sample count, for example
+`pnpm benchmark:codegen -- --samples 1` for a quick correctness run.
+
+## Schema Code Generation Scenario
+
+The code-generation benchmark builds real FastAPI and FluxFast applications,
+exports their Pydantic serialization schemas, and consumes the manifests with
+the built `@fluxfast/next` package. It covers six fixed workloads:
+
+| Workload | Resources | Page routes | JSON mutations | Purpose |
+| --- | ---: | ---: | ---: | --- |
+| `resources-10` | 10 | 0 | 0 | Small typed baseline |
+| `resources-100` | 100 | 0 | 0 | Medium resource scaling |
+| `resources-500` | 500 | 0 | 0 | Large resource scaling |
+| `large-nested` | 10 | 0 | 0 | 24 repeated nested model levels |
+| `many-routes` | 10 | 500 | 0 | Route-helper scaling |
+| `many-mutations` | 10 | 0 | 500 | Mutation-helper scaling |
+
+For each workload it measures Python schema export, Node manifest parsing,
+TypeScript generation, `fluxfast doctor`, and `fluxfast generate --check`.
+Python export records the first export separately and then measures repeated
+exports of the same application. Every Node stage gets one untimed warm-up
+before the measured samples. Direct parsing and generation isolate codegen CPU;
+the CLI measurements also include project detection, file reads, and artifact
+comparison.
+
+Timing output is observational and has no pass/fail threshold. Correctness
+checks require deterministic manifests, matching counts and fingerprints,
+byte-stable generated output, no page or mutation handler execution, and clean
+results from both CLI checks. Pull requests execute every workload with one
+sample to prevent benchmark drift. The manually dispatched `Benchmark`
+workflow uses five samples and uploads the complete output as `codegen.txt`.
+
+### Observed Code-Generation Reference Run
+
+The controlled reference table below records medians from five measured
+samples. It is a baseline for comparing the same workload, not a latency
+guarantee and not a release gate.
+
+On 2026-09-01, Linux WSL2 x86_64 with Python 3.13.14 and Node 24.19.0
+produced:
+
+| Workload | Manifest | First Python export | Python export | Node parse | TypeScript generation | Doctor | Generate check |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10 resources | 5.2 KiB | 6.111 ms | 4.134 ms | 0.230 ms | 0.817 ms | 2.966 ms | 1.605 ms |
+| 100 resources | 50.9 KiB | 40.900 ms | 39.586 ms | 1.506 ms | 5.971 ms | 13.183 ms | 7.522 ms |
+| 500 resources | 253.6 KiB | 210.104 ms | 200.440 ms | 7.076 ms | 22.541 ms | 53.968 ms | 28.435 ms |
+| Large nested schema | 81.0 KiB | 105.220 ms | 107.456 ms | 2.072 ms | 9.260 ms | 23.461 ms | 10.857 ms |
+| 500 routes | 147.7 KiB | 325.666 ms | 334.061 ms | 3.656 ms | 12.934 ms | 25.526 ms | 19.521 ms |
+| 500 mutations | 255.1 KiB | 274.170 ms | 275.546 ms | 5.599 ms | 16.422 ms | 29.975 ms | 21.653 ms |
+
+All correctness checks passed. The largest observed costs were Python-side
+FastAPI/Pydantic route and mutation schema extraction; direct Node parsing and
+generation remained a smaller portion of the measured toolchain. `doctor` and
+`generate --check` intentionally trade additional project and filesystem work
+for end-to-end validation. Run the benchmark on the target development machine
+before making local performance decisions.
+
 ## Deferred Resource Scenario
 
 The deferred benchmark uses three uncacheable async resources with fixed loader
