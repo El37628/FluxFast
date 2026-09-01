@@ -2,7 +2,23 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { generatePagesRegistry } from "../src/generate";
+import {
+  generateFluxFastProject,
+  generatePagesRegistry
+} from "../src/generate";
+
+const fingerprint = "e".repeat(64);
+
+function schemaManifest(resources: Record<string, unknown> = {}): string {
+  return `${JSON.stringify({
+    schema: "fluxfast-schema/1",
+    producer: "0.6.0",
+    fingerprint,
+    resources,
+    pages: [],
+    mutations: []
+  })}\n`;
+}
 
 describe("Pages Registry Generator", () => {
   let tmpDir: string;
@@ -76,5 +92,98 @@ describe("Pages Registry Generator", () => {
       /Duplicate FluxFast page identifier/
     );
     expect(fs.existsSync(outputFile)).toBe(false);
+  });
+
+  it("rejects project artifacts outside the configured output directory before writing", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    const escapedRegistry = path.join(tmpDir, "escaped-registry.ts");
+
+    expect(() =>
+      generateFluxFastProject({
+        pagesDir,
+        generatedDir,
+        outputFile: escapedRegistry,
+        log: false
+      })
+    ).toThrow(/component registry must stay inside the configured output directory/);
+    expect(fs.existsSync(escapedRegistry)).toBe(false);
+    expect(fs.existsSync(generatedDir)).toBe(false);
+
+    const escapedSchema = path.join(tmpDir, "escaped-schema.json");
+    expect(() =>
+      generateFluxFastProject({
+        pagesDir,
+        generatedDir,
+        outputFile: path.join(generatedDir, "pages.generated.ts"),
+        schemaFile: escapedSchema,
+        schemaContent: schemaManifest(),
+        log: false
+      })
+    ).toThrow(/schema manifest must stay inside the configured output directory/);
+    expect(fs.existsSync(escapedSchema)).toBe(false);
+    expect(fs.existsSync(generatedDir)).toBe(false);
+  });
+
+  it("refuses to follow generated-file symbolic links", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    const outputFile = path.join(generatedDir, "pages.generated.ts");
+    const outsideFile = path.join(tmpDir, "outside.ts");
+    fs.mkdirSync(generatedDir, { recursive: true });
+    fs.writeFileSync(outsideFile, "leave me alone", "utf8");
+    fs.symlinkSync(outsideFile, outputFile);
+
+    expect(() =>
+      generateFluxFastProject({
+        pagesDir,
+        generatedDir,
+        outputFile,
+        log: false
+      })
+    ).toThrow(/component registry must not traverse the symbolic link/);
+    expect(fs.readFileSync(outsideFile, "utf8")).toBe("leave me alone");
+  });
+
+  it("keeps hostile resource and model names inside fixed generated files", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    const outputFile = path.join(generatedDir, "pages.generated.ts");
+    const resourceKey = "../../malicious.ts";
+    const modelTitle = '../../model";globalThis.compromised=true;.ts';
+
+    const result = generateFluxFastProject({
+      pagesDir,
+      generatedDir,
+      outputFile,
+      schemaContent: schemaManifest({
+        [resourceKey]: {
+          schema: {
+            title: modelTitle,
+            type: "object",
+            properties: {
+              '../../field";globalThis.compromised=true': { type: "string" }
+            }
+          }
+        }
+      }),
+      log: false
+    });
+
+    expect(result.generatedFiles.sort()).toEqual([
+      path.join(generatedDir, "mutations.generated.ts"),
+      path.join(generatedDir, "pages.generated.ts"),
+      path.join(generatedDir, "routes.generated.ts"),
+      path.join(generatedDir, "types.generated.ts")
+    ]);
+    expect(fs.readdirSync(generatedDir).sort()).toEqual([
+      "mutations.generated.ts",
+      "pages.generated.ts",
+      "routes.generated.ts",
+      "schema.generated.json",
+      "types.generated.ts"
+    ]);
+    expect(fs.existsSync(path.join(tmpDir, "malicious.ts"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "model.ts"))).toBe(false);
   });
 });

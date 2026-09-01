@@ -224,6 +224,57 @@ routes.hotelRooms({ hotel_id: 12, room_slug: "suite", query: { status: "closed" 
     ).toThrow(/placeholder "hotel_id" must have exactly one path parameter/);
   });
 
+  it("treats hostile route names, paths, and query keys as data", () => {
+    const queryName = 'q");globalThis.compromised=true;//';
+    const staticPath = '/rooms/";globalThis.compromised=true;/{slug}';
+    const output = compileFluxFastPageRoutes(
+      manifest([
+        {
+          name: 'room"); globalThis.compromised = true; //',
+          path: staticPath,
+          parameters: [
+            {
+              name: "slug",
+              location: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: queryName,
+              location: "query",
+              required: true,
+              schema: { type: "string" }
+            }
+          ]
+        }
+      ])
+    );
+    expect(output).toContain("roomGlobalThisCompromisedTrue:");
+
+    const consumer = `import { routes } from "./routes.generated";
+
+routes.roomGlobalThisCompromisedTrue({
+  slug: "../secret",
+  query: { ${JSON.stringify(queryName)}: "a&b" }
+});
+`;
+    const stdout = compileAndRun(
+      output,
+      consumer,
+      `globalThis.compromised = false;
+const value = routes.roomGlobalThisCompromisedTrue({
+  slug: "../secret",
+  query: { [${JSON.stringify(queryName)}]: "a&b" }
+});
+process.stdout.write(JSON.stringify([value, globalThis.compromised]));`
+    );
+    const query = new URLSearchParams([[queryName, "a&b"]]).toString();
+    expect(JSON.parse(stdout)).toEqual([
+      `${staticPath.replace("{slug}", encodeURIComponent("../secret"))}?${query}`,
+      false
+    ]);
+  });
+
   it("generates a valid empty route module", () => {
     const output = compileFluxFastPageRoutes(manifest([]));
     expect(output).toContain("export const routes = {} as const;");

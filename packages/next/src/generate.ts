@@ -59,6 +59,45 @@ const IGNORED_PAGE = /\.(test|spec|stories)\.(tsx|jsx)$/;
 const SAFE_PAGE_FILE =
   /^[A-Za-z0-9_.@()\[\]-]+(?:\/[A-Za-z0-9_.@()\[\]-]+)*\.(?:tsx|jsx)$/;
 
+function assertGeneratedOutputPath(
+  generatedDir: string,
+  outputPath: string,
+  label: string
+): void {
+  const relative = path.relative(generatedDir, outputPath);
+  if (
+    !relative ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new TypeError(
+      `[fluxfast] Generated ${label} must stay inside the configured output directory ${JSON.stringify(generatedDir)}; received ${JSON.stringify(outputPath)}`
+    );
+  }
+
+  let current = generatedDir;
+  for (const segment of relative.split(path.sep)) {
+    current = path.join(current, segment);
+    try {
+      if (fs.lstatSync(current).isSymbolicLink()) {
+        throw new TypeError(
+          `[fluxfast] Generated ${label} must not traverse the symbolic link ${JSON.stringify(current)}`
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 function assertSafePageFile(file: string): void {
   const hasTraversalSegment = file
     .split("/")
@@ -139,6 +178,11 @@ export function createPagesRegistrySnapshot(
 
 export function generatePagesRegistry(options: GenerateOptions = {}): void {
   const snapshot = createPagesRegistrySnapshot(options);
+  assertGeneratedOutputPath(
+    path.dirname(snapshot.outputFile),
+    snapshot.outputFile,
+    "component registry"
+  );
   fs.mkdirSync(snapshot.pagesDir, { recursive: true });
   fs.mkdirSync(path.dirname(snapshot.outputFile), { recursive: true });
 
@@ -158,9 +202,21 @@ function createFluxFastProjectSnapshot(
   const generatedDir = path.resolve(
     options.generatedDir ?? path.dirname(registry.outputFile)
   );
+  assertGeneratedOutputPath(
+    generatedDir,
+    registry.outputFile,
+    "component registry"
+  );
   const candidateSchemaFile = path.resolve(
     options.schemaFile ?? path.join(generatedDir, "schema.generated.json")
   );
+  if (options.schemaContent !== undefined) {
+    assertGeneratedOutputPath(
+      generatedDir,
+      candidateSchemaFile,
+      "schema manifest"
+    );
+  }
   const schemaContent = options.schemaContent ?? (
     fs.existsSync(candidateSchemaFile)
       ? fs.readFileSync(candidateSchemaFile, "utf8")
@@ -173,20 +229,27 @@ function createFluxFastProjectSnapshot(
 
   if (hasSchema) {
     const manifest = parseFluxFastSchemaManifest(schemaContent);
-    artifacts.push(
+    const schemaArtifacts = [
       {
         path: path.join(generatedDir, "types.generated.ts"),
-        content: compileFluxFastResourceTypes(manifest)
+        content: compileFluxFastResourceTypes(manifest),
+        label: "resource types"
       },
       {
         path: path.join(generatedDir, "routes.generated.ts"),
-        content: compileFluxFastPageRoutes(manifest)
+        content: compileFluxFastPageRoutes(manifest),
+        label: "page routes"
       },
       {
         path: path.join(generatedDir, "mutations.generated.ts"),
-        content: compileFluxFastMutations(manifest)
+        content: compileFluxFastMutations(manifest),
+        label: "mutation helpers"
       }
-    );
+    ];
+    for (const artifact of schemaArtifacts) {
+      assertGeneratedOutputPath(generatedDir, artifact.path, artifact.label);
+      artifacts.push({ path: artifact.path, content: artifact.content });
+    }
   }
 
   return {

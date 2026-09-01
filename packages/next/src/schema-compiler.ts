@@ -236,7 +236,7 @@ function schemaMap(
   path: string
 ): Record<string, SchemaNode> {
   const record = schemaRecord(value, path);
-  const result: Record<string, SchemaNode> = {};
+  const result = Object.create(null) as Record<string, SchemaNode>;
   for (const key of Object.keys(record)) {
     const item = record[key];
     if (typeof item === "boolean") {
