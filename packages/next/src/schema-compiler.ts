@@ -113,9 +113,89 @@ function pascalIdentifier(value: string, fallback: string): string {
   return identifier;
 }
 
-function camelIdentifier(value: string): string {
+export function camelIdentifier(value: string): string {
   const identifier = pascalIdentifier(value, "ResourceKey");
   return `${identifier[0].toLowerCase()}${identifier.slice(1)}`;
+}
+
+/** Compile one validated JSON Schema as a self-contained TypeScript expression. */
+export function compileInlineJsonSchemaType(
+  schema: JsonSchema,
+  path = "$"
+): string {
+  const definitions = new Map<string, { path: string; schema: SchemaNode }>();
+  for (const keyword of ["$defs", "definitions"] as const) {
+    if (schema[keyword] === undefined) continue;
+    const entries = schemaMap(schema[keyword], `${path}.${keyword}`);
+    for (const key of Object.keys(entries).sort()) {
+      const definition = entries[key];
+      const definitionPath = childPath(`${path}.${keyword}`, key);
+      const existing = definitions.get(key);
+      if (
+        existing &&
+        canonicalJson(existing.schema) !== canonicalJson(definition)
+      ) {
+        fail(
+          definitionPath,
+          `definition ${JSON.stringify(key)} is declared more than once`
+        );
+      }
+      definitions.set(key, { path: definitionPath, schema: definition });
+    }
+  }
+
+  const context: CompilationContext = {
+    references: new Map(),
+    resourceAlias: "unknown",
+    resourceKey: "inline"
+  };
+  const visiting = new Set<string>();
+
+  const referencedDefinitions = (value: SchemaNode): string[] => {
+    if (typeof value === "boolean") return [];
+    const references = new Set<string>();
+    const pending: JsonValue[] = [value];
+    while (pending.length > 0) {
+      const item = pending.pop()!;
+      if (Array.isArray(item)) {
+        pending.push(...item);
+        continue;
+      }
+      if (!isRecord(item)) continue;
+      if (typeof item.$ref === "string") {
+        const key = decodeReferenceKey(item.$ref);
+        if (definitions.has(key)) references.add(key);
+      }
+      pending.push(...Object.values(item));
+    }
+    return [...references].sort();
+  };
+
+  const resolveDefinition = (key: string): void => {
+    if (context.references.has(key)) return;
+    const definition = definitions.get(key);
+    if (!definition) return;
+    if (visiting.has(key)) {
+      fail(
+        definition.path,
+        `recursive definition ${JSON.stringify(key)} cannot be used as an inline route parameter`
+      );
+    }
+    visiting.add(key);
+    for (const dependency of referencedDefinitions(definition.schema)) {
+      resolveDefinition(dependency);
+    }
+    context.references.set(
+      key,
+      compileSchema(definition.schema, context, definition.path)
+    );
+    visiting.delete(key);
+  };
+
+  for (const key of [...definitions.keys()].sort()) {
+    resolveDefinition(key);
+  }
+  return compileSchema(schema, context, path);
 }
 
 function propertyName(value: string): string {
