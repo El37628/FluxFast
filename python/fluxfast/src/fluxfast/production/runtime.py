@@ -7,16 +7,10 @@ import sys
 from pathlib import Path
 
 from .config import ProductionConfig
+from .errors import ProductionBuildMissingError, ProductionValidationError
+from .frontend import production_frontend_command
 from .process import ManagedProcess
 from .supervisor import ProductionSupervisor, ReadinessProbe, tcp_readiness_probe
-
-
-class ProductionValidationError(RuntimeError):
-    """Raised when an application cannot safely start in production."""
-
-
-class ProductionBuildMissingError(ProductionValidationError):
-    """Raised when the frontend has no completed Next.js production build."""
 
 
 def create_production_supervisor(config: ProductionConfig) -> ProductionSupervisor:
@@ -51,14 +45,7 @@ def create_production_supervisor(config: ProductionConfig) -> ProductionSupervis
     frontend_environment.pop("NEXT_PUBLIC_FLUXFAST_BACKEND_URL", None)
     frontend_process = ManagedProcess(
         "Next.js",
-        [
-            str(_next_executable(frontend)),
-            "start",
-            "--hostname",
-            config.host,
-            "--port",
-            str(config.port),
-        ],
+        production_frontend_command(frontend, config.host, config.port),
         cwd=frontend,
         environment=frontend_environment,
     )
@@ -105,18 +92,6 @@ def _validate_frontend(frontend: Path) -> None:
         raise ProductionBuildMissingError(
             f"No Next.js production build found in {frontend}. Run: fluxfast build"
         )
-    _next_executable(frontend)
-
-
-def _next_executable(frontend: Path) -> Path:
-    name = "next.cmd" if os.name == "nt" else "next"
-    executable = frontend / "node_modules" / ".bin" / name
-    if not executable.is_file():
-        raise ProductionValidationError(
-            "Could not find the installed local Next.js executable at "
-            f"{executable}. Install frontend dependencies before production startup."
-        )
-    return executable
 
 
 def _connection_host(host: str) -> str:

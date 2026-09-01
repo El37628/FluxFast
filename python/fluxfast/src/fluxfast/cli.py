@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import importlib
-import json
 import os
 import shutil
 import signal
@@ -30,6 +29,7 @@ from .production import (
     resolve_production_config,
     run_production,
 )
+from .production.frontend import detect_package_manager
 from .schema_export import build_app_schema_manifest
 from .serialization import canonical_json
 
@@ -60,37 +60,8 @@ class TypeGenerationError(RuntimeError):
     """Raised when full-stack type generation cannot be started."""
 
 
-_PACKAGE_MANAGER_CANDIDATES = (
-    ("pnpm-lock.yaml", "pnpm"),
-    ("yarn.lock", "yarn"),
-    ("bun.lock", "bun"),
-    ("bun.lockb", "bun"),
-    ("package-lock.json", "npm"),
-)
-
-
 def _frontend_package_manager(frontend: Path) -> str:
-    manager = next(
-        (
-            name
-            for lockfile, name in _PACKAGE_MANAGER_CANDIDATES
-            if (frontend / lockfile).exists()
-        ),
-        None,
-    )
-    if manager is None:
-        try:
-            manifest = json.loads(
-                (frontend / "package.json").read_text(encoding="utf8")
-            )
-        except (OSError, json.JSONDecodeError):
-            manifest = {}
-        declared_manager = manifest.get("packageManager")
-        if isinstance(declared_manager, str):
-            candidate = declared_manager.split("@", 1)[0]
-            if candidate in {name for _lock, name in _PACKAGE_MANAGER_CANDIDATES}:
-                manager = candidate
-    return manager or "npm"
+    return detect_package_manager(frontend)
 
 
 def _available_port(host: str) -> int:

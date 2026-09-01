@@ -18,10 +18,12 @@ from fluxfast.production.runtime import _connection_host, _http_url
 
 def _built_frontend(path: Path) -> Path:
     (path / ".next").mkdir(parents=True)
-    (path / "node_modules" / ".bin").mkdir(parents=True)
-    (path / "package.json").write_text("{}\n", encoding="utf8")
+    (path / "package.json").write_text(
+        '{"scripts":{"start":"next start"}}\n',
+        encoding="utf8",
+    )
+    (path / "package-lock.json").touch()
     (path / ".next" / "BUILD_ID").write_text("build-id\n", encoding="utf8")
-    (path / "node_modules" / ".bin" / "next").touch()
     return path
 
 
@@ -30,6 +32,10 @@ def test_production_runtime_builds_safe_child_commands_and_private_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     frontend = _built_frontend(tmp_path / "frontend")
+    monkeypatch.setattr(
+        "fluxfast.production.frontend.shutil.which",
+        lambda manager: f"/tools/{manager}",
+    )
     monkeypatch.setenv("NEXT_PUBLIC_FLUXFAST_BACKEND_URL", "https://public.invalid")
     monkeypatch.setenv("APPLICATION_SECRET", "kept-private")
     probe_addresses: list[tuple[str, int]] = []
@@ -65,8 +71,10 @@ def test_production_runtime_builds_safe_child_commands_and_private_environment(
     )
     assert "--reload" not in supervisor.backend.command
     assert supervisor.frontend.command == (
-        str(frontend.resolve() / "node_modules" / ".bin" / "next"),
+        "/tools/npm",
+        "run",
         "start",
+        "--",
         "--hostname",
         "0.0.0.0",
         "--port",
@@ -99,13 +107,13 @@ def test_production_runtime_requires_completed_next_build(tmp_path: Path) -> Non
         create_production_supervisor(config)
 
 
-def test_production_runtime_requires_installed_local_next(tmp_path: Path) -> None:
+def test_production_runtime_requires_frontend_start_script(tmp_path: Path) -> None:
     (tmp_path / ".next").mkdir()
     (tmp_path / "package.json").write_text("{}\n", encoding="utf8")
     (tmp_path / ".next" / "BUILD_ID").touch()
     config = ProductionConfig(app="backend:app", frontend=tmp_path)
 
-    with pytest.raises(ProductionValidationError, match="installed local Next.js"):
+    with pytest.raises(ProductionValidationError, match="scripts.start"):
         create_production_supervisor(config)
 
 
