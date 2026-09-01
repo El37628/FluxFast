@@ -162,7 +162,7 @@ jobs:
         run: pnpm test:consumer:init
 
   mixed-version-consumers:
-    name: Built current packages with published 0.4.1
+    name: Built v0.6 source packages with published v0.5
     runs-on: ubuntu-latest
     services:
       redis:
@@ -197,31 +197,31 @@ jobs:
           npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-mixed/artifacts"
       - name: Install Chromium
         run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
-      - name: Verify current Python with published 0.4.1 JavaScript
+      - name: Verify current Python with published 0.5.0 JavaScript
         env:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PAIRING: python-current
-          FLUXFAST_PREVIOUS_VERSION: 0.4.1
+          FLUXFAST_PREVIOUS_VERSION: 0.5.0
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
         run: |
           release_version="$(node -p 'require("./package.json").version')"
           python_wheel="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-*.whl)"
           FLUXFAST_RELEASE_VERSION="$release_version" \
           FLUXFAST_PYTHON_SPEC="fluxfast[redis] @ file://$python_wheel" \
-          FLUXFAST_CORE_SPEC="@fluxfast/core@0.4.1" \
-          FLUXFAST_NEXT_SPEC="@fluxfast/next@0.4.1" \
+          FLUXFAST_CORE_SPEC="@fluxfast/core@0.5.0" \
+          FLUXFAST_NEXT_SPEC="@fluxfast/next@0.5.0" \
             node scripts/test-published-mixed-consumer.mjs
-      - name: Verify published Python 0.4.1 with current JavaScript
+      - name: Verify published Python 0.5.0 with current JavaScript
         env:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PAIRING: javascript-current
-          FLUXFAST_PREVIOUS_VERSION: 0.4.1
+          FLUXFAST_PREVIOUS_VERSION: 0.5.0
         run: |
           release_version="$(node -p 'require("./package.json").version')"
           core_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-core-*.tgz)"
           next_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-next-*.tgz)"
           FLUXFAST_RELEASE_VERSION="$release_version" \
-          FLUXFAST_PYTHON_SPEC="fluxfast==0.4.1" \
+          FLUXFAST_PYTHON_SPEC="fluxfast==0.5.0" \
           FLUXFAST_CORE_SPEC="$core_tarball" \
           FLUXFAST_NEXT_SPEC="$next_tarball" \
             node scripts/test-published-mixed-consumer.mjs

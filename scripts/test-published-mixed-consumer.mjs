@@ -23,7 +23,7 @@ const repositoryVersion = JSON.parse(
 const pairing = resolvePublishedMixedPairing({
   pairing: process.env.FLUXFAST_PAIRING ?? "python-current",
   releaseVersion: process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion,
-  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.4.1"
+  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.5.0"
 });
 const expectedPythonVersion =
   process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "") ?? pairing.pythonVersion;
@@ -122,6 +122,28 @@ function installedPackageVersion(packageName) {
   return JSON.parse(fs.readFileSync(manifestPath, "utf8")).version;
 }
 
+function assertTraditionalRegistryGeneration() {
+  const generatedRoot = path.join(consumerRoot, "src", ".fluxfast");
+  const registryPath = path.join(generatedRoot, "pages.generated.ts");
+  assert.equal(fs.existsSync(registryPath), true, "traditional page registry was not generated");
+  const registry = fs.readFileSync(registryPath, "utf8");
+  assert.match(registry, /home\/index/);
+  if (pairing.mode === "distributed") assert.match(registry, /details\/index/);
+
+  for (const file of [
+    "schema.generated.json",
+    "types.generated.ts",
+    "routes.generated.ts",
+    "mutations.generated.ts"
+  ]) {
+    assert.equal(
+      fs.existsSync(path.join(generatedRoot, file)),
+      false,
+      `${file} must not be required for an untyped mixed-version consumer`
+    );
+  }
+}
+
 async function installPublishedPython(python) {
   const attempts = process.env.FLUXFAST_PYTHON_SPEC ? 1 : 18;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -188,6 +210,14 @@ try {
     path.join(consumerRoot, "fixtures", pairing.frontendFixture),
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx")
   );
+  if (pairing.mode === "distributed") {
+    const detailsRoot = path.join(consumerRoot, "src", "flux-pages", "details");
+    fs.mkdirSync(detailsRoot, { recursive: true });
+    fs.copyFileSync(
+      path.join(consumerRoot, "fixtures", "distributed-details.tsx"),
+      path.join(detailsRoot, "index.tsx")
+    );
+  }
   if (pairing.mode === "legacy") {
     fs.copyFileSync(
       path.join(consumerRoot, "fixtures", pairing.backendFixture),
@@ -195,6 +225,7 @@ try {
     );
   }
   run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
+  assertTraditionalRegistryGeneration();
   run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
   run(npmCommand, ["run", "typecheck"], consumerRoot);
   run(npmCommand, ["run", "build"], consumerRoot);
