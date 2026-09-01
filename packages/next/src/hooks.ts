@@ -5,6 +5,8 @@ import {
   FluxRouter,
   PageState,
   ResourceStateSnapshot,
+  type FluxResourceKey,
+  type FluxResourceValue,
 } from "@fluxfast/core";
 import { useFluxContext } from "./provider";
 
@@ -36,6 +38,10 @@ export function usePage(): PageState {
   );
 }
 
+export function useResource<Key extends FluxResourceKey>(
+  key: Key
+): FluxResourceValue<Key>;
+export function useResource<T = unknown>(key: string): T;
 export function useResource<T = unknown>(key: string): T {
   const router = useRouter();
 
@@ -76,6 +82,12 @@ export function useResource<T = unknown>(key: string): T {
 }
 
 /** Subscribe to stable status, error, data, and stale metadata for one resource. */
+export function useResourceState<Key extends FluxResourceKey>(
+  key: Key
+): ResourceStateSnapshot<FluxResourceValue<Key>>;
+export function useResourceState<T = unknown>(
+  key: string
+): ResourceStateSnapshot<T>;
 export function useResourceState<T = unknown>(
   key: string
 ): ResourceStateSnapshot<T> {
@@ -103,6 +115,12 @@ export interface DeferredResourceResult<T = unknown>
 }
 
 /** Read a deferred resource state and retry only that resource on demand. */
+export function useDeferredResource<Key extends FluxResourceKey>(
+  key: Key
+): DeferredResourceResult<FluxResourceValue<Key>>;
+export function useDeferredResource<T = unknown>(
+  key: string
+): DeferredResourceResult<T>;
 export function useDeferredResource<T = unknown>(
   key: string
 ): DeferredResourceResult<T> {
