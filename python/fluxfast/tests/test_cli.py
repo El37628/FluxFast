@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from subprocess import CompletedProcess
 
 import pytest
 from fastapi import Depends, FastAPI
@@ -12,10 +13,14 @@ from fluxfast.cli import (
     DevConfig,
     DevServerError,
     SchemaCommandError,
+    TypeGenerationError,
     _frontend_command,
     _load_schema_app,
+    _type_generation_command,
+    main,
     run_dev,
     run_schema,
+    run_types,
 )
 
 
@@ -73,6 +78,50 @@ def test_frontend_command_honors_declared_package_manager_without_local_lock(
         "--port",
         "3100",
     ]
+
+
+@pytest.mark.parametrize(
+    ("lockfile", "expected_prefix"),
+    [
+        ("package-lock.json", ["npm", "exec", "--no", "--"]),
+        ("pnpm-lock.yaml", ["pnpm", "exec"]),
+        ("yarn.lock", ["yarn", "exec"]),
+        ("bun.lock", ["bun", "x", "--no-install"]),
+    ],
+)
+def test_type_generation_command_uses_local_frontend_package_manager(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lockfile: str,
+    expected_prefix: list[str],
+) -> None:
+    (tmp_path / lockfile).touch()
+    schema_file = tmp_path / "schema.json"
+    monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
+
+    assert _type_generation_command(tmp_path, schema_file, check=True) == [
+        *expected_prefix,
+        "fluxfast",
+        "generate",
+        "--schema-file",
+        str(schema_file),
+        "--check",
+    ]
+
+
+def test_type_generation_command_reports_missing_manager(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "pnpm-lock.yaml").touch()
+    monkeypatch.setattr("fluxfast.cli.shutil.which", lambda _name: None)
+
+    with pytest.raises(TypeGenerationError, match="Could not find 'pnpm'"):
+        _type_generation_command(
+            tmp_path,
+            tmp_path / "schema.json",
+            check=False,
+        )
 
 
 def test_dev_supervisor_injects_private_backend_and_stops_both_processes(
@@ -210,3 +259,72 @@ def test_schema_command_does_not_execute_handlers_or_dependencies(
 
     assert run_schema("backend:app") == 0
     assert calls == {"page": 0, "dependency": 0, "mutation": 0}
+
+
+def test_types_command_passes_current_schema_to_frontend_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "package.json").write_text("{}\n", encoding="utf8")
+    app = _schema_app()
+    observed: dict[str, object] = {}
+
+    monkeypatch.setattr("fluxfast.cli._load_schema_app", lambda _app_import: app)
+
+    def command(
+        received_frontend: Path,
+        schema_file: Path,
+        *,
+        check: bool,
+    ) -> list[str]:
+        observed["frontend"] = received_frontend
+        observed["schema_file"] = schema_file
+        observed["check"] = check
+        return ["frontend-cli", str(schema_file)]
+
+    def run(
+        command: list[str],
+        *,
+        cwd: Path,
+        check: bool,
+    ) -> CompletedProcess[str]:
+        schema_file = Path(command[-1])
+        payload = json.loads(schema_file.read_text(encoding="utf8"))
+        observed["payload"] = payload
+        observed["cwd"] = cwd
+        observed["subprocess_check"] = check
+        return CompletedProcess(command, 7)
+
+    monkeypatch.setattr("fluxfast.cli._type_generation_command", command)
+    monkeypatch.setattr("fluxfast.cli.subprocess.run", run)
+
+    assert run_types("backend:app", frontend=frontend, check=True) == 7
+    assert observed["frontend"] == frontend.resolve()
+    assert observed["cwd"] == frontend.resolve()
+    assert observed["check"] is True
+    assert observed["subprocess_check"] is False
+    assert observed["payload"]["schema"] == "fluxfast-schema/1"  # type: ignore[index]
+    assert not Path(observed["schema_file"]).exists()  # type: ignore[arg-type]
+
+
+def test_types_parser_forwards_frontend_and_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def run(app: str, *, frontend: Path, check: bool) -> int:
+        observed.update(app=app, frontend=frontend, check=check)
+        return 0
+
+    monkeypatch.setattr("fluxfast.cli.run_types", run)
+
+    assert main(
+        ["types", "backend.main:app", "--frontend", "web", "--check"]
+    ) == 0
+    assert observed == {
+        "app": "backend.main:app",
+        "frontend": Path("web"),
+        "check": True,
+    }

@@ -155,6 +155,113 @@ describe("FluxFast CLI", () => {
     );
   });
 
+  it("generates and checks every artifact from an external schema file", () => {
+    createTestProject(tmpDir, { layout: "root" });
+    const generatedSchema = writeSchemaManifest(tmpDir);
+    const schemaSource = path.join(tmpDir, "backend-schema.json");
+    fs.renameSync(generatedSchema, schemaSource);
+
+    expect(
+      runCli(["generate", "--schema-file", schemaSource], io)
+    ).toBe(0);
+
+    const project = detectFluxProject(tmpDir);
+    const schemaTarget = path.join(
+      project.generatedDir,
+      "schema.generated.json"
+    );
+    expect(fs.readFileSync(schemaTarget, "utf8")).toBe(
+      fs.readFileSync(schemaSource, "utf8")
+    );
+    expect(
+      fs.readFileSync(
+        path.join(project.generatedDir, "types.generated.ts"),
+        "utf8"
+      )
+    ).toContain('rooms: "rooms"');
+    expect(stdout.join("\n")).toContain(
+      "Generated FluxFast schema at .fluxfast/schema.generated.json"
+    );
+
+    stdout = [];
+    expect(
+      runCli(
+        ["generate", "--check", "--schema-file", schemaSource],
+        io
+      )
+    ).toBe(0);
+    expect(stdout.join("\n")).toContain("Generated FluxFast files are current");
+
+    const targetBefore = fs.readFileSync(schemaTarget, "utf8");
+    const changed = JSON.parse(fs.readFileSync(schemaSource, "utf8"));
+    changed.fingerprint = "f".repeat(64);
+    fs.writeFileSync(schemaSource, `${JSON.stringify(changed)}\n`, "utf8");
+    stdout = [];
+
+    expect(
+      runCli(
+        ["generate", "--schema-file", schemaSource, "--check"],
+        io
+      )
+    ).toBe(1);
+    expect(stdout.join("\n")).toContain(
+      "Rerun the full-stack type generation command without --check"
+    );
+    expect(fs.readFileSync(schemaTarget, "utf8")).toBe(targetBefore);
+  });
+
+  it("validates an external schema before updating any generated file", () => {
+    createTestProject(tmpDir);
+    const project = detectFluxProject(tmpDir);
+    const schemaTarget = writeTestFile(
+      tmpDir,
+      "src/.fluxfast/schema.generated.json",
+      "previous schema\n"
+    );
+    writeTestFile(
+      tmpDir,
+      "src/.fluxfast/pages.generated.ts",
+      "previous registry\n"
+    );
+    const schemaSource = writeTestFile(tmpDir, "invalid-schema.json", "{}\n");
+
+    expect(
+      runCli(["generate", "--schema-file", schemaSource], io)
+    ).toBe(1);
+    expect(stderr.join("\n")).toContain("Invalid schema manifest");
+    expect(fs.readFileSync(schemaTarget, "utf8")).toBe("previous schema\n");
+    expect(fs.readFileSync(project.registryPath, "utf8")).toBe(
+      "previous registry\n"
+    );
+    expect(
+      fs.existsSync(path.join(project.generatedDir, "types.generated.ts"))
+    ).toBe(false);
+  });
+
+  it("validates schema-file generate options", () => {
+    createTestProject(tmpDir);
+
+    expect(runCli(["generate", "--schema-file"], io)).toBe(2);
+    expect(stderr.join("\n")).toContain("--schema-file requires a path");
+
+    stderr = [];
+    expect(
+      runCli(
+        [
+          "generate",
+          "--schema-file",
+          "first.json",
+          "--schema-file",
+          "second.json",
+        ],
+        io
+      )
+    ).toBe(2);
+    expect(stderr.join("\n")).toContain(
+      "--schema-file may only be provided once"
+    );
+  });
+
   it("checks every generated artifact without rewriting current files", () => {
     createTestProject(tmpDir);
     writeTestFile(

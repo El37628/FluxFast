@@ -54,12 +54,41 @@ than risking user code. Resolve the route conflict and run `init` again.
 | `npx fluxfast init --dry-run` | Show the initialization plan without writes. |
 | `npx fluxfast init --check` | Return success only when configuration is complete. |
 | `npx fluxfast init --force` | Replace an invalid or customized FluxFast catch-all with the generated template. |
-| `npx fluxfast generate` | Regenerate the allowlisted page registry. |
+| `npx fluxfast generate` | Regenerate the page registry and schema-backed TypeScript artifacts. |
+| `npx fluxfast generate --check` | Check every generated frontend artifact without writing. |
 | `npx fluxfast doctor` | Diagnose packages, layout, routes, config, pages, and registry freshness. |
 
 `init --check` and `doctor` are read-only and return a nonzero exit status when
 they find a blocking problem, which makes either command suitable for CI.
 `doctor` also prints registered component names and actionable repair commands.
+
+## Typed contract generation
+
+From a directory that can import the FastAPI application, generate the backend
+manifest and all frontend TypeScript artifacts together:
+
+```bash
+fluxfast types backend.main:app --frontend frontend
+```
+
+If the frontend is the current directory, omit `--frontend`. The Python CLI
+owns application import and Pydantic serialization-schema export. It passes a
+temporary manifest to the frontend's locally installed `@fluxfast/next` CLI,
+which detects the root or `src/` layout and compiles the manifest, resource
+types, route builders, mutation helpers, and page registry before writing any
+of them. Page handlers, resource loaders, dependencies, and mutation handlers
+are not executed during export.
+
+Use the read-only form in CI to detect changes to either backend contracts or
+frontend pages:
+
+```bash
+fluxfast types backend.main:app --frontend frontend --check
+```
+
+A stale or missing manifest or generated file returns a nonzero status and is
+left untouched. The helper selects npm, pnpm, Yarn, or Bun from the frontend
+lockfile or `packageManager` field and runs its local FluxFast executable.
 
 ## Development
 

@@ -57,6 +57,21 @@ export default function HomePage() {
 }
 ```
 
+When the backend declares typed resources, routes, or JSON mutations, export
+their schema and generate the matching frontend contracts with one command:
+
+```bash
+fluxfast types backend.main:app --frontend frontend
+```
+
+The command uses the frontend's installed `@fluxfast/next` CLI, detects its
+layout, and updates the manifest, resource types, route builders, mutation
+helpers, and page registry together. Use the read-only form in CI:
+
+```bash
+fluxfast types backend.main:app --frontend frontend --check
+```
+
 Start FastAPI and Next.js with one public browser origin:
 
 ```bash
