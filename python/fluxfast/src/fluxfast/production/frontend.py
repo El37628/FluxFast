@@ -41,33 +41,53 @@ def production_frontend_command(
 ) -> list[str]:
     """Build a local-only package-manager command for the production server."""
 
-    manifest = _load_manifest(frontend)
-    scripts = manifest.get("scripts")
-    start_script = scripts.get("start") if isinstance(scripts, dict) else None
-    if not isinstance(start_script, str) or not start_script.strip():
-        raise ProductionFrontendError(
-            f"Frontend package {frontend / 'package.json'} must define a non-empty "
-            "scripts.start production command"
-        )
-
-    manager = _detect_package_manager(frontend, manifest)
-    executable = shutil.which(manager)
-    if executable is None:
-        raise ProductionFrontendError(
-            f"Could not find '{manager}' on PATH for frontend directory {frontend}"
-        )
-
-    separator = ["--"] if manager == "npm" else []
-    return [
-        executable,
-        "run",
+    return package_manager_run_command(
+        frontend,
         "start",
-        *separator,
         "--hostname",
         host,
         "--port",
         str(port),
-    ]
+    )
+
+
+def package_manager_run_command(
+    frontend: Path,
+    script: str,
+    *arguments: str,
+) -> list[str]:
+    """Build a validated package-manager script command without a shell."""
+
+    manifest = _load_manifest(frontend)
+    scripts = manifest.get("scripts")
+    script_value = scripts.get(script) if isinstance(scripts, dict) else None
+    if not isinstance(script_value, str) or not script_value.strip():
+        raise ProductionFrontendError(
+            f"Frontend package {frontend / 'package.json'} must define a non-empty "
+            f"scripts.{script} command"
+        )
+
+    manager, executable = _package_manager_executable(frontend, manifest)
+    separator = ["--"] if manager == "npm" and arguments else []
+    return [executable, "run", script, *separator, *arguments]
+
+
+def package_manager_exec_command(
+    frontend: Path,
+    command: str,
+    *arguments: str,
+) -> list[str]:
+    """Resolve an already-installed package binary with no download fallback."""
+
+    manifest = _load_manifest(frontend)
+    manager, executable = _package_manager_executable(frontend, manifest)
+    prefix = {
+        "npm": [executable, "exec", "--no", "--"],
+        "pnpm": [executable, "exec"],
+        "yarn": [executable, "exec"],
+        "bun": [executable, "x", "--no-install"],
+    }[manager]
+    return [*prefix, command, *arguments]
 
 
 def _load_manifest(frontend: Path) -> dict[str, object]:
@@ -103,3 +123,16 @@ def _detect_package_manager(
         if candidate in _SUPPORTED_PACKAGE_MANAGERS:
             return candidate
     return "npm"
+
+
+def _package_manager_executable(
+    frontend: Path,
+    manifest: dict[str, object],
+) -> tuple[str, str]:
+    manager = _detect_package_manager(frontend, manifest)
+    executable = shutil.which(manager)
+    if executable is None:
+        raise ProductionFrontendError(
+            f"Could not find '{manager}' on PATH for frontend directory {frontend}"
+        )
+    return manager, executable

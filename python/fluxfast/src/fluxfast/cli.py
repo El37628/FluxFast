@@ -21,12 +21,16 @@ from fastapi import FastAPI
 from . import __version__
 from .production import (
     ManagedProcessError,
+    ProductionBuildError,
     ProductionBuildMissingError,
     ProductionChildError,
     ProductionConfigError,
     ProductionStartupError,
     ProductionValidationError,
+    check_frontend_command,
+    resolve_build_frontend,
     resolve_production_config,
+    run_frontend_build,
     run_production,
 )
 from .production.frontend import detect_package_manager
@@ -339,6 +343,28 @@ def run_types(
     return int(result.returncode)
 
 
+def run_build(
+    *,
+    frontend: Path | None = None,
+    app_import: str | None = None,
+) -> int:
+    """Validate generated artifacts and run the existing production build."""
+
+    resolved_frontend = resolve_build_frontend(frontend)
+    print(f"[fluxfast] validating frontend: {resolved_frontend}", flush=True)
+    check_frontend_command(resolved_frontend, "init")
+    if app_import is None:
+        check_frontend_command(resolved_frontend, "generate")
+    else:
+        status = run_types(app_import, frontend=resolved_frontend, check=True)
+        if status != 0:
+            raise ProductionBuildError(
+                f"Backend contract validation failed with status {status}"
+            )
+    print("[fluxfast] building production frontend", flush=True)
+    return run_frontend_build(resolved_frontend)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fluxfast")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -354,6 +380,16 @@ def _parser() -> argparse.ArgumentParser:
     dev.add_argument("--frontend-port", type=int, default=3000)
     dev.add_argument("--no-reload", action="store_true")
     dev.add_argument("--startup-timeout", type=float, default=15.0)
+
+    build = subparsers.add_parser(
+        "build",
+        help="validate generated artifacts and build the production frontend",
+    )
+    build.add_argument("--frontend", type=Path)
+    build.add_argument(
+        "--app",
+        help="optionally verify this FastAPI application contract before building",
+    )
 
     start = subparsers.add_parser(
         "start",
@@ -429,6 +465,18 @@ def main(argv: list[str] | None = None) -> int:
         except DevServerError as error:
             print(f"[fluxfast] {error}", file=sys.stderr)
             return 1
+    if args.command == "build":
+        try:
+            return run_build(frontend=args.frontend, app_import=args.app)
+        except (
+            ProductionBuildError,
+            ProductionValidationError,
+            SchemaCommandError,
+            TypeGenerationError,
+            OSError,
+        ) as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 3
     if args.command == "start":
         try:
             config = resolve_production_config(
