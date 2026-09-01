@@ -1,4 +1,7 @@
-import { generateFluxFastProject } from "../generate";
+import {
+  checkFluxFastProject,
+  generateFluxFastProject,
+} from "../generate";
 import { applyInitPlan } from "./apply";
 import {
   validateFluxProject,
@@ -30,7 +33,7 @@ const defaultIo: CliIo = {
 const USAGE = `Usage:
   fluxfast init [--dry-run] [--yes] [--force]
   fluxfast init --check
-  fluxfast generate
+  fluxfast generate [--check]
   fluxfast doctor
   fluxfast --help`;
 
@@ -239,17 +242,36 @@ function runDoctor(args: string[], io: CliIo): number {
 }
 
 function runGenerate(args: string[], io: CliIo): number {
-  if (args.length > 0) {
-    io.stderr(`Unknown option: ${args[0]}\n\n${USAGE}`);
+  const unknown = args.find(argument => argument !== "--check");
+  if (unknown) {
+    io.stderr(`Unknown option: ${unknown}\n\n${USAGE}`);
+    return 2;
+  }
+  if (args.length > 1) {
+    io.stderr(`--check may only be provided once.\n\n${USAGE}`);
     return 2;
   }
   const project = detectFluxProject(io.cwd);
-  const result = generateFluxFastProject({
+  const options = {
     pagesDir: project.fluxPagesDir,
     outputFile: project.registryPath,
     generatedDir: project.generatedDir,
     log: false,
-  });
+  };
+
+  if (args[0] === "--check") {
+    const result = checkFluxFastProject(options);
+    if (result.current) {
+      io.stdout("✓ Generated FluxFast files are current.");
+      return 0;
+    }
+    io.stdout(
+      "✗ Generated FluxFast types are out of date.\n\nRun:\n\n  npx fluxfast generate"
+    );
+    return 1;
+  }
+
+  const result = generateFluxFastProject(options);
   io.stdout(
     `✓ Generated FluxFast registry at ${relativeProjectPath(project, project.registryPath).replace(/\\/g, "/")}`
   );

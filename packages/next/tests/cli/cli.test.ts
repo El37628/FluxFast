@@ -7,6 +7,60 @@ import { desiredCatchAllPath, renderCatchAll } from "../../src/cli/files";
 import { detectFluxProject } from "../../src/cli/project";
 import { createTestProject, writeTestFile } from "./helpers";
 
+function writeSchemaManifest(
+  root: string,
+  fingerprint = "e".repeat(64)
+): string {
+  return writeTestFile(
+    root,
+    "src/.fluxfast/schema.generated.json",
+    `${JSON.stringify(
+      {
+        schema: "fluxfast-schema/1",
+        producer: "0.6.0",
+        fingerprint,
+        resources: {
+          rooms: {
+            schema: {
+              type: "array",
+              items: { type: "string" },
+            },
+          },
+        },
+        pages: [
+          {
+            name: "hotel_rooms",
+            path: "/hotels/{hotel_id}/rooms",
+            parameters: [
+              {
+                name: "hotel_id",
+                location: "path",
+                required: true,
+                schema: { type: "integer" },
+              },
+            ],
+          },
+        ],
+        mutations: [
+          {
+            name: "create_room",
+            path: "/rooms",
+            method: "POST",
+            parameters: [],
+            body: {
+              type: "object",
+              properties: { number: { type: "integer" } },
+              required: ["number"],
+            },
+          },
+        ],
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
 describe("FluxFast CLI", () => {
   let tmpDir: string;
   let stdout: string[];
@@ -41,6 +95,10 @@ describe("FluxFast CLI", () => {
 
     stderr = [];
     expect(runCli(["init", "--mystery"], io)).toBe(2);
+    expect(stderr.join("\n")).toContain("Unknown option: --mystery");
+
+    stderr = [];
+    expect(runCli(["generate", "--mystery"], io)).toBe(2);
     expect(stderr.join("\n")).toContain("Unknown option: --mystery");
   });
 
@@ -128,50 +186,7 @@ describe("FluxFast CLI", () => {
 
   it("generates schema-backed types, routes, and mutations when a manifest exists", () => {
     createTestProject(tmpDir);
-    writeTestFile(
-      tmpDir,
-      "src/.fluxfast/schema.generated.json",
-      `${JSON.stringify({
-        schema: "fluxfast-schema/1",
-        producer: "0.6.0",
-        fingerprint: "e".repeat(64),
-        resources: {
-          rooms: {
-            schema: {
-              type: "array",
-              items: { type: "string" }
-            }
-          }
-        },
-        pages: [
-          {
-            name: "hotel_rooms",
-            path: "/hotels/{hotel_id}/rooms",
-            parameters: [
-              {
-                name: "hotel_id",
-                location: "path",
-                required: true,
-                schema: { type: "integer" }
-              }
-            ]
-          }
-        ],
-        mutations: [
-          {
-            name: "create_room",
-            path: "/rooms",
-            method: "POST",
-            parameters: [],
-            body: {
-              type: "object",
-              properties: { number: { type: "integer" } },
-              required: ["number"]
-            }
-          }
-        ]
-      }, null, 2)}\n`
-    );
+    writeSchemaManifest(tmpDir);
 
     expect(runCli(["generate"], io)).toBe(0);
 
@@ -190,6 +205,113 @@ describe("FluxFast CLI", () => {
     );
   });
 
+  it("checks every generated artifact without rewriting current files", () => {
+    createTestProject(tmpDir);
+    writeTestFile(
+      tmpDir,
+      "src/flux-pages/home.tsx",
+      "export default function Home() { return null; }\n"
+    );
+    writeSchemaManifest(tmpDir);
+    expect(runCli(["generate"], io)).toBe(0);
+
+    const project = detectFluxProject(tmpDir);
+    const generatedFiles = [
+      project.registryPath,
+      path.join(project.generatedDir, "types.generated.ts"),
+      path.join(project.generatedDir, "routes.generated.ts"),
+      path.join(project.generatedDir, "mutations.generated.ts"),
+    ];
+    const currentContents = new Map(
+      generatedFiles.map(file => [file, fs.readFileSync(file, "utf8")])
+    );
+    stdout = [];
+
+    expect(runCli(["generate", "--check"], io)).toBe(0);
+    expect(stdout.join("\n")).toContain("Generated FluxFast files are current");
+    for (const [file, content] of currentContents) {
+      expect(fs.readFileSync(file, "utf8")).toBe(content);
+    }
+
+    for (const file of generatedFiles) {
+      const staleContent = `${currentContents.get(file)}// stale\n`;
+      fs.writeFileSync(file, staleContent, "utf8");
+      stdout = [];
+
+      expect(runCli(["generate", "--check"], io)).toBe(1);
+      expect(stdout.join("\n")).toContain(
+        "Generated FluxFast types are out of date"
+      );
+      expect(stdout.join("\n")).toContain("npx fluxfast generate");
+      expect(fs.readFileSync(file, "utf8")).toBe(staleContent);
+
+      fs.writeFileSync(file, currentContents.get(file)!, "utf8");
+    }
+  });
+
+  it("detects manifest fingerprint drift without changing generated files", () => {
+    createTestProject(tmpDir);
+    writeSchemaManifest(tmpDir);
+    expect(runCli(["generate"], io)).toBe(0);
+
+    const project = detectFluxProject(tmpDir);
+    const generatedFiles = [
+      project.registryPath,
+      path.join(project.generatedDir, "types.generated.ts"),
+      path.join(project.generatedDir, "routes.generated.ts"),
+      path.join(project.generatedDir, "mutations.generated.ts"),
+    ];
+    const generatedBefore = generatedFiles.map(file =>
+      fs.readFileSync(file, "utf8")
+    );
+    writeSchemaManifest(tmpDir, "f".repeat(64));
+    stdout = [];
+
+    expect(runCli(["generate", "--check"], io)).toBe(1);
+    expect(stdout.join("\n")).toContain(
+      "Generated FluxFast types are out of date"
+    );
+    expect(
+      generatedFiles.map(file => fs.readFileSync(file, "utf8"))
+    ).toEqual(generatedBefore);
+  });
+
+  it("detects page source drift without updating the registry", () => {
+    createTestProject(tmpDir);
+    writeTestFile(
+      tmpDir,
+      "src/flux-pages/home.tsx",
+      "export default function Home() { return null; }\n"
+    );
+    expect(runCli(["generate"], io)).toBe(0);
+
+    const project = detectFluxProject(tmpDir);
+    const registryBefore = fs.readFileSync(project.registryPath, "utf8");
+    writeTestFile(
+      tmpDir,
+      "src/flux-pages/rooms.tsx",
+      "export default function Rooms() { return null; }\n"
+    );
+    stdout = [];
+
+    expect(runCli(["generate", "--check"], io)).toBe(1);
+    expect(stdout.join("\n")).toContain(
+      "Generated FluxFast types are out of date"
+    );
+    expect(fs.readFileSync(project.registryPath, "utf8")).toBe(registryBefore);
+  });
+
+  it("reports missing generated files without creating directories or files", () => {
+    createTestProject(tmpDir);
+    const project = detectFluxProject(tmpDir);
+
+    expect(fs.existsSync(project.fluxPagesDir)).toBe(false);
+    expect(fs.existsSync(project.generatedDir)).toBe(false);
+    expect(runCli(["generate", "--check"], io)).toBe(1);
+    expect(fs.existsSync(project.fluxPagesDir)).toBe(false);
+    expect(fs.existsSync(project.generatedDir)).toBe(false);
+  });
+
   it("does not partially update generated files when the manifest is invalid", () => {
     createTestProject(tmpDir);
     const project = detectFluxProject(tmpDir);
@@ -198,6 +320,22 @@ describe("FluxFast CLI", () => {
     writeTestFile(tmpDir, "src/.fluxfast/schema.generated.json", "{}\n");
 
     expect(runCli(["generate"], io)).toBe(1);
+    expect(stderr.join("\n")).toContain("Invalid schema manifest");
+    expect(fs.readFileSync(project.registryPath, "utf8")).toBe(
+      "previous registry\n"
+    );
+    expect(
+      fs.existsSync(path.join(project.generatedDir, "types.generated.ts"))
+    ).toBe(false);
+  });
+
+  it("does not modify generated files while checking an invalid manifest", () => {
+    createTestProject(tmpDir);
+    const project = detectFluxProject(tmpDir);
+    writeTestFile(tmpDir, "src/.fluxfast/pages.generated.ts", "previous registry\n");
+    writeTestFile(tmpDir, "src/.fluxfast/schema.generated.json", "{}\n");
+
+    expect(runCli(["generate", "--check"], io)).toBe(1);
     expect(stderr.join("\n")).toContain("Invalid schema manifest");
     expect(fs.readFileSync(project.registryPath, "utf8")).toBe(
       "previous registry\n"
