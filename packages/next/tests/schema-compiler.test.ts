@@ -21,22 +21,33 @@ function manifest(resources: Record<string, { schema: Record<string, unknown> }>
 function expectValidTypeScript(source: string): void {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-types-"));
   const sourceFile = path.join(directory, "types.generated.ts");
+  const configFile = path.join(directory, "tsconfig.json");
   fs.writeFileSync(sourceFile, source, "utf8");
+  fs.writeFileSync(
+    configFile,
+    `${JSON.stringify({
+      compilerOptions: {
+        target: "ES2022",
+        module: "Node16",
+        moduleResolution: "Node16",
+        lib: ["ES2022", "DOM", "DOM.Iterable"],
+        types: [],
+        strict: true,
+        skipLibCheck: true,
+        paths: {
+          "@fluxfast/core": [
+            path.resolve(__dirname, "../../core/src/index.ts")
+          ]
+        }
+      },
+      files: [sourceFile]
+    }, null, 2)}\n`,
+    "utf8"
+  );
   try {
     const result = spawnSync(
       path.resolve(__dirname, "../node_modules/typescript/bin/tsc"),
-      [
-        "--noEmit",
-        "--ignoreConfig",
-        "--target",
-        "ES2022",
-        "--module",
-        "Node16",
-        "--moduleResolution",
-        "Node16",
-        "--skipLibCheck",
-        sourceFile
-      ],
+      ["--noEmit", "--project", configFile],
       { encoding: "utf8" }
     );
     expect(`${result.stdout}${result.stderr}`).toBe("");
@@ -83,6 +94,8 @@ describe("FluxFast JSON Schema compiler", () => {
 // Producer: 0.6.0
 // Fingerprint: ${fingerprint}
 
+import type {} from "@fluxfast/core";
+
 export interface Room {
   createdAt?: string;
   id: number;
@@ -93,6 +106,16 @@ export interface Room {
 export type RoomStatus = "available" | "occupied";
 
 export type RoomsResource = Room[];
+
+export interface GeneratedFluxResourceMap {
+  rooms: RoomsResource;
+}
+
+declare module "@fluxfast/core" {
+  interface FluxResourceMap {
+    rooms: RoomsResource;
+  }
+}
 `);
     expectValidTypeScript(output);
   });
@@ -131,6 +154,8 @@ export type RoomsResource = Room[];
     expect(output).toContain(
       "export type TotalsResource = { [key: string]: number; };"
     );
+    expect(output).toContain("settings: SettingsResource;");
+    expect(output).toContain("totals: TotalsResource;");
     expect(output).not.toContain("any");
   });
 
@@ -194,6 +219,7 @@ export type RoomsResource = Room[];
     expect(output).toContain(
       '"value\\\"; globalThis.compromised = true; \\\""?: string;'
     );
+    expect(output).toContain("values: ValuesResource;");
 
     expect(() =>
       compileFluxFastResourceTypes(
