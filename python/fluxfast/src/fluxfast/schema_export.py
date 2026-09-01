@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Iterable, Iterator
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import FastAPI
 from pydantic import JsonValue, TypeAdapter
@@ -13,6 +13,7 @@ from pydantic_core import PydanticUndefined
 from .route_metadata import get_fluxfast_route_metadata
 from .schema_manifest import (
     SCHEMA_MANIFEST_VERSION,
+    MutationMethod,
     MutationRouteSchema,
     PageRouteSchema,
     ResourceSchemaEntry,
@@ -141,6 +142,33 @@ def _parameter_schema(location: Literal["path", "query"], field: Any) -> RoutePa
     )
 
 
+def _mutation_parameter_schema(
+    location: Literal["path", "query"],
+    field: Any,
+) -> RouteParameterSchema:
+    """Build input-mode metadata for a mutation path or query parameter."""
+
+    field_info = field.field_info
+    annotation = field_info.annotation
+    annotated = Annotated[annotation, field_info]
+    raw_schema: Any = TypeAdapter(annotated).json_schema(
+        mode="validation",
+        by_alias=True,
+    )
+    is_required = getattr(field_info, "is_required", None)
+    required = (
+        bool(is_required())
+        if callable(is_required)
+        else field.default is PydanticUndefined
+    )
+    return RouteParameterSchema(
+        name=field.alias or field.name,
+        location=location,
+        required=required,
+        schema=_sort_json_objects(raw_schema),
+    )
+
+
 def _export_page_routes(app: FastAPI) -> list[PageRouteSchema]:
     pages: list[PageRouteSchema] = []
     for route in _iter_effective_routes(app):
@@ -173,6 +201,76 @@ def _export_page_routes(app: FastAPI) -> list[PageRouteSchema]:
     return pages
 
 
+_SUPPORTED_MUTATION_METHODS = frozenset({"DELETE", "PATCH", "POST", "PUT"})
+
+
+def _json_body_schema(route: Any) -> dict[str, JsonValue] | None:
+    """Return the accepted JSON body schema, omitting non-JSON request bodies."""
+
+    body_field = getattr(route, "body_field", None)
+    if body_field is None:
+        return None
+    field_info = body_field.field_info
+    media_type = getattr(field_info, "media_type", "application/json")
+    if not isinstance(media_type, str):
+        return None
+    base_media_type = media_type.partition(";")[0].strip().lower()
+    if not (
+        base_media_type == "application/json" or base_media_type.endswith("+json")
+    ):
+        return None
+
+    annotation = field_info.annotation
+    annotated = Annotated[annotation, field_info]
+    raw_schema: Any = TypeAdapter(annotated).json_schema(
+        mode="validation",
+        by_alias=True,
+    )
+    return cast(dict[str, JsonValue], _sort_json_objects(raw_schema))
+
+
+def _export_mutation_routes(app: FastAPI) -> list[MutationRouteSchema]:
+    mutations: list[MutationRouteSchema] = []
+    for route in _iter_effective_routes(app):
+        metadata = get_fluxfast_route_metadata(getattr(route, "endpoint", None))
+        if metadata is None or metadata.kind != "mutation":
+            continue
+
+        parameters: list[RouteParameterSchema] = []
+        seen_parameters: set[tuple[str, str]] = set()
+        for location, field in _iter_parameter_fields(route.dependant):
+            name = field.alias or field.name
+            identity = (location, name)
+            if identity in seen_parameters:
+                continue
+            seen_parameters.add(identity)
+            parameters.append(_mutation_parameter_schema(location, field))
+        parameters.sort(
+            key=lambda parameter: (
+                0 if parameter.location == "path" else 1,
+                parameter.name,
+            )
+        )
+
+        body_schema = _json_body_schema(route)
+        methods = sorted(
+            method
+            for method in metadata.methods
+            if method in _SUPPORTED_MUTATION_METHODS
+        )
+        for method in methods:
+            mutations.append(
+                MutationRouteSchema(
+                    name=metadata.name,
+                    path=route.path,
+                    method=cast(MutationMethod, method),
+                    parameters=parameters,
+                    body=body_schema,
+                )
+            )
+    return mutations
+
+
 def build_app_schema_manifest(
     app: FastAPI,
     *,
@@ -187,4 +285,5 @@ def build_app_schema_manifest(
         registry,
         producer=producer,
         pages=_export_page_routes(app),
+        mutations=_export_mutation_routes(app),
     )
