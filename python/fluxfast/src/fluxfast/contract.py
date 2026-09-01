@@ -151,3 +151,8 @@ class ResourceContract(Generic[T]):
                 details={self.key: [str(error)]},
             ) from error
         return _canonicalize_unordered_collections(validated, wire_value)
+
+    def _serialization_schema(self) -> dict[str, Any]:
+        """Return the JSON Schema describing the value emitted on the wire."""
+
+        return self._adapter.json_schema(mode="serialization", by_alias=True)
