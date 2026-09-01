@@ -22,6 +22,13 @@ from fluxfast.cli import (
     run_schema,
     run_types,
 )
+from fluxfast.production import (
+    ProductionBuildMissingError,
+    ProductionChildError,
+    ProductionConfig,
+    ProductionStartupError,
+    ProductionValidationError,
+)
 
 
 class Room(BaseModel):
@@ -328,3 +335,77 @@ def test_types_parser_forwards_frontend_and_check(
         "frontend": Path("web"),
         "check": True,
     }
+
+
+def test_start_parser_resolves_environment_and_cli_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[ProductionConfig] = []
+    monkeypatch.setenv("FLUXFAST_HOST", "127.0.0.2")
+    monkeypatch.setenv("FLUXFAST_PORT", "4000")
+    monkeypatch.setenv("FLUXFAST_BACKEND_PORT", "9000")
+    monkeypatch.setenv("FLUXFAST_WORKERS", "2")
+    monkeypatch.setenv("FLUXFAST_STARTUP_TIMEOUT", "45")
+    monkeypatch.setenv("FLUXFAST_SHUTDOWN_TIMEOUT", "25")
+    monkeypatch.setattr(
+        "fluxfast.cli.run_production",
+        lambda config: observed.append(config) or 0,
+    )
+
+    assert main(
+        [
+            "start",
+            "backend.main:app",
+            "--frontend",
+            "web",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "3100",
+            "--workers",
+            "4",
+        ]
+    ) == 0
+    assert observed == [
+        ProductionConfig(
+            app="backend.main:app",
+            frontend=Path("web"),
+            host="0.0.0.0",
+            port=3100,
+            backend_port=9000,
+            workers=4,
+            startup_timeout=45,
+            shutdown_timeout=25,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (ProductionChildError("Next.js", 7), 1),
+        (ProductionValidationError("invalid production project"), 3),
+        (ProductionStartupError("startup timed out"), 4),
+        (ProductionBuildMissingError("build missing"), 5),
+    ],
+)
+def test_start_command_maps_runtime_failures_to_stable_exit_codes(
+    error: Exception,
+    expected_status: int,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail(_config: ProductionConfig) -> int:
+        raise error
+
+    monkeypatch.setattr("fluxfast.cli.run_production", fail)
+
+    assert main(["start", "backend:app"]) == expected_status
+    assert str(error) in capsys.readouterr().err
+
+
+def test_start_command_maps_invalid_configuration_to_exit_code_2(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["start", "backend:app", "--workers", "0"]) == 2
+    assert "workers must be an integer" in capsys.readouterr().err
