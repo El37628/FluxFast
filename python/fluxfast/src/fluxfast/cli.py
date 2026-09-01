@@ -20,6 +20,16 @@ from types import FrameType
 from fastapi import FastAPI
 
 from . import __version__
+from .production import (
+    ManagedProcessError,
+    ProductionBuildMissingError,
+    ProductionChildError,
+    ProductionConfigError,
+    ProductionStartupError,
+    ProductionValidationError,
+    resolve_production_config,
+    run_production,
+)
 from .schema_export import build_app_schema_manifest
 from .serialization import canonical_json
 
@@ -374,6 +384,23 @@ def _parser() -> argparse.ArgumentParser:
     dev.add_argument("--no-reload", action="store_true")
     dev.add_argument("--startup-timeout", type=float, default=15.0)
 
+    start = subparsers.add_parser(
+        "start",
+        help="run FastAPI and Next.js as one supervised production service",
+    )
+    start.add_argument(
+        "app",
+        help="ASGI application import, for example backend.main:app",
+    )
+    start.add_argument("--frontend", type=Path, default=Path.cwd())
+    start.add_argument("--host")
+    start.add_argument("--port", type=int)
+    start.add_argument("--backend-host")
+    start.add_argument("--backend-port", type=int)
+    start.add_argument("--workers", type=int)
+    start.add_argument("--startup-timeout", type=float)
+    start.add_argument("--shutdown-timeout", type=float)
+
     schema = subparsers.add_parser(
         "schema",
         help="export the offline FluxFast schema manifest",
@@ -431,6 +458,35 @@ def main(argv: list[str] | None = None) -> int:
         except DevServerError as error:
             print(f"[fluxfast] {error}", file=sys.stderr)
             return 1
+    if args.command == "start":
+        try:
+            config = resolve_production_config(
+                args.app,
+                args.frontend,
+                host=args.host,
+                port=args.port,
+                backend_host=args.backend_host,
+                backend_port=args.backend_port,
+                workers=args.workers,
+                startup_timeout=args.startup_timeout,
+                shutdown_timeout=args.shutdown_timeout,
+            )
+            return run_production(config)
+        except ProductionConfigError as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 2
+        except ProductionBuildMissingError as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 5
+        except ProductionStartupError as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 4
+        except ProductionChildError as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 1
+        except (ProductionValidationError, ManagedProcessError, OSError) as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 3
     if args.command == "schema":
         try:
             return run_schema(
