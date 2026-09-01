@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Literal
+from typing import Generic, Literal, Optional, TypeVar, Union
+from uuid import UUID
 
 import pytest
 from fastapi import Body, Depends, FastAPI, Query
@@ -40,6 +42,63 @@ class UpdateRoom(BaseModel):
     note: str | None = Field(default=None, validation_alias="inputNote")
 
 
+@dataclass(frozen=True)
+class Coordinates:
+    latitude: float
+    longitude: float
+
+
+class Address(BaseModel):
+    city: str
+    coordinates: Coordinates
+
+
+ItemT = TypeVar("ItemT")
+
+
+class PageResult(BaseModel, Generic[ItemT]):
+    items: list[ItemT]
+    total: int
+
+
+class TreeNode(BaseModel):
+    name: str
+    children: list[TreeNode] = Field(default_factory=list)
+
+
+class CustomWireValue(BaseModel):
+    code: int
+
+    @field_serializer("code")
+    def serialize_code(self, value: int) -> str:
+        return f"C-{value}"
+
+
+class AdvancedContractPayload(BaseModel):
+    integer: int
+    floating: float
+    enabled: bool
+    label: str
+    tuple_values: tuple[int, ...]
+    mapping: dict[str, Address]
+    tags: set[str]
+    legacy_optional: Optional[int]  # noqa: UP045 - compatibility contract
+    modern_optional: str | None
+    legacy_union: Union[int, str]  # noqa: UP007 - compatibility contract
+    modern_union: float | bool
+    lifecycle: Literal["draft", "published"]
+    status: RoomStatus
+    timestamp: datetime
+    day: date
+    clock: time
+    identifier: UUID
+    amount: Decimal
+    address: Address
+    page: PageResult[Address]
+    tree: TreeNode
+    custom: CustomWireValue
+
+
 def test_export_uses_pydantic_serialization_mode_wire_schema() -> None:
     flux = FluxFast(FastAPI())
     flux.define_resource("bookings", list[Booking])
@@ -58,6 +117,83 @@ def test_export_uses_pydantic_serialization_mode_wire_schema() -> None:
     assert booking["properties"]["amount"]["type"] == "string"
     assert booking["properties"]["status"]["enum"] == ["confirmed", "cancelled"]
     assert "created_at" not in booking["properties"]
+
+
+def test_export_covers_advanced_pydantic_contract_shapes() -> None:
+    flux = FluxFast(FastAPI())
+    flux.define_resource("advanced", AdvancedContractPayload)
+
+    manifest = build_schema_manifest(flux.schema_registry, producer="0.6.0")
+    schema = manifest.resources["advanced"].json_schema
+    properties = schema["properties"]
+
+    def resolve(reference: str) -> dict[str, object]:
+        prefix = "#/$defs/"
+        assert reference.startswith(prefix)
+        return schema["$defs"][reference.removeprefix(prefix)]
+
+    assert schema["type"] == "object"
+    assert properties["integer"]["type"] == "integer"
+    assert properties["floating"]["type"] == "number"
+    assert properties["enabled"]["type"] == "boolean"
+    assert properties["label"]["type"] == "string"
+
+    assert properties["tuple_values"] == {
+        "items": {"type": "integer"},
+        "title": "Tuple Values",
+        "type": "array",
+    }
+    assert properties["tags"]["type"] == "array"
+    assert properties["tags"]["items"] == {"type": "string"}
+    assert properties["tags"]["uniqueItems"] is True
+
+    assert properties["legacy_optional"]["anyOf"] == [
+        {"type": "integer"},
+        {"type": "null"},
+    ]
+    assert properties["modern_optional"]["anyOf"] == [
+        {"type": "string"},
+        {"type": "null"},
+    ]
+    assert properties["legacy_union"]["anyOf"] == [
+        {"type": "integer"},
+        {"type": "string"},
+    ]
+    assert properties["modern_union"]["anyOf"] == [
+        {"type": "number"},
+        {"type": "boolean"},
+    ]
+    assert properties["lifecycle"]["enum"] == ["draft", "published"]
+
+    assert resolve(properties["status"]["$ref"])["enum"] == [
+        "available",
+        "occupied",
+    ]
+    assert properties["timestamp"]["format"] == "date-time"
+    assert properties["day"]["format"] == "date"
+    assert properties["clock"]["format"] == "time"
+    assert properties["identifier"]["format"] == "uuid"
+    assert properties["amount"]["type"] == "string"
+
+    address = resolve(properties["address"]["$ref"])
+    coordinates = resolve(address["properties"]["coordinates"]["$ref"])
+    assert address["properties"]["city"]["type"] == "string"
+    assert coordinates["properties"]["latitude"]["type"] == "number"
+    assert coordinates["properties"]["longitude"]["type"] == "number"
+    assert resolve(properties["mapping"]["additionalProperties"]["$ref"]) == address
+
+    page = resolve(properties["page"]["$ref"])
+    assert page["title"] == "PageResult[Address]"
+    assert resolve(page["properties"]["items"]["items"]["$ref"]) == address
+    assert page["properties"]["total"]["type"] == "integer"
+
+    tree_reference = properties["tree"]["$ref"]
+    tree = resolve(tree_reference)
+    assert tree["properties"]["name"]["type"] == "string"
+    assert tree["properties"]["children"]["items"]["$ref"] == tree_reference
+
+    custom = resolve(properties["custom"]["$ref"])
+    assert custom["properties"]["code"]["type"] == "string"
 
 
 def test_export_is_sorted_and_fingerprint_is_deterministic() -> None:
