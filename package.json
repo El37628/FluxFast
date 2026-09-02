@@ -14,6 +14,7 @@
     "test:e2e:distributed": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --dir tests/browser/frontend run test:e2e:distributed",
     "test:e2e:distributed:production": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && node scripts/test-production-distributed-browser.mjs",
     "test:e2e:production": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && node scripts/test-production-browser.mjs",
+    "test:container:docker": "node scripts/test-docker-production.mjs",
     "test:release": "node --test scripts/*.test.mjs",
     "test:consumer:init": "node scripts/test-next-init-consumer.mjs",
     "test:consumer:mixed-published": "node scripts/test-published-mixed-consumer.mjs",
