@@ -125,6 +125,29 @@ def test_multi_worker_memory_runtime_reports_two_nonblocking_risks(
     assert "runnable with 2 risk warnings" in render_production_report(report)
 
 
+def test_strict_report_converts_risk_warnings_to_blocking_failures() -> None:
+    report = ProductionDiagnosticReport(
+        (
+            ProductionDiagnostic("Workers", "pass", "4 FastAPI workers"),
+            ProductionDiagnostic(
+                "Distributed runtime",
+                "warning",
+                "Live Resource events are process-local across 4 FastAPI workers",
+                fix="Configure RedisLiveBroker or use --workers 1.",
+            ),
+        )
+    )
+
+    rendered = render_production_report(report, strict=True)
+
+    assert report.valid is True
+    assert report.is_valid(strict=True) is False
+    assert report.blocking_count(strict=True) == 1
+    assert "  ✗ Live Resource events are process-local" in rendered
+    assert "  ! Live Resource events are process-local" not in rendered
+    assert "Strict production configuration has 1 blocking problem" in rendered
+
+
 @pytest.mark.parametrize("healthy", [True, False])
 def test_redis_diagnostics_probe_owned_dependencies_without_leaking_errors(
     tmp_path: Path,

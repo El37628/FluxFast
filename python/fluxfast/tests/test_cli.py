@@ -483,6 +483,7 @@ def test_production_doctor_warnings_are_nonblocking_and_failures_exit_three(
     )
     monkeypatch.setattr("fluxfast.cli.diagnose_production", lambda _config: warning)
     assert main(["doctor", "--production"]) == 0
+    assert main(["doctor", "--production", "--strict"]) == 3
 
     failure = ProductionDiagnosticReport(
         (ProductionDiagnostic("Application", "fail", "Build missing"),)

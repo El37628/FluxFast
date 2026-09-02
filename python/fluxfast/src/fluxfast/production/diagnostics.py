@@ -54,9 +54,22 @@ class ProductionDiagnosticReport:
 
     diagnostics: tuple[ProductionDiagnostic, ...]
 
+    def is_valid(self, *, strict: bool = False) -> bool:
+        """Return whether diagnostics satisfy the selected validation policy."""
+
+        return self.blocking_count(strict=strict) == 0
+
+    def blocking_count(self, *, strict: bool = False) -> int:
+        """Count errors, and warnings when strict validation is enabled."""
+
+        return sum(
+            item.status == "fail" or (strict and item.status == "warning")
+            for item in self.diagnostics
+        )
+
     @property
     def valid(self) -> bool:
-        return not any(item.status == "fail" for item in self.diagnostics)
+        return self.is_valid()
 
     @property
     def warning_count(self) -> int:
@@ -103,7 +116,11 @@ def diagnose_production(config: ProductionConfig) -> ProductionDiagnosticReport:
     return ProductionDiagnosticReport(tuple(diagnostics))
 
 
-def render_production_report(report: ProductionDiagnosticReport) -> str:
+def render_production_report(
+    report: ProductionDiagnosticReport,
+    *,
+    strict: bool = False,
+) -> str:
     """Render a deterministic human-readable report without sensitive values."""
 
     symbols = {"pass": "✓", "warning": "!", "fail": "✗"}
@@ -118,18 +135,24 @@ def render_production_report(report: ProductionDiagnosticReport) -> str:
         for item in report.diagnostics:
             if item.section != section:
                 continue
-            lines.append(f"  {symbols[item.status]} {_safe_display(item.message)}")
+            effective_status: DiagnosticStatus = (
+                "fail" if strict and item.status == "warning" else item.status
+            )
+            lines.append(
+                f"  {symbols[effective_status]} {_safe_display(item.message)}"
+            )
             if item.detail:
                 lines.append(f"    {_safe_display(item.detail)}")
             if item.fix:
                 lines.append(f"    Fix: {_safe_display(item.fix)}")
 
     lines.extend(("", "Result"))
-    if not report.valid:
-        failures = sum(item.status == "fail" for item in report.diagnostics)
+    blocking = report.blocking_count(strict=strict)
+    if blocking:
+        subject = "Strict production configuration" if strict else "Production configuration"
         lines.append(
-            f"  ✗ Production configuration has {failures} blocking "
-            f"problem{'s' if failures != 1 else ''}."
+            f"  ✗ {subject} has {blocking} blocking "
+            f"problem{'s' if blocking != 1 else ''}."
         )
     elif report.warning_count:
         lines.append(
