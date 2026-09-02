@@ -11,7 +11,7 @@ function stableVersion(value, label) {
 export function resolvePublishedMixedPairing({
   pairing,
   releaseVersion,
-  previousVersion = "0.5.0"
+  previousVersion = "0.6.0"
 }) {
   const release = stableVersion(releaseVersion, "Release version");
   const previous = stableVersion(previousVersion, "Previous version");

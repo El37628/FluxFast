@@ -23,7 +23,7 @@ const repositoryVersion = JSON.parse(
 const pairing = resolvePublishedMixedPairing({
   pairing: process.env.FLUXFAST_PAIRING ?? "python-current",
   releaseVersion: process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion,
-  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.5.0"
+  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.6.0"
 });
 const expectedPythonVersion =
   process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "") ?? pairing.pythonVersion;

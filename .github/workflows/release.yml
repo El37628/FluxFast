@@ -222,7 +222,7 @@ jobs:
           publish_package "@fluxfast/next" "${GITHUB_REF_NAME#v}" "${next_tarballs[0]}"
 
   verify-published-mixed-version:
-    name: Verify published 0.6/0.5 package pairings
+    name: Verify published 0.7/0.6 package pairings
     needs: [publish-pypi, publish-npm]
     runs-on: ubuntu-latest
     services:
@@ -255,7 +255,7 @@ jobs:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PAIRING: python-current
           FLUXFAST_RELEASE_VERSION: ${{ github.ref_name }}
-          FLUXFAST_PREVIOUS_VERSION: 0.5.0
+          FLUXFAST_PREVIOUS_VERSION: 0.6.0
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
         run: node scripts/test-published-mixed-consumer.mjs
       - name: Verify previous Python with current JavaScript packages
@@ -263,7 +263,7 @@ jobs:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PAIRING: javascript-current
           FLUXFAST_RELEASE_VERSION: ${{ github.ref_name }}
-          FLUXFAST_PREVIOUS_VERSION: 0.5.0
+          FLUXFAST_PREVIOUS_VERSION: 0.6.0
         run: node scripts/test-published-mixed-consumer.mjs
 
   verify-published-production:
