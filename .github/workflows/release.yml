@@ -92,6 +92,15 @@ jobs:
           mkdir -p "$FLUXFAST_ARTIFACT_DIR"
           cp release/npm/*.tgz release/python/*.whl "$FLUXFAST_ARTIFACT_DIR/"
           pnpm test:consumer:init
+      - name: Verify artifacts in a clean one-service production consumer
+        env:
+          FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-production-consumer/artifacts
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_RUN_PRODUCTION: "1"
+        run: |
+          mkdir -p "$FLUXFAST_ARTIFACT_DIR"
+          cp release/npm/*.tgz release/python/*.whl "$FLUXFAST_ARTIFACT_DIR/"
+          pnpm test:consumer:init
       - name: Verify npm distributions
         run: |
           mkdir -p "$RUNNER_TEMP/fluxfast-release/javascript"
@@ -257,9 +266,39 @@ jobs:
           FLUXFAST_PREVIOUS_VERSION: 0.5.0
         run: node scripts/test-published-mixed-consumer.mjs
 
+  verify-published-production:
+    name: Verify published production consumer
+    needs: [publish-pypi, publish-npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install Chromium
+        run: npx --yes playwright@1.62.1 install --with-deps chromium
+      - name: Verify packages in a clean one-service production consumer
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_PUBLISHED_VERSION: ${{ github.ref_name }}
+          FLUXFAST_RUN_PRODUCTION: "1"
+        run: node scripts/test-next-init-consumer.mjs
+
   github-release:
     name: Create GitHub release
-    needs: [publish-pypi, publish-npm, verify-published-mixed-version]
+    needs:
+      - publish-pypi
+      - publish-npm
+      - verify-published-production
+      - verify-published-mixed-version
     runs-on: ubuntu-latest
     permissions:
       contents: write

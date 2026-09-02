@@ -20,6 +20,7 @@
     "test:compose:podman": "FLUXFAST_COMPOSE_ENGINE=podman node scripts/test-compose-production.mjs",
     "test:release": "node --test scripts/*.test.mjs",
     "test:consumer:init": "node scripts/test-next-init-consumer.mjs",
+    "test:consumer:production": "FLUXFAST_RUN_PRODUCTION=1 node scripts/test-next-init-consumer.mjs",
     "test:consumer:mixed-published": "node scripts/test-published-mixed-consumer.mjs",
     "test:python": "./.venv/bin/python -m pytest -q python/fluxfast/tests",
     "benchmark": "pnpm benchmark:runtime && pnpm benchmark:codegen && pnpm benchmark:production",
