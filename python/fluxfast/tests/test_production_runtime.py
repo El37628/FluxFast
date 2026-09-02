@@ -92,6 +92,7 @@ def test_production_runtime_builds_safe_child_commands_and_private_environment(
         supervisor.frontend.environment["FLUXFAST_BACKEND_URL"]
         == "http://[::1]:8124"
     )
+    assert supervisor.frontend.environment["FLUXFAST_PRODUCTION_START"] == "1"
     assert "NEXT_PUBLIC_FLUXFAST_BACKEND_URL" not in supervisor.frontend.environment
     assert supervisor.frontend.environment["APPLICATION_SECRET"] == "kept-private"
     assert readiness_urls == ["http://[::1]:8124/_fluxfast/readyz"]

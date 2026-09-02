@@ -50,6 +50,11 @@ if (process.argv.includes("--check-schema")) {
   );
 }
 
+if (process.argv.includes("--check-generated")) {
+  run(process.execPath, [fluxfastCli, "generate", "--check"], frontendRoot);
+  process.exit(0);
+}
+
 fs.mkdirSync(path.dirname(schemaFile), { recursive: true });
 fs.copyFileSync(schemaFixture, schemaFile);
 run(process.execPath, [fluxfastCli, "generate"], frontendRoot);

@@ -10,7 +10,6 @@ const python = process.env.FLUXFAST_E2E_PYTHON ?? (
 const port = Number(process.env.FLUXFAST_E2E_PORT ?? "3100");
 const backendPort = Number(process.env.FLUXFAST_E2E_BACKEND_PORT ?? "3101");
 const production = process.env.FLUXFAST_E2E_PRODUCTION === "1";
-const backendUrl = `http://127.0.0.1:${backendPort}`;
 const localDevelopmentEnv = { ...process.env };
 delete localDevelopmentEnv.CI;
 
@@ -27,29 +26,18 @@ const developmentServer = {
   gracefulShutdown: { signal: "SIGTERM" as const, timeout: 10_000 },
 };
 
-const productionServers = [
-  {
-    command: `exec ${JSON.stringify(python)} -m uvicorn tests.browser.backend:app --host 127.0.0.1 --port ${backendPort}`,
-    cwd: repositoryRoot,
-    url: backendUrl,
-    reuseExistingServer: false,
-    timeout: 120_000,
-    gracefulShutdown: { signal: "SIGTERM" as const, timeout: 10_000 },
+const productionServer = {
+  command: `exec ${JSON.stringify(python)} -m fluxfast.cli start tests.browser.backend:app --frontend tests/browser/frontend --host 127.0.0.1 --port ${port} --backend-host 127.0.0.1 --backend-port ${backendPort} --startup-timeout 90 --shutdown-timeout 10`,
+  cwd: repositoryRoot,
+  env: {
+    ...process.env,
+    NEXT_TELEMETRY_DISABLED: "1",
   },
-  {
-    command: `pnpm run start --hostname 127.0.0.1 --port ${port}`,
-    cwd: __dirname,
-    env: {
-      ...process.env,
-      FLUXFAST_BACKEND_URL: backendUrl,
-      NEXT_TELEMETRY_DISABLED: "1",
-    },
-    url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: false,
-    timeout: 120_000,
-    gracefulShutdown: { signal: "SIGTERM" as const, timeout: 10_000 },
-  },
-];
+  url: `http://127.0.0.1:${port}/_fluxfast/readyz`,
+  reuseExistingServer: false,
+  timeout: 120_000,
+  gracefulShutdown: { signal: "SIGTERM" as const, timeout: 15_000 },
+};
 
 export default defineConfig({
   testDir: "./e2e",
@@ -61,7 +49,7 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
     trace: "retain-on-failure",
   },
-  webServer: production ? productionServers : developmentServer,
+  webServer: production ? productionServer : developmentServer,
   projects: [
     {
       name: "chromium",

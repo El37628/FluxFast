@@ -6,8 +6,10 @@ import {
   desiredCatchAllPath,
   desiredHealthRoutePath,
   desiredHomePagePath,
+  desiredTransportRoutePath,
   renderCatchAll,
   renderHealthRoute,
+  renderTransportRoute,
 } from "../../src/cli/files";
 import { changedOperations, createInitPlan } from "../../src/cli/init";
 import { detectFluxProject } from "../../src/cli/project";
@@ -49,6 +51,7 @@ describe("FluxFast init planner", () => {
     const homePage = desiredHomePagePath(project);
     const catchAll = desiredCatchAllPath(project);
     const healthRoute = desiredHealthRoutePath(project);
+    const transportRoute = desiredTransportRoutePath(project);
 
     expect(plan.errors).toEqual([]);
     expect(plan.warnings).toEqual([]);
@@ -58,6 +61,10 @@ describe("FluxFast init planner", () => {
     expect(operation("create", healthRoute)).toMatchObject({
       type: "create",
       content: renderHealthRoute(),
+    });
+    expect(operation("create", transportRoute)).toMatchObject({
+      type: "create",
+      content: renderTransportRoute(),
     });
     expect(operation("move", homePage)).toMatchObject({
       type: "move",
@@ -71,6 +78,7 @@ describe("FluxFast init planner", () => {
     expect(fs.existsSync(homePage)).toBe(false);
     expect(fs.existsSync(catchAll)).toBe(false);
     expect(fs.existsSync(healthRoute)).toBe(false);
+    expect(fs.existsSync(transportRoute)).toBe(false);
     expect(fs.readFileSync(rootPage, "utf8")).toContain("next/image");
   });
 
@@ -131,6 +139,11 @@ describe("FluxFast init planner", () => {
       tmpDir,
       path.relative(tmpDir, desiredHealthRoutePath(project)),
       renderHealthRoute()
+    );
+    writeTestFile(
+      tmpDir,
+      path.relative(tmpDir, desiredTransportRoutePath(project)),
+      renderTransportRoute()
     );
     writeTestFile(
       tmpDir,

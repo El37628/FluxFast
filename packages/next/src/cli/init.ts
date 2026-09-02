@@ -5,12 +5,15 @@ import {
   desiredCatchAllPath,
   desiredHealthRoutePath,
   desiredHomePagePath,
+  desiredTransportRoutePath,
   isFluxCatchAll,
   isFluxHealthRoute,
+  isFluxTransportRoute,
   renderCatchAll,
   renderFluxConfig,
   renderHealthRoute,
   renderStarterPage,
+  renderTransportRoute,
 } from "./files";
 import { inspectPage, prepareMigratedPage } from "./migration";
 import { planNextConfigIntegration } from "./next-config";
@@ -160,6 +163,43 @@ export function createInitPlan(
       type: "create",
       path: healthRoutePath,
       content: renderHealthRoute(),
+    });
+  }
+
+  const transportRoutePath = desiredTransportRoutePath(project);
+  if (isFile(transportRoutePath)) {
+    const before = fs.readFileSync(transportRoutePath, "utf8");
+    const after = renderTransportRoute();
+    if (before === after || (isFluxTransportRoute(before) && !options.force)) {
+      operations.push({
+        type: "skip",
+        path: transportRoutePath,
+        reason: "FluxFast production transport route already exists",
+      });
+    } else if (options.force) {
+      operations.push({
+        type: "modify",
+        path: transportRoutePath,
+        before,
+        after,
+      });
+      warnings.push(
+        `${relativeProjectPath(project, transportRoutePath)} was replaced because --force was used.`
+      );
+    } else {
+      const displayPath = relativeProjectPath(project, transportRoutePath);
+      const warning = `${displayPath} occupies FluxFast's reserved production transport route.`;
+      warnings.push(warning);
+      manualActions.push(
+        `Repair ${displayPath} manually or run npx fluxfast init --force.`
+      );
+      operations.push({ type: "skip", path: transportRoutePath, reason: warning });
+    }
+  } else {
+    operations.push({
+      type: "create",
+      path: transportRoutePath,
+      content: renderTransportRoute(),
     });
   }
 
