@@ -87,13 +87,35 @@ release gates test both adjacent mixed-package directions. See [typed resource
 contracts and code generation](type-safety.md) for the build-time workflow and
 [the release guide](releasing.md) for clean-consumer requirements.
 
+## Production runtime compatibility
+
+FluxFast 0.7 adds production orchestration without changing the `fluxfast/1`
+browser protocol or `fluxfast-schema/1` developer manifest. Existing
+applications may continue managing Uvicorn and Next.js separately, although
+the supported one-service deployment uses `fluxfast build` and `fluxfast
+start`.
+
+Protocol-level resource, deferred, live, mutation, cache, and generated-type
+behavior remains compatible between 0.7 and 0.6 packages in both mixed-package
+directions. Production features that cross the Python supervisor and Next.js
+adapter boundary—especially the public health routes and private runtime
+transport—require matching 0.7 Python and JavaScript packages. Run `fluxfast
+doctor --production --strict` before deployment; synchronized stable package
+versions are the recommended production configuration.
+
+The adjacent-version release gates distinguish these concerns: mixed 0.7/0.6
+consumers prove unchanged application behavior, while the clean matched 0.7
+consumer proves the new build, start, health, shutdown, and one-origin
+production path. See [production deployment](production.md) and
+[ADR-0007](decisions/0007-production-runtime.md).
+
 ## Preparing a release
 
 Add user-facing entries beneath `Unreleased`, then run:
 
 ```bash
-pnpm release:prepare 0.6.0
-pnpm release:check v0.6.0
+pnpm release:prepare 0.7.0
+pnpm release:check v0.7.0
 ```
 
 The preparation command synchronizes every package manifest, the Python runtime

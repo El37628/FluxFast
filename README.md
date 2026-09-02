@@ -87,6 +87,25 @@ verify the setup. See the [Next.js adapter guide](docs/nextjs-adapter.md) for
 automatic setup options, diagnostics, and troubleshooting. Advanced projects
 can use the [manual setup guide](docs/nextjs-manual-setup.md).
 
+## Production
+
+Build the checked frontend artifact, then run both runtimes as one supervised
+service:
+
+```bash
+fluxfast build --app backend.main:app --frontend frontend
+
+fluxfast start backend.main:app \
+  --frontend frontend
+```
+
+FluxFast starts FastAPI privately and exposes the Next.js application as the
+single public service. The browser stays on that origin and does not need a
+backend port or CORS configuration. See the [production deployment
+guide](docs/production.md) for workers, health checks, shutdown, process
+managers, proxies, and troubleshooting, or [container
+deployment](docs/containers.md) for Docker, rootless Podman, and Compose.
+
 ## Resources
 
 FastAPI page handlers can resolve independently cached resources:
@@ -250,10 +269,11 @@ Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
 coherence](docs/distributed-cache.md), [deferred
 resources](docs/deferred-resources.md), [Live Resources](docs/live-resources.md),
 [typed resource contracts](docs/type-safety.md), [Next.js
-integration](docs/nextjs-adapter.md), and [mutations](docs/mutations.md) before
-extending a wire, schema, or cache boundary. The [compatibility and versioning
-policy](docs/versioning.md) lists supported runtimes and the deprecation policy.
-Maintainers can find the registry and tag procedure in the [release
-guide](docs/releasing.md).
+integration](docs/nextjs-adapter.md), [production deployment](docs/production.md),
+[containers](docs/containers.md), and [mutations](docs/mutations.md) before
+extending a wire, schema, cache, or deployment boundary. The [compatibility and
+versioning policy](docs/versioning.md) lists supported runtimes and the
+deprecation policy. Maintainers can find the registry and tag procedure in the
+[release guide](docs/releasing.md).
 
 FluxFast is not an Inertia wrapper and does not implement the Inertia protocol.

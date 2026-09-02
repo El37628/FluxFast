@@ -366,8 +366,9 @@ after invalidation, reconnect, resync, or uncertainty.
 
 ## Deployment and security checklist
 
-- Keep the browser on the normal frontend origin; preserve FluxFast request
-  headers through the Next rewrite and reverse proxy.
+- Run the built application through `fluxfast start` so the browser stays on
+  the one public Next.js origin and FastAPI remains on private loopback.
+- Preserve FluxFast request headers through the Next rewrite and reverse proxy.
 - Disable response buffering and caching for SSE, allow a read timeout longer
   than the heartbeat interval, and size file descriptors/connections for one
   stream per active live page and browser tab.
@@ -382,7 +383,8 @@ after invalidation, reconnect, resync, or uncertainty.
 - Clear the router on logout and keep the server's maximum connection age
   finite so long sessions are periodically reauthorized.
 
-See [live deployment](live-deployment.md) for Nginx and Nginx Proxy Manager
+See [production deployment](production.md) for the one-service lifecycle,
+[live deployment](live-deployment.md) for Nginx and Nginx Proxy Manager
 examples, and [the protocol guide](protocol.md#live-resources) for the wire
 contract.
 
