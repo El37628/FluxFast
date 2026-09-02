@@ -21,6 +21,7 @@ const fluxfast = process.env.FLUXFAST_E2E_FLUXFAST;
 const requireFromConsumer = createRequire(path.join(consumerRoot, "package.json"));
 const { chromium } = requireFromConsumer("@playwright/test");
 const production = process.env.FLUXFAST_CONSUMER_PRODUCTION === "1";
+const published = process.env.FLUXFAST_CONSUMER_PUBLISHED === "1";
 const ignoredTopLevel = new Set([
   ".next",
   "node_modules",
@@ -315,7 +316,9 @@ try {
   assert.deepEqual(browserErrors, []);
 
   console.log(
-    `${production ? "Production" : "Development"} packed consumer synchronized live resources across two clients at ${frontendUrl}.`
+    `${production ? "Production" : "Development"} `
+      + `${published ? "published" : "packed"} consumer synchronized live resources `
+      + `across two clients at ${frontendUrl}.`
   );
 } finally {
   await browser?.close();
