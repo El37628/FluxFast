@@ -36,6 +36,11 @@ observed duration and bytes for the initial dashboard, complete rooms props,
 and the resource delta. It also asserts that the four shared values are absent
 and their loaders executed only once.
 
+For the deployment behavior measured below, see the [production
+guide](production.md) and [container guide](containers.md). Benchmark timings
+are observations, while those guides define the supported operational
+contract.
+
 Run only the offline schema and TypeScript toolchain benchmark with:
 
 ```bash

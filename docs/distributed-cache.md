@@ -138,7 +138,7 @@ Redis owns expiry for distributed entries:
 
 A warm value written by worker A can be read by worker B without executing the
 loader again. Simultaneous cold misses may still execute the loader in several
-workers because v0.5 has no distributed lease or single-flight lock. Valid
+workers because FluxFast has no distributed lease or single-flight lock. Valid
 competing writes are last-writer-wins. Loaders must therefore remain safe to
 run more than once and must return the same authorized canonical state.
 
@@ -264,8 +264,8 @@ volume, Redis latency/availability, memory, eviction policy, and connection
 usage. FluxFast does not configure Redis persistence, eviction, TLS,
 authentication, clustering, or backups for the application.
 
-v0.5 has no Sentinel-specific abstraction or Redis Cluster-specific
-optimization/guarantee. Validate provider and topology behavior in the
+FluxFast has no Sentinel-specific abstraction or Redis Cluster-specific
+optimization or guarantee. Validate provider and topology behavior in the
 application's own deployment tests rather than inferring it from single-node
 compatibility CI.
 
@@ -319,6 +319,8 @@ resource-specific publisher, not an arbitrary Redis Pub/Sub API or task queue.
 
 See [caching](caching.md) for the full server/browser cache model,
 [Live Resources](live-resources.md) for synchronization semantics,
+[production deployment](production.md) for worker and service operation,
+[container deployment](containers.md) for the Compose topology,
 [live deployment](live-deployment.md) for proxy requirements, and
 [ADR-0005](decisions/0005-distributed-resource-cache.md) for the architectural
 decision.

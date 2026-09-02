@@ -18,7 +18,8 @@ Redis resource cache + Pub/Sub when worker count > 1
 Initial documents, live streams, resource-only requests, and mutations all use
 the same browser origin. `FLUXFAST_BACKEND_URL` is a server-only address used by
 Next.js and the generated rewrite; it is not a browser environment variable and
-does not require CORS.
+does not require CORS. The canonical production command supplies this address
+automatically; see [production deployment](production.md).
 
 ## Proxy requirements
 
@@ -207,8 +208,8 @@ Before rollout, verify all of the following through the real proxy chain:
 4. Tenant/user-isolated contexts do not receive or request the resource.
 5. Taking Redis offline ends streams; restoring it lets reconnect converge.
 6. Navigating away and logging out reduce active subscriptions to baseline.
-7. A production Next.js build and `next start` work through the single public
-   origin.
+7. `fluxfast build` and `fluxfast start` serve the production application
+   through the single public origin.
 8. A positive-TTL resource loaded through worker A is a warm hit through worker
    B, and invalidation through worker C forces a canonical refill.
 9. If `MemoryResourceCache` is intentionally retained, multi-worker live

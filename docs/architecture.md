@@ -53,7 +53,7 @@ worker C ─┘
 The resource engine uses the existing `ResourceCacheBackend` interface, so
 Redis adds no browser capability or wire field. A shared warm entry can be read
 through any worker. Simultaneous cold misses may still execute several loaders;
-v0.5 deliberately does not add a distributed loader lease.
+FluxFast deliberately does not add a distributed loader lease.
 
 Typed resource contracts add a developer-tooling path without changing either
 runtime protocol:
@@ -193,6 +193,39 @@ one command. FastAPI listens on an automatically selected loopback port known
 only to the Next server; the browser uses the Next origin, whose header-gated
 rewrite proxies FluxFast protocol requests internally. FastAPI still owns every
 application route and resource definition.
+
+## Production topology
+
+`fluxfast build` validates the initialized adapter and generated contracts,
+then creates the production Next.js output with the frontend's installed
+package manager. `fluxfast start` consumes that immutable output and supervises
+the supported servers as one foreground service:
+
+```text
+external process manager or OCI runtime
+        |
+        `-- fluxfast start
+              |-- Next.js   public origin
+              `-- FastAPI   private loopback origin
+```
+
+FastAPI becomes ready before Next.js starts. The supervisor injects the private
+backend URL into the Next.js child as server-only configuration; documents,
+navigation, mutations, deferred requests, Live Resource streams, and public
+health probes all remain on the Next.js origin. A normal production deployment
+therefore exposes one port and does not require browser CORS configuration.
+
+SIGTERM and SIGINT stop both process groups within a bounded grace period. An
+unexpected child exit stops its sibling and fails the service. Uvicorn owns its
+configured worker pool; Redis remains the cross-process cache and live-signal
+boundary when more than one worker or application instance needs coherence.
+The same topology runs as a host process, as PID 1 in Docker, and in rootless
+Podman.
+
+See [production deployment](production.md), [container
+deployment](containers.md), and
+[ADR-0007](decisions/0007-production-runtime.md) for the operational contract
+and its rationale.
 
 ## Boundaries
 

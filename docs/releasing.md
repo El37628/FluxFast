@@ -6,10 +6,11 @@ Stable releases publish the same version to PyPI, `@fluxfast/core`, and
 tests, builds and smoke-tests the distributions, publishes through short-lived
 OIDC credentials, and creates a GitHub release containing those distributions.
 Before publication, the built wheel and npm tarballs are installed together in
-a clean temporary consumer. That consumer runs `fluxfast init`, builds a
-production Next application, launches its own FastAPI backend from the isolated
-wheel environment, and proves deferred skeleton-to-resource behavior in a real
-browser through one origin.
+a clean temporary consumer. That consumer runs `fluxfast init`, validates
+generated contracts, runs `fluxfast build`, and launches `fluxfast start` from
+the isolated wheel environment. It verifies public health/readiness, one-origin
+browser behavior, deferred settlement, and clean shutdown without importing a
+source checkout.
 The release gate also runs a separate clean consumer against Redis with three
 independent FastAPI worker processes. From only the built wheel and npm
 tarballs, it proves that a deferred live resource is populated by one worker,
@@ -17,12 +18,12 @@ reused from the shared cache by another, invalidated by a mutation on a third,
 synchronized over Redis Pub/Sub, and then reused at its new value without
 running another loader.
 Before publication, the release-artifact workflow also combines the built
-current Python package with the published 0.5.0 JavaScript packages, then the
-published Python 0.5.0 package with the built current JavaScript packages.
+current Python package with the published 0.6.0 JavaScript packages, then the
+published Python 0.6.0 package with the built current JavaScript packages.
 After registry publication, the release workflow repeats both pairings using
 only registry packages. The current-Python pairing must pass the full deferred,
 live, typed, and distributed Redis browser scenario; the current-JavaScript
-pairing must preserve v0.5 behavior. The GitHub release is created only after
+pairing must preserve v0.6 behavior. The GitHub release is created only after
 these registry-backed mixed-version checks pass.
 
 A release that changes typed contracts or code generation must also prove the
@@ -111,7 +112,7 @@ the package manifests, Python runtime version, lockfile, and dated release
 section together:
 
 ```bash
-version=0.6.0
+version=0.7.0
 pnpm release:prepare "$version"
 pnpm release:check "v$version"
 ```
@@ -125,7 +126,7 @@ an up-to-date checkout:
 ```bash
 git switch main
 git pull --ff-only
-version=0.6.0
+version=0.7.0
 pnpm release:check "v$version"
 git tag -a "v$version" -m "FluxFast $version"
 git push origin "v$version"

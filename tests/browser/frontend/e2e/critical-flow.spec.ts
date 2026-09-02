@@ -19,6 +19,7 @@ test("uses generated types through dynamic prefetch, navigation, history, and re
   });
 
   await page.goto("/");
+  await expect(page.getByTestId("home-page")).toHaveAttribute("data-hydrated", "true");
   const typedRoute = page.getByRole("link", { name: "View Hotel 101 rooms" });
   await typedRoute.hover();
   await expect.poll(() => dynamicVisits.length).toBe(1);
@@ -58,6 +59,7 @@ test("navigates, validates, mutates, and redirects through one browser origin", 
   await expect(page.getByTestId("application-name")).toHaveText(
     "FluxFast Browser Fixture"
   );
+  await expect(page.getByTestId("home-page")).toHaveAttribute("data-hydrated", "true");
 
   await page.getByRole("link", { name: "Manage rooms" }).click();
   await expect(page).toHaveURL(/\/rooms$/);
