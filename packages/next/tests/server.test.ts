@@ -50,7 +50,7 @@ describe("Next adapter paths", () => {
     expect(buildFluxPath(undefined)).toBe("/");
   });
 
-  it("uses an anonymous not-found child after a completed timing anchor", async () => {
+  it("uses a lazy not-found child after a completed timing anchor", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ detail: "Not Found" }),
       {
@@ -73,9 +73,15 @@ describe("Next adapter paths", () => {
     expect(children).toHaveLength(2);
     const TimingAnchor = children[0]?.type as () => null;
     expect(TimingAnchor()).toBeNull();
-    const NotFoundComponent = children[1]?.type as () => never;
-    expect(NotFoundComponent.name).toBe("");
-    expect(() => NotFoundComponent()).toThrow("NEXT_NOT_FOUND");
+    const NotFoundBoundary = children[1]?.type as unknown as {
+      $$typeof: symbol;
+      _init: (payload: unknown) => unknown;
+      _payload: unknown;
+    };
+    expect(NotFoundBoundary.$$typeof).toBe(Symbol.for("react.lazy"));
+    expect(() => NotFoundBoundary._init(NotFoundBoundary._payload)).toThrow(
+      "NEXT_NOT_FOUND"
+    );
     expect(notFoundMock).toHaveBeenCalledOnce();
   });
 
