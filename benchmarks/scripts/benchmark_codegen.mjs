@@ -35,6 +35,7 @@ const {
   generateFluxFastProject,
 } = require("../../packages/next/dist/generate.js");
 const { runCli } = require("../../packages/next/dist/cli/index.js");
+const { renderHealthRoute } = require("../../packages/next/dist/cli/files.js");
 
 function parseArguments(argv) {
   const arguments_ = { samples: 5 };
@@ -120,6 +121,11 @@ function prepareConsumer(projectRoot, manifestText) {
     projectRoot,
     "src/app/(flux)/[[...flux]]/page.tsx",
     'import { createFluxNextPage } from "@fluxfast/next/server";\nimport { fluxConfig } from "../../../fluxfast.config";\n\nexport default createFluxNextPage(fluxConfig);\n',
+  );
+  writeFile(
+    projectRoot,
+    "src/app/%5Ffluxfast/[probe]/route.ts",
+    renderHealthRoute(),
   );
   writeFile(
     projectRoot,
