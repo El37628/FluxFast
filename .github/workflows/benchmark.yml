@@ -6,6 +6,7 @@ on:
 jobs:
   controlled:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     services:
       redis:
         image: redis:7.4-alpine
@@ -43,6 +44,16 @@ jobs:
           FLUXFAST_BENCHMARK_REDIS_URL: redis://127.0.0.1:6379/15
       - name: Benchmark schema code generation
         run: pnpm benchmark:codegen | tee benchmark-results/codegen.txt
+      - name: Benchmark production lifecycle
+        run: >-
+          PYTHONPATH=python/fluxfast/src:.
+          python benchmarks/scripts/benchmark_production.py
+          | tee benchmark-results/production-lifecycle.txt
+      - name: Benchmark production container
+        run: >-
+          PYTHONPATH=python/fluxfast/src:.
+          python benchmarks/scripts/benchmark_container.py
+          | tee benchmark-results/production-container.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: controlled-benchmark

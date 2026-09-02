@@ -42,8 +42,109 @@ Run only the offline schema and TypeScript toolchain benchmark with:
 pnpm benchmark:codegen
 ```
 
+Run only the production supervisor benchmark with:
+
+```bash
+pnpm benchmark:production
+```
+
+The production benchmark builds the browser fixture once, then performs three
+complete start/readiness/SIGTERM cycles at each of 1, 2, 4, and 8 FastAPI
+workers. It currently requires Linux `/proc` so it can prove process ancestry,
+socket bindings, and cleanup without adding a monitoring dependency. Use
+`--samples N` after `--` to change the sample count; at least two samples are
+required because repeated start/stop cleanup is a correctness gate. Pass
+`--skip-build` only when the fixture already has a current production build.
+
+Container observations are separate because they require a container engine:
+
+```bash
+pnpm benchmark:container
+FLUXFAST_CONTAINER_ENGINE=podman pnpm benchmark:container
+```
+
+Docker is the default. The same harness accepts a local Podman CLI. It removes
+its temporary container and image after the run.
+
 Pass `--samples N` after `--` to select the measured sample count, for example
 `pnpm benchmark:codegen -- --samples 1` for a quick correctness run.
+
+## Production Lifecycle Scenario
+
+The lifecycle benchmark executes the real `fluxfast start` command and the
+repository's built Next.js fixture. Each sample records cumulative elapsed time
+from supervisor launch to:
+
+- the FastAPI child process appearing in the supervisor's `/proc` tree;
+- the supervisor reporting FastAPI readiness;
+- the Next.js production process appearing in that same tree; and
+- an exact `{"status":"ready"}` response from the public origin.
+
+It then measures SIGTERM through clean supervisor exit. Timings are
+observational: pull requests do not fail because a phase takes a particular
+number of milliseconds. They do fail if the phase order or runtime contract is
+wrong.
+
+Every 1/2/4/8-worker sample proves that Uvicorn reported exactly the requested
+server-process count and that those PIDs belong to the supervisor tree. It also
+requires one externally bound public socket, a FastAPI socket bound only to
+`127.0.0.1`, minimal health and readiness payloads, exit status zero, closed
+sockets, and no surviving captured PID after shutdown. Running at least two
+samples per topology catches repeated start/stop leaks. Redis coherence for the
+same worker-count matrix remains a separate controlled workload in the
+[distributed resource cache scenario](#distributed-resource-cache-scenario);
+CI executes both correctness paths.
+
+### Observed Production Lifecycle Reference Run
+
+The initial v0.7 baseline below used two complete samples per worker count on
+2026-09-02, on Linux WSL2 x86_64 with an AMD Ryzen 5 3600, Python 3.13.14,
+Node 24.19.0, and Next.js 16.3.3. Values are medians except peak descendants.
+
+| Workers | FastAPI process start | FastAPI ready | Next.js process start | Public ready | SIGTERM cleanup | Peak descendants |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 436.567 ms | 948.693 ms | 968.072 ms | 1,775.738 ms | 326.854 ms | 4 |
+| 2 | 410.644 ms | 1,084.026 ms | 1,094.568 ms | 1,869.292 ms | 483.448 ms | 7 |
+| 4 | 431.777 ms | 1,154.523 ms | 1,163.074 ms | 1,919.448 ms | 631.325 ms | 9 |
+| 8 | 427.790 ms | 1,349.785 ms | 1,359.361 ms | 2,165.335 ms | 443.472 ms | 13 |
+
+All correctness gates passed across eight full lifecycles. The result shows the
+expected tradeoff on this machine: more FastAPI workers add startup and process
+work, while preserving the same public boundary and clean lifecycle. The
+shutdown samples are too few and host-sensitive to rank worker counts; rerun
+the workload on the deployment target instead of treating small differences as
+a guarantee.
+
+## Production Container Scenario
+
+The container benchmark builds the repository's production `Dockerfile`, reads
+the engine-reported image size, starts the hardened image with one random host
+mapping, waits for public readiness, and samples every application process from
+the container's `/proc`. It reports summed per-process `VmRSS` and process
+count, then measures a clean container stop. Summed `VmRSS` can count shared
+pages more than once and is not equivalent to cgroup working-set memory; its
+purpose is a repeatable process-level observation.
+
+The initial Docker and rootless Podman baselines on the same 2026-09-02 host
+produced:
+
+| Measurement | Docker | Rootless Podman |
+| --- | ---: | ---: |
+| Engine-reported image size | 129,917,451 B (123.9 MiB) | 381,725,952 B (364.0 MiB) |
+| Container run to public readiness | 2,134.774 ms | 2,181.702 ms |
+| Idle application processes | 5 | 5 |
+| Summed idle process `VmRSS` | 299,072 KiB (292.1 MiB) | 299,896 KiB (292.9 MiB) |
+| Container stop | 608.772 ms | 747.964 ms |
+
+The correctness gates confirmed only `3000/tcp` was exposed and published,
+health/readiness returned their exact minimal bodies, process metrics were
+captured only after readiness, and stopping the container cleanly terminated
+PID 1 and its children. The image intentionally includes both Python/FastAPI
+and Node/Next.js; the additional runtime footprint buys a single deployable
+application boundary. Image size is the local engine's content size, not a
+registry-compressed transfer size. Docker and Podman account for local image
+content differently, so their size values are baselines within each engine and
+should not be compared as if they used the same storage metric.
 
 ## Schema Code Generation Scenario
 
@@ -203,8 +304,8 @@ For each worker count it records:
 - process-local Redis cache reads and writes aggregated across workers; and
 - one known-version request per worker, all of which must omit the resource.
 
-The cold loader sleeps for 50 ms so simultaneous misses overlap. FluxFast v0.5
-does not provide a distributed single-flight lease, so duplicate cold loads are
+The cold loader sleeps for 50 ms so simultaneous misses overlap. FluxFast does
+not provide a distributed single-flight lease, so duplicate cold loads are
 expected and reported. The warm phase first seeds Redis and then requires the
 global loader count to remain exactly one regardless of worker count.
 

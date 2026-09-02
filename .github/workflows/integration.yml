@@ -56,6 +56,14 @@ jobs:
           python/fluxfast/tests/test_redis_multiworker_integration.py
         env:
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      - name: Verify distributed benchmark correctness
+        run: >-
+          PYTHONPATH=python/fluxfast/src:.
+          python benchmarks/scripts/benchmark_redis_cache.py
+          --samples 1
+          --warm-requests 16
+        env:
+          FLUXFAST_BENCHMARK_REDIS_URL: redis://127.0.0.1:6379/15
 
   redis-compatibility:
     name: Redis ${{ matrix.redis }} on Python ${{ matrix.python }}
@@ -135,6 +143,12 @@ jobs:
       - run: pnpm test:e2e:production
         env:
           FLUXFAST_E2E_PYTHON: python
+      - name: Verify production lifecycle benchmark gates
+        run: >-
+          PYTHONPATH=python/fluxfast/src:.
+          python benchmarks/scripts/benchmark_production.py
+          --samples 2
+          --skip-build
 
   distributed-browser:
     name: Distributed browser flow
