@@ -107,8 +107,15 @@ function inspectImage() {
   assert.notEqual(inspected.Config.User, "", "the image must declare a user");
   assert.notEqual(inspected.Config.User, "0", "the image must not run as UID 0");
   assert.notEqual(inspected.Config.User, "root", "the image must not run as root");
+  const healthcheck = inspected.Config.Healthcheck ?? inspected.Healthcheck;
+  assert.equal(
+    healthcheck?.Test?.[0],
+    "CMD",
+    "the image must declare an exec-form health check",
+  );
   console.log(`✓ image declares non-root user ${inspected.Config.User}`);
   console.log("✓ image exposes only 3000/tcp");
+  console.log("✓ image declares an exec-form health check");
 }
 
 function mappedPublicPort() {
@@ -190,6 +197,25 @@ async function verifyPublicApplication(baseURL) {
   assert.match(await home.text(), /Control Center/);
 
   await waitFor("the image health check", () => {
+    if (isPodman) {
+      const result = spawnSync(
+        containerEngine,
+        ["healthcheck", "run", container],
+        {
+          cwd: repositoryRoot,
+          env: process.env,
+          encoding: "utf8",
+        },
+      );
+      if (result.error) throw result.error;
+      if (result.status === 0) return true;
+      if (result.status === 1) return false;
+      throw commandFailure(
+        containerEngine,
+        ["healthcheck", "run", container],
+        result,
+      );
+    }
     const state = JSON.parse(
       output(containerEngine, ["inspect", container]),
     )[0]?.State;
