@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -16,26 +17,91 @@ const localPython = path.join(repositoryRoot, ".venv", "bin", "python");
 const python =
   process.env.FLUXFAST_E2E_PYTHON ??
   (fs.existsSync(localPython) ? localPython : "python");
+const fluxfast = process.env.FLUXFAST_E2E_FLUXFAST;
 const requireFromConsumer = createRequire(path.join(consumerRoot, "package.json"));
 const { chromium } = requireFromConsumer("@playwright/test");
+const production = process.env.FLUXFAST_CONSUMER_PRODUCTION === "1";
+const ignoredTopLevel = new Set([
+  ".next",
+  "node_modules",
+  "playwright-report",
+  "test-results",
+]);
 
 function delay(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
-async function availablePort() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : undefined;
-  await new Promise((resolve, reject) =>
-    server.close(error => (error ? reject(error) : resolve()))
-  );
-  if (!port) throw new Error("Could not allocate a frontend port.");
-  return port;
+async function availablePorts(count) {
+  const servers = Array.from({ length: count }, () => net.createServer());
+  try {
+    await Promise.all(
+      servers.map(
+        server => new Promise((resolve, reject) => {
+          server.once("error", reject);
+          server.listen(0, "127.0.0.1", resolve);
+        })
+      )
+    );
+    return servers.map(server => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : undefined;
+      if (!port) throw new Error("Could not allocate a consumer port.");
+      return port;
+    });
+  } finally {
+    await Promise.all(
+      servers.map(
+        server => server.listening
+          ? new Promise((resolve, reject) =>
+              server.close(error => (error ? reject(error) : resolve()))
+            )
+          : Promise.resolve()
+      )
+    );
+  }
+}
+
+function snapshotConsumerInputs() {
+  const snapshot = new Map();
+
+  function visit(absolute, relative) {
+    const stat = fs.lstatSync(absolute, { bigint: true });
+    if (stat.isDirectory()) {
+      for (const name of fs.readdirSync(absolute).sort()) {
+        if (!relative && ignoredTopLevel.has(name)) continue;
+        const childRelative = relative ? path.join(relative, name) : name;
+        visit(path.join(absolute, name), childRelative);
+      }
+      return;
+    }
+
+    const record = {
+      mode: stat.mode.toString(),
+      type: stat.isSymbolicLink() ? "symlink" : "file",
+    };
+    if (stat.isSymbolicLink()) {
+      record.target = fs.readlinkSync(absolute);
+    } else {
+      record.sha256 = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(absolute))
+        .digest("hex");
+    }
+    snapshot.set(relative.replaceAll(path.sep, "/"), record);
+  }
+
+  visit(consumerRoot, "");
+  return snapshot;
+}
+
+function changedPaths(before, after) {
+  const paths = new Set([...before.keys(), ...after.keys()]);
+  return [...paths]
+    .filter(
+      file => JSON.stringify(before.get(file)) !== JSON.stringify(after.get(file))
+    )
+    .sort();
 }
 
 function terminateProcessGroup(child, signal) {
@@ -59,21 +125,47 @@ async function waitForExit(child, timeout) {
   ]);
 }
 
-const frontendPort = await availablePort();
+const [frontendPort, backendPort] = await availablePorts(2);
 const frontendUrl = `http://127.0.0.1:${frontendPort}`;
+const beforeStart = production ? snapshotConsumerInputs() : undefined;
+if (production && !fluxfast) {
+  throw new Error(
+    "FLUXFAST_E2E_FLUXFAST must identify the isolated console command."
+  );
+}
+const command = production
+  ? [
+      "start",
+      "backend:app",
+      "--frontend",
+      consumerRoot,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(frontendPort),
+      "--backend-host",
+      "127.0.0.1",
+      "--backend-port",
+      String(backendPort),
+      "--startup-timeout",
+      "90",
+      "--shutdown-timeout",
+      "10",
+    ]
+  : [
+      "-m",
+      "fluxfast.cli",
+      "dev",
+      "backend:app",
+      "--frontend",
+      consumerRoot,
+      "--frontend-port",
+      String(frontendPort),
+      "--no-reload",
+    ];
 const child = spawn(
-  python,
-  [
-    "-m",
-    "fluxfast.cli",
-    "dev",
-    "backend:app",
-    "--frontend",
-    consumerRoot,
-    "--frontend-port",
-    String(frontendPort),
-    "--no-reload",
-  ],
+  production ? fluxfast : python,
+  command,
   {
     cwd: consumerRoot,
     detached: process.platform !== "win32",
@@ -93,13 +185,17 @@ const recordOutput = chunk => {
 child.stdout.on("data", recordOutput);
 child.stderr.on("data", recordOutput);
 let browser;
+let gracefulShutdown = false;
+let shutdownDuration = 0;
 
 try {
   const deadline = Date.now() + 120_000;
   let html;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
-      throw new Error(`FluxFast dev exited before the frontend was ready.\n${output}`);
+      throw new Error(
+        `FluxFast ${production ? "start" : "dev"} exited before the frontend was ready.\n${output}`
+      );
     }
     try {
       const response = await fetch(frontendUrl);
@@ -121,6 +217,19 @@ try {
   assert.equal(typeof html, "string", `Frontend did not become ready.\n${output}`);
   assert.match(html, /Clean live consumer/);
   assert.match(html, /Loading analytics/);
+
+  if (production) {
+    assert.match(output, /\[fluxfast\] FastAPI: 127\.0\.0\.1:/);
+    assert.match(output, /\[fluxfast\] application ready/);
+    const health = await fetch(`${frontendUrl}/_fluxfast/healthz`);
+    assert.equal(health.status, 200);
+    assert.equal(health.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await health.json(), { status: "ok" });
+    const readiness = await fetch(`${frontendUrl}/_fluxfast/readyz`);
+    assert.equal(readiness.status, 200);
+    assert.equal(readiness.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await readiness.json(), { status: "ready" });
+  }
 
   const protocolResponse = await fetch(frontendUrl, {
     headers: {
@@ -206,13 +315,39 @@ try {
   assert.deepEqual(browserErrors, []);
 
   console.log(
-    `Initialized packed consumer synchronized live resources across two clients at ${frontendUrl}.`
+    `${production ? "Production" : "Development"} packed consumer synchronized live resources across two clients at ${frontendUrl}.`
   );
 } finally {
   await browser?.close();
-  terminateProcessGroup(child, "SIGTERM");
-  if (!(await waitForExit(child, 10_000))) {
+  const shutdownStartedAt = Date.now();
+  if (production && child.exitCode === null) {
+    child.kill("SIGTERM");
+  } else {
+    terminateProcessGroup(child, "SIGTERM");
+  }
+  gracefulShutdown = await waitForExit(child, 15_000);
+  shutdownDuration = Date.now() - shutdownStartedAt;
+  if (!gracefulShutdown) {
     terminateProcessGroup(child, "SIGKILL");
     await waitForExit(child, 5_000);
   }
+}
+
+if (production) {
+  assert.equal(gracefulShutdown, true, "fluxfast start must stop after SIGTERM");
+  assert.equal(
+    child.exitCode,
+    0,
+    `fluxfast start exited with status ${child.exitCode}\n${output}`
+  );
+  assert.equal(child.signalCode, null, "the production supervisor must handle SIGTERM");
+  const changed = changedPaths(beforeStart, snapshotConsumerInputs());
+  assert.deepEqual(
+    changed,
+    [],
+    `fluxfast start modified consumer source/generated inputs: ${changed.join(", ")}`
+  );
+  console.log(
+    `Production consumer stopped cleanly after SIGTERM in ${shutdownDuration} ms without changing inputs.`
+  );
 }

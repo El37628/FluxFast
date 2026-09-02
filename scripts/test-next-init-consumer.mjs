@@ -9,6 +9,15 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const fixtureRoot = path.join(repositoryRoot, "tests", "release-consumer", "next-init");
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-next-init-"));
 const consumerRoot = path.join(temporaryRoot, "consumer");
+const relativeConsumerRoot = path.relative(repositoryRoot, consumerRoot);
+if (
+  relativeConsumerRoot === "" ||
+  (!path.isAbsolute(relativeConsumerRoot) &&
+    !relativeConsumerRoot.startsWith(`..${path.sep}`) &&
+    relativeConsumerRoot !== "..")
+) {
+  throw new Error("The clean consumer must be created outside the repository.");
+}
 const configuredArtifactRoot = process.env.FLUXFAST_ARTIFACT_DIR;
 const artifactRoot = configuredArtifactRoot
   ? path.resolve(configuredArtifactRoot)
@@ -22,8 +31,14 @@ const pythonCommand = process.env.FLUXFAST_E2E_PYTHON ?? (
 );
 const runLiveConsumer = process.env.FLUXFAST_RUN_LIVE === "1";
 const runDistributedConsumer = process.env.FLUXFAST_RUN_DISTRIBUTED === "1";
-if (runLiveConsumer && runDistributedConsumer) {
-  throw new Error("Run the clean live and distributed consumers separately.");
+const runProductionConsumer = process.env.FLUXFAST_RUN_PRODUCTION === "1";
+if (
+  [runLiveConsumer, runDistributedConsumer, runProductionConsumer]
+    .filter(Boolean).length > 1
+) {
+  throw new Error(
+    "Run the clean live, distributed, and production consumers separately."
+  );
 }
 
 function execute(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
@@ -125,13 +140,25 @@ function prepareIsolatedPython({ distributed = false } = {}) {
       "-c",
       "import sys; from pathlib import Path; "
         + `${imports}; `
+        + "repository = Path(sys.argv[1]).resolve(); "
+        + "assert all(not Path(entry).resolve().is_relative_to(repository) "
+        + "for entry in sys.path if entry); "
         + "assert all(Path(module.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()) "
         + "for module in modules)",
+      repositoryRoot,
     ],
     consumerRoot,
     { PYTHONPATH: "" }
   );
   return isolatedPython;
+}
+
+function isolatedFluxfastExecutable(isolatedPython) {
+  const environmentBin = path.dirname(isolatedPython);
+  return path.join(
+    environmentBin,
+    process.platform === "win32" ? "fluxfast.exe" : "fluxfast"
+  );
 }
 
 function findArtifact(packageName) {
@@ -356,7 +383,7 @@ try {
   run(npmCommand, ["run", "verify:init"], consumerRoot);
   const homeFixture = runDistributedConsumer
     ? "distributed-home.tsx"
-    : runLiveConsumer
+    : runLiveConsumer || runProductionConsumer
       ? "typed-live-home.tsx"
       : "deferred-home.tsx";
   fs.copyFileSync(
@@ -371,7 +398,9 @@ try {
       path.join(detailsRoot, "index.tsx")
     );
   }
-  const livePython = runLiveConsumer ? prepareIsolatedPython() : undefined;
+  const livePython = runLiveConsumer || runProductionConsumer
+    ? prepareIsolatedPython()
+    : undefined;
   if (livePython) {
     run(
       livePython,
@@ -394,13 +423,70 @@ try {
   run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
   run(npxCommand, ["--no-install", "fluxfast", "doctor"], consumerRoot);
   run(npmCommand, ["run", "typecheck"], consumerRoot);
-  run(npmCommand, ["run", "build"], consumerRoot);
+  const productionFluxfast = runProductionConsumer
+    ? isolatedFluxfastExecutable(livePython)
+    : undefined;
+  if (runProductionConsumer) {
+    assert.equal(
+      fs.existsSync(productionFluxfast),
+      true,
+      "the isolated wheel must install the fluxfast console command"
+    );
+    run(
+      productionFluxfast,
+      [
+        "build",
+        "--app",
+        "backend:app",
+        "--frontend",
+        consumerRoot,
+      ],
+      consumerRoot,
+      { PYTHONPATH: "" }
+    );
+    run(
+      productionFluxfast,
+      [
+        "doctor",
+        "--production",
+        "--app",
+        "backend:app",
+        "--frontend",
+        consumerRoot,
+        "--backend-host",
+        "127.0.0.1",
+        "--workers",
+        "1",
+        "--strict",
+      ],
+      consumerRoot,
+      { PYTHONPATH: "" }
+    );
+  } else {
+    run(npmCommand, ["run", "build"], consumerRoot);
+  }
   if (runLiveConsumer) {
     run(
       process.execPath,
       [path.join(repositoryRoot, "scripts", "test-next-init-live.mjs"), consumerRoot],
       repositoryRoot,
       { FLUXFAST_E2E_PYTHON: livePython, PYTHONPATH: "" }
+    );
+  }
+  if (runProductionConsumer) {
+    run(
+      process.execPath,
+      [
+        path.join(repositoryRoot, "scripts", "test-next-init-live.mjs"),
+        consumerRoot,
+      ],
+      repositoryRoot,
+      {
+        FLUXFAST_CONSUMER_PRODUCTION: "1",
+        FLUXFAST_E2E_FLUXFAST: productionFluxfast,
+        FLUXFAST_E2E_PYTHON: livePython,
+        PYTHONPATH: "",
+      }
     );
   }
   if (runDistributedConsumer) {
@@ -413,9 +499,10 @@ try {
     );
   }
 
-  const typed = runLiveConsumer ? " typed" : "";
+  const typed = runLiveConsumer || runProductionConsumer ? " typed" : "";
+  const runtime = runProductionConsumer ? " production" : " initialization";
   console.log(
-    `Packed${typed} FluxFast initialization consumer passed with Next.js ${manifest.dependencies.next}.`
+    `Packed${typed} FluxFast${runtime} consumer passed with Next.js ${manifest.dependencies.next}.`
   );
 } finally {
   if (process.env.FLUXFAST_KEEP_TEMP === "1") {

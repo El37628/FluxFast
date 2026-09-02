@@ -92,6 +92,15 @@ jobs:
           mkdir -p "$FLUXFAST_ARTIFACT_DIR"
           cp release/npm/*.tgz release/python/*.whl "$FLUXFAST_ARTIFACT_DIR/"
           pnpm test:consumer:init
+      - name: Verify artifacts in a clean one-service production consumer
+        env:
+          FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-production-consumer/artifacts
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_RUN_PRODUCTION: "1"
+        run: |
+          mkdir -p "$FLUXFAST_ARTIFACT_DIR"
+          cp release/npm/*.tgz release/python/*.whl "$FLUXFAST_ARTIFACT_DIR/"
+          pnpm test:consumer:init
       - name: Verify npm distributions
         run: |
           mkdir -p "$RUNNER_TEMP/fluxfast-release/javascript"
