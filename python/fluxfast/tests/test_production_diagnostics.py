@@ -8,7 +8,7 @@ from subprocess import CompletedProcess
 import pytest
 from fastapi import FastAPI
 
-from fluxfast import FluxFast, RedisLiveBroker, RedisResourceCache
+from fluxfast import FluxFast, RedisLiveBroker, RedisResourceCache, __version__
 from fluxfast.production import (
     ProductionConfig,
     ProductionDiagnostic,
@@ -19,7 +19,12 @@ from fluxfast.production import (
 )
 
 
-def _frontend(path: Path, *, core: str = "0.6.0", next_: str = "0.6.0") -> Path:
+def _frontend(
+    path: Path,
+    *,
+    core: str = __version__,
+    next_: str = __version__,
+) -> Path:
     path.mkdir()
     (path / "package.json").write_text(
         '{"packageManager":"pnpm@10.15.0"}\n',
@@ -71,7 +76,7 @@ def test_single_worker_production_diagnostics_are_ready(
     assert report.warning_count == 0
     expected = {
         "Node.js 24.19.0": "pass",
-        "FluxFast packages synchronized at 0.6.0": "pass",
+        f"FluxFast packages synchronized at {__version__}": "pass",
         "Frontend production build exists": "pass",
         "Next.js adapter is initialized": "pass",
         "Generated FluxFast files are current": "pass",
