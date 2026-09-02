@@ -168,3 +168,8 @@ jobs:
         env:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      - name: Verify supervised three-worker production flow
+        run: pnpm test:e2e:distributed:production
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/15
