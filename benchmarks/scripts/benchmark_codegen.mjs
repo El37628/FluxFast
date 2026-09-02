@@ -35,7 +35,10 @@ const {
   generateFluxFastProject,
 } = require("../../packages/next/dist/generate.js");
 const { runCli } = require("../../packages/next/dist/cli/index.js");
-const { renderHealthRoute } = require("../../packages/next/dist/cli/files.js");
+const {
+  renderHealthRoute,
+  renderTransportRoute,
+} = require("../../packages/next/dist/cli/files.js");
 
 function parseArguments(argv) {
   const arguments_ = { samples: 5 };
@@ -126,6 +129,11 @@ function prepareConsumer(projectRoot, manifestText) {
     projectRoot,
     "src/app/%5Ffluxfast/[probe]/route.ts",
     renderHealthRoute(),
+  );
+  writeFile(
+    projectRoot,
+    "src/app/%5Ffluxfast/transport/[[...path]]/route.ts",
+    renderTransportRoute(),
   );
   writeFile(
     projectRoot,
