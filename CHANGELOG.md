@@ -5,6 +5,60 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-02
+
+### Added
+
+- `fluxfast build` for read-only production validation and local package-manager
+  builds, plus `fluxfast start` for a foreground production service that
+  supervises private FastAPI/Uvicorn and public Next.js processes behind one
+  browser origin.
+- Explicit production configuration for public and backend bindings, Uvicorn
+  workers, startup and shutdown timeouts, ordered readiness, graceful
+  SIGTERM/SIGINT handling, sibling shutdown on child failure, and meaningful
+  exit statuses.
+- Minimal `/_fluxfast/healthz` and `/_fluxfast/readyz` endpoints routed through
+  the public Next.js port, along with `fluxfast doctor --production --strict`
+  diagnostics for build, network, package-version, worker, Redis, and container
+  risks.
+- A single-service OCI production image and Redis Compose topology tested with
+  Docker, rootless Podman, Docker Compose, and Podman Compose as a non-root,
+  read-only runtime exposing only port `3000`.
+- Production browser, three-worker Redis, child-failure, repeated lifecycle,
+  clean artifact-consumer, registry-consumer, container, and observational
+  startup/shutdown benchmark coverage.
+
+### Changed
+
+- The Next.js adapter now forwards production health probes and uses the
+  supervisor-provided private backend URL, so normal production applications
+  require neither a browser-visible backend port nor CORS configuration.
+- Existing npm, pnpm, Yarn, and Bun projects can keep their installed package
+  manager, and existing manual `uvicorn` plus `next start` deployments remain
+  supported; the `fluxfast/1` and `fluxfast-schema/1` protocols are unchanged.
+- Release publication now waits for the full Python/JavaScript matrix,
+  production integration, Docker and rootless Podman, built-package consumers,
+  registry-backed production use, and both `0.7`/`0.6` package directions
+  before creating the GitHub Release.
+
+### Fixed
+
+- Development-mode redirects to unknown FluxFast pages now preserve the 404
+  boundary without producing React Server Components' negative
+  `performance.measure()` timestamp error.
+
+### Security
+
+- FastAPI binds to loopback by default; child commands use argument arrays,
+  package-manager execution has no implicit download fallback, and production
+  startup neither installs packages nor modifies source or generated files.
+- Production diagnostics and Redis or process failures redact credentials and
+  secret environment values; health and readiness bodies remain minimal and
+  omit paths, ports, process IDs, dependencies, and other runtime details.
+- Container verification rejects root users, privileged mode, socket mounts,
+  extra exposed or published ports, writable root filesystems, leaked secrets,
+  orphaned processes, and unsuccessful PID 1 shutdown.
+
 ## [0.6.0] - 2026-09-01
 
 ### Added
@@ -193,7 +247,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.7.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
@@ -203,3 +257,4 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 [0.4.3]: https://github.com/El37628/FluxFast/releases/tag/v0.4.3
 [0.5.0]: https://github.com/El37628/FluxFast/releases/tag/v0.5.0
 [0.6.0]: https://github.com/El37628/FluxFast/releases/tag/v0.6.0
+[0.7.0]: https://github.com/El37628/FluxFast/releases/tag/v0.7.0
