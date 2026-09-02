@@ -418,6 +418,27 @@ def test_start_command_maps_invalid_configuration_to_exit_code_2(
     assert "workers must be an integer" in capsys.readouterr().err
 
 
+def test_start_command_redacts_credentials_and_control_characters(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail(_config: ProductionConfig) -> int:
+        raise ProductionValidationError(
+            "REDIS_URL=redis://worker:redis-password@redis.internal/0\n"
+            "API_KEY=api-key-value"
+        )
+
+    monkeypatch.setattr("fluxfast.cli.run_production", fail)
+
+    assert main(["start", "backend:app"]) == 3
+    rendered = capsys.readouterr().err
+    assert "redis://***@redis.internal/0" in rendered
+    assert "API_KEY=***" in rendered
+    assert "redis-password" not in rendered
+    assert "api-key-value" not in rendered
+    assert rendered.count("\n") == 1
+
+
 def test_production_doctor_resolves_configuration_and_prints_report(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

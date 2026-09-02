@@ -12,6 +12,13 @@ services:
     environment:
       FLUXFAST_WORKERS: "3"
       REDIS_URL: redis://redis:6379/0
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test:
         - CMD

@@ -16,6 +16,7 @@ const engineName = path.basename(containerEngine).toLowerCase();
 const isPodman = engineName === "podman";
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const identifier = `${process.pid}-${Date.now()}`;
+const securitySentinel = `fluxfast-security-${identifier}`;
 const project = `fluxfast-compose-${identifier}`;
 let composeCreated = false;
 let appStopped = false;
@@ -90,6 +91,7 @@ const publicPort = await findAvailablePort();
 const composeEnvironment = {
   ...process.env,
   FLUXFAST_COMPOSE_PORT: String(publicPort),
+  FLUXFAST_SECURITY_SENTINEL: securitySentinel,
   NEXT_TELEMETRY_DISABLED: "1",
 };
 delete composeEnvironment.FLUXFAST_BACKEND_URL;
@@ -183,6 +185,32 @@ function serviceContainer(service, { all = false } = {}) {
   return containers[0];
 }
 
+function listeningAddresses(containerId, port) {
+  const script = [
+    "const fs=require('node:fs');",
+    "const port=Number(process.argv[1]);",
+    "const files=['/proc/net/tcp','/proc/net/tcp6'];",
+    "const addresses=[];",
+    "for(const file of files){",
+    "if(!fs.existsSync(file))continue;",
+    "for(const line of fs.readFileSync(file,'utf8').trim().split('\\n').slice(1)){",
+    "const fields=line.trim().split(/\\s+/);",
+    "if(fields[3]!=='0A')continue;",
+    "const [address,hexPort]=fields[1].split(':');",
+    "if(Number.parseInt(hexPort,16)===port)addresses.push(address);",
+    "}}",
+    "process.stdout.write(JSON.stringify(addresses));",
+  ].join("");
+  return JSON.parse(output(containerEngine, [
+    "exec",
+    containerId,
+    "node",
+    "-e",
+    script,
+    String(port),
+  ]));
+}
+
 function inspectTopology() {
   const app = serviceContainer("app", { all: true });
   const redis = serviceContainer("redis");
@@ -198,9 +226,53 @@ function inspectTopology() {
     {},
     "Redis must remain private to the Compose network",
   );
+  assert.equal(appInspection.HostConfig.ReadonlyRootfs, true);
+  assert.equal(appInspection.HostConfig.Privileged, false);
+  assert.ok(
+    (appInspection.HostConfig.SecurityOpt ?? []).some(value =>
+      value.includes("no-new-privileges"),
+    ),
+    "the Compose application must prevent privilege escalation",
+  );
+  for (const mount of appInspection.Mounts ?? []) {
+    const rendered = JSON.stringify(mount).toLowerCase();
+    assert.equal(rendered.includes("docker.sock"), false);
+    assert.equal(rendered.includes("podman.sock"), false);
+  }
+  assert.equal(
+    (appInspection.Config.Env ?? []).some(value => value.includes(securitySentinel)),
+    false,
+    "the host environment must not leak into the Compose application",
+  );
   const uid = output(containerEngine, ["exec", app, "id", "-u"]);
   assert.notEqual(uid, "0", "the Compose application must run as non-root");
-  console.log(`✓ app is non-root, publishes only port 3000, and keeps Redis private`);
+  const capabilityStatus = output(containerEngine, [
+    "exec",
+    app,
+    "node",
+    "-e",
+    "process.stdout.write(require('node:fs').readFileSync('/proc/1/status', 'utf8'))",
+  ]);
+  const capabilities = Object.fromEntries(
+    [...capabilityStatus.matchAll(/^(Cap(?:Inh|Prm|Eff|Bnd|Amb)):\s+([0-9a-f]+)$/gim)].map(
+      ([, name, mask]) => [name, mask],
+    ),
+  );
+  for (const name of ["CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"]) {
+    assert.match(
+      capabilities[name] ?? "",
+      /^0+$/,
+      `the Compose capability mask ${name} must be empty`,
+    );
+  }
+  const backendAddresses = listeningAddresses(app, 8123);
+  assert.ok(
+    backendAddresses.includes("0100007F"),
+    `FastAPI must listen on 127.0.0.1:8123, got ${backendAddresses.join(", ")}`,
+  );
+  assert.equal(backendAddresses.includes("00000000"), false);
+  console.log("✓ app is non-root, read-only, capability-free, and socket-free");
+  console.log("✓ app publishes only port 3000 and keeps loopback FastAPI and Redis private");
 }
 
 async function verifyPublicApplication(baseURL) {
@@ -208,6 +280,10 @@ async function verifyPublicApplication(baseURL) {
     const response = await fetch(`${baseURL}/_fluxfast/readyz`);
     return response.ok;
   });
+  const health = await fetch(`${baseURL}/_fluxfast/healthz`);
+  assert.equal(health.status, 200);
+  assert.deepEqual(await health.json(), { status: "ok" });
+
   const readiness = await fetch(`${baseURL}/_fluxfast/readyz`);
   assert.equal(readiness.status, 200);
   assert.deepEqual(await readiness.json(), { status: "ready" });
@@ -268,6 +344,7 @@ function stopApplicationGracefully() {
   assert.match(logs, /\[fluxfast\] FastAPI: 127\.0\.0\.1:8123/);
   assert.match(logs, /\[fluxfast\] FastAPI workers: 3/);
   assert.match(logs, /\[fluxfast\] application ready/);
+  assert.equal(logs.includes(securitySentinel), false);
   console.log(`✓ ${engineName} compose stop produced a clean FluxFast shutdown`);
 }
 

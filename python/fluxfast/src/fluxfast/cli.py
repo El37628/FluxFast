@@ -37,6 +37,7 @@ from .production import (
     run_production,
 )
 from .production.frontend import detect_package_manager
+from .production.redaction import safe_production_text
 from .schema_export import build_app_schema_manifest
 from .serialization import canonical_json
 
@@ -346,6 +347,10 @@ def run_build(
     return run_frontend_build(resolved_frontend)
 
 
+def _print_production_error(error: BaseException) -> None:
+    print(f"[fluxfast] {safe_production_text(str(error))}", file=sys.stderr)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fluxfast")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -479,7 +484,7 @@ def main(argv: list[str] | None = None) -> int:
             TypeGenerationError,
             OSError,
         ) as error:
-            print(f"[fluxfast] {error}", file=sys.stderr)
+            _print_production_error(error)
             return 3
     if args.command == "start":
         try:
@@ -496,19 +501,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             return run_production(config)
         except ProductionConfigError as error:
-            print(f"[fluxfast] {error}", file=sys.stderr)
+            _print_production_error(error)
             return 2
         except ProductionBuildMissingError as error:
-            print(f"[fluxfast] {error}", file=sys.stderr)
+            _print_production_error(error)
             return 5
         except ProductionStartupError as error:
-            print(f"[fluxfast] {error}", file=sys.stderr)
+            _print_production_error(error)
             return 4
         except ProductionChildError as error:
-            print(f"[fluxfast] {error}", file=sys.stderr)
+            _print_production_error(error)
             return 1
         except (ProductionValidationError, ManagedProcessError, OSError) as error:
-            print(f"[fluxfast] {error}", file=sys.stderr)
+            _print_production_error(error)
             return 3
     if args.command == "doctor":
         try:
@@ -534,10 +539,10 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(render_production_report(report, strict=args.strict))
             return 0 if report.is_valid(strict=args.strict) else 3
         except ProductionConfigError as error:
-            print(f"[fluxfast] {error}", file=sys.stderr)
+            _print_production_error(error)
             return 2
         except (ProductionBuildError, ProductionValidationError, OSError) as error:
-            print(f"[fluxfast] {error}", file=sys.stderr)
+            _print_production_error(error)
             return 3
     if args.command == "schema":
         try:

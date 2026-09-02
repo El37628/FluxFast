@@ -49,6 +49,27 @@ def test_managed_process_propagates_real_child_exit_code() -> None:
     assert managed.poll() == 7
 
 
+def test_managed_process_treats_shell_metacharacters_as_literal_argument(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "injected"
+    payload = f"literal; touch {marker}"
+    managed = ManagedProcess(
+        "argument safety child",
+        [
+            sys.executable,
+            "-c",
+            "import sys; raise SystemExit(0 if sys.argv[1].startswith('literal;') else 1)",
+            payload,
+        ],
+    )
+
+    managed.start()
+
+    assert managed.wait(timeout=5) == 0
+    assert marker.exists() is False
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process-group semantics")
 @pytest.mark.parametrize(
     ("operation", "expected_signal"),
