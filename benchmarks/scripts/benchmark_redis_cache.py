@@ -485,7 +485,7 @@ async def run_benchmark(
     print(
         "tradeoff: Redis adds serialization and network work in exchange for "
         "cache coherence across independent workers; simultaneous cold misses "
-        "may still execute duplicate loaders because v0.5 has no distributed lease"
+        "may still execute duplicate loaders because FluxFast has no distributed lease"
     )
     print(
         "correctness: PASS — every cross-client payload round-tripped exactly; "
