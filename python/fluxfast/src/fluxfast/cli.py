@@ -406,6 +406,11 @@ def _parser() -> argparse.ArgumentParser:
     doctor.add_argument("--backend-host")
     doctor.add_argument("--backend-port", type=int)
     doctor.add_argument("--workers", type=int)
+    doctor.add_argument(
+        "--strict",
+        action="store_true",
+        help="treat production-risk warnings as blocking failures",
+    )
 
     schema = subparsers.add_parser(
         "schema",
@@ -526,8 +531,8 @@ def main(argv: list[str] | None = None) -> int:
                 workers=args.workers,
             )
             report = diagnose_production(config)
-            sys.stdout.write(render_production_report(report))
-            return 0 if report.valid else 3
+            sys.stdout.write(render_production_report(report, strict=args.strict))
+            return 0 if report.is_valid(strict=args.strict) else 3
         except ProductionConfigError as error:
             print(f"[fluxfast] {error}", file=sys.stderr)
             return 2
