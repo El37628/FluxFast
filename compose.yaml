@@ -1,0 +1,38 @@
+services:
+  app:
+    build: .
+    command:
+      - fluxfast
+      - start
+      - tests.browser.distributed_backend:app
+      - --frontend
+      - tests/browser/frontend
+    depends_on:
+      - redis
+    environment:
+      FLUXFAST_WORKERS: "3"
+      REDIS_URL: redis://redis:6379/0
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3000/_fluxfast/readyz')
+          .then(response => process.exit(response.ok ? 0 : 1))
+          .catch(() => process.exit(1))
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    ports:
+      - "${FLUXFAST_COMPOSE_PORT:-3000}:3000"
+    stop_grace_period: 25s
+
+  redis:
+    image: docker.io/library/redis:8.10.1-alpine3.23
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20

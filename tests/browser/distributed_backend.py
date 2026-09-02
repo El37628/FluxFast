@@ -28,11 +28,17 @@ def _required_environment(name: str) -> str:
     return value
 
 
-REDIS_URL = _required_environment("FLUXFAST_TEST_REDIS_URL")
-CACHE_NAMESPACE = _required_environment("FLUXFAST_TEST_CACHE_NAMESPACE")
-LIVE_PREFIX = _required_environment("FLUXFAST_TEST_LIVE_PREFIX")
-DIAGNOSTIC_PREFIX = _required_environment("FLUXFAST_TEST_DIAGNOSTIC_PREFIX")
-WORKER_NAME = _required_environment("FLUXFAST_TEST_WORKER_NAME")
+REDIS_URL = os.getenv("FLUXFAST_TEST_REDIS_URL") or _required_environment("REDIS_URL")
+CACHE_NAMESPACE = os.getenv("FLUXFAST_TEST_CACHE_NAMESPACE", "fluxfast-compose")
+LIVE_PREFIX = os.getenv(
+    "FLUXFAST_TEST_LIVE_PREFIX",
+    "fluxfast:compose:live:",
+)
+DIAGNOSTIC_PREFIX = os.getenv(
+    "FLUXFAST_TEST_DIAGNOSTIC_PREFIX",
+    "fluxfast:compose:diagnostics",
+)
+WORKER_NAME = os.getenv("FLUXFAST_TEST_WORKER_NAME", "production")
 
 app = FastAPI()
 state = Redis.from_url(REDIS_URL)
