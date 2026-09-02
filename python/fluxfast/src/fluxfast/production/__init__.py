@@ -6,6 +6,13 @@ from .build import (
     run_frontend_build,
 )
 from .config import ProductionConfig, ProductionConfigError, resolve_production_config
+from .diagnostics import (
+    ProductionDiagnostic,
+    ProductionDiagnosticReport,
+    diagnose_production,
+    render_production_report,
+    resolve_production_app,
+)
 from .errors import (
     ProductionBuildError,
     ProductionBuildMissingError,
@@ -45,6 +52,8 @@ __all__ = [
     "ProductionChildError",
     "ProductionConfig",
     "ProductionConfigError",
+    "ProductionDiagnostic",
+    "ProductionDiagnosticReport",
     "ProductionFrontendError",
     "ProductionHealthState",
     "ProductionStartupError",
@@ -54,9 +63,12 @@ __all__ = [
     "SupervisorState",
     "check_frontend_command",
     "create_production_supervisor",
+    "diagnose_production",
     "http_readiness_probe",
     "install_production_health",
+    "render_production_report",
     "resolve_build_frontend",
+    "resolve_production_app",
     "resolve_production_config",
     "run_frontend_build",
     "run_production",

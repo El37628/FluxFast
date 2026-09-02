@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 import os
 import shutil
 import signal
@@ -19,6 +18,7 @@ from types import FrameType
 from fastapi import FastAPI
 
 from . import __version__
+from .application_import import ApplicationImportError, load_fastapi_application
 from .production import (
     ManagedProcessError,
     ProductionBuildError,
@@ -28,7 +28,10 @@ from .production import (
     ProductionStartupError,
     ProductionValidationError,
     check_frontend_command,
+    diagnose_production,
+    render_production_report,
     resolve_build_frontend,
+    resolve_production_app,
     resolve_production_config,
     run_frontend_build,
     run_production,
@@ -248,32 +251,10 @@ def run_dev(config: DevConfig) -> int:
 def _load_schema_app(app_import: str) -> FastAPI:
     """Import and resolve a FastAPI application from ``module:attribute``."""
 
-    module_name, separator, attribute_path = app_import.partition(":")
-    if not separator or not module_name or not attribute_path:
-        raise SchemaCommandError(
-            "Application import must use module:attribute format, for example backend:app"
-        )
-
     try:
-        value: object = importlib.import_module(module_name)
-    except Exception as error:
-        raise SchemaCommandError(
-            f"Could not import application module '{module_name}': {error}"
-        ) from error
-
-    try:
-        for attribute in attribute_path.split("."):
-            value = getattr(value, attribute)
-    except AttributeError as error:
-        raise SchemaCommandError(
-            f"Application import '{app_import}' does not resolve to an attribute"
-        ) from error
-
-    if not isinstance(value, FastAPI):
-        raise SchemaCommandError(
-            f"Application import '{app_import}' must resolve to a FastAPI application"
-        )
-    return value
+        return load_fastapi_application(app_import)
+    except ApplicationImportError as error:
+        raise SchemaCommandError(str(error)) from error
 
 
 def _schema_manifest_text(app: FastAPI) -> str:
@@ -408,6 +389,24 @@ def _parser() -> argparse.ArgumentParser:
     start.add_argument("--startup-timeout", type=float)
     start.add_argument("--shutdown-timeout", type=float)
 
+    doctor = subparsers.add_parser(
+        "doctor",
+        help="inspect a production deployment without modifying it",
+    )
+    doctor.add_argument(
+        "--production",
+        action="store_true",
+        required=True,
+        help="run production runtime and deployment diagnostics",
+    )
+    doctor.add_argument("--app", help="FastAPI application import")
+    doctor.add_argument("--frontend", type=Path)
+    doctor.add_argument("--host")
+    doctor.add_argument("--port", type=int)
+    doctor.add_argument("--backend-host")
+    doctor.add_argument("--backend-port", type=int)
+    doctor.add_argument("--workers", type=int)
+
     schema = subparsers.add_parser(
         "schema",
         help="export the offline FluxFast schema manifest",
@@ -504,6 +503,35 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[fluxfast] {error}", file=sys.stderr)
             return 1
         except (ProductionValidationError, ManagedProcessError, OSError) as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 3
+    if args.command == "doctor":
+        try:
+            frontend = resolve_build_frontend(args.frontend)
+            app_import = resolve_production_app(args.app)
+            if app_import is None:
+                print(
+                    "[fluxfast] Could not detect the FastAPI application. "
+                    "Pass --app MODULE:ATTRIBUTE or set FLUXFAST_APP.",
+                    file=sys.stderr,
+                )
+                return 2
+            config = resolve_production_config(
+                app_import,
+                frontend,
+                host=args.host,
+                port=args.port,
+                backend_host=args.backend_host,
+                backend_port=args.backend_port,
+                workers=args.workers,
+            )
+            report = diagnose_production(config)
+            sys.stdout.write(render_production_report(report))
+            return 0 if report.valid else 3
+        except ProductionConfigError as error:
+            print(f"[fluxfast] {error}", file=sys.stderr)
+            return 2
+        except (ProductionBuildError, ProductionValidationError, OSError) as error:
             print(f"[fluxfast] {error}", file=sys.stderr)
             return 3
     if args.command == "schema":
