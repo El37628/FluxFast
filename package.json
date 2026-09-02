@@ -16,6 +16,8 @@
     "test:e2e:production": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && node scripts/test-production-browser.mjs",
     "test:container:docker": "node scripts/test-docker-production.mjs",
     "test:container:podman": "FLUXFAST_CONTAINER_ENGINE=podman node scripts/test-docker-production.mjs",
+    "test:compose:docker": "node scripts/test-compose-production.mjs",
+    "test:compose:podman": "FLUXFAST_COMPOSE_ENGINE=podman node scripts/test-compose-production.mjs",
     "test:release": "node --test scripts/*.test.mjs",
     "test:consumer:init": "node scripts/test-next-init-consumer.mjs",
     "test:consumer:mixed-published": "node scripts/test-published-mixed-consumer.mjs",

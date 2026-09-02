@@ -28,10 +28,11 @@ RUN pnpm install --frozen-lockfile
 COPY packages packages
 COPY python/fluxfast python/fluxfast
 COPY tests/browser/backend.py tests/browser/backend.py
+COPY tests/browser/distributed_backend.py tests/browser/distributed_backend.py
 COPY tests/browser/frontend tests/browser/frontend
 
 RUN python3 -m venv /opt/fluxfast \
-    && /opt/fluxfast/bin/python -m pip install ./python/fluxfast \
+    && /opt/fluxfast/bin/python -m pip install './python/fluxfast[redis]' \
     && pnpm --filter @fluxfast/core run build \
     && pnpm --filter @fluxfast/next run build \
     && /opt/fluxfast/bin/fluxfast types tests.browser.backend:app \
@@ -60,6 +61,8 @@ COPY --from=builder /workspace/tests/browser/frontend/.next/standalone/ ./
 COPY --from=builder /workspace/tests/browser/frontend/.next/static/ \
     ./tests/browser/frontend/.next/static/
 COPY --from=builder /workspace/tests/browser/backend.py ./tests/browser/backend.py
+COPY --from=builder /workspace/tests/browser/distributed_backend.py \
+    ./tests/browser/distributed_backend.py
 COPY tests/container/frontend.package.json ./tests/browser/frontend/package.json
 COPY tests/container/start-next.mjs ./tests/browser/frontend/start-next.mjs
 
