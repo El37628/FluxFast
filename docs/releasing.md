@@ -5,6 +5,11 @@ Stable releases publish the same version to PyPI, `@fluxfast/core`, and
 `.github/workflows/release.yml`. The workflow validates versions, runs all
 tests, builds and smoke-tests the distributions, publishes through short-lived
 OIDC credentials, and creates a GitHub release containing those distributions.
+The tagged release workflow calls the same JavaScript, Python, integration,
+container, and release-artifact workflows used for pull requests. Artifact
+building and publication cannot begin until those reusable workflow gates pass,
+so the GitHub release cannot race ahead of production, Docker, or rootless
+Podman failures.
 Before publication, the built wheel and npm tarballs are installed together in
 a clean temporary consumer. That consumer runs `fluxfast init`, validates
 generated contracts, runs `fluxfast build`, and launches `fluxfast start` from
