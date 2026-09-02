@@ -178,3 +178,32 @@ def test_package_manager_build_script_has_no_argument_separator(
         "run",
         "build",
     ]
+
+
+def test_production_frontend_command_keeps_untrusted_values_as_arguments(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"scripts":{"start":"next start"}}\n',
+        encoding="utf8",
+    )
+    (tmp_path / "package-lock.json").touch()
+    monkeypatch.setattr(
+        "fluxfast.production.frontend.shutil.which",
+        lambda name: f"/tools/{name}",
+    )
+    hostile_host = "127.0.0.1;printf injected"
+
+    command = production_frontend_command(tmp_path, hostile_host, 3100)
+
+    assert command == [
+        "/tools/npm",
+        "run",
+        "start",
+        "--",
+        "--hostname",
+        hostile_host,
+        "--port",
+        "3100",
+    ]

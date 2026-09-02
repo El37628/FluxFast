@@ -51,7 +51,7 @@ def load_fastapi_application(
             value: object = importlib.import_module(module_name)
     except Exception as error:
         raise ApplicationImportError(
-            f"Could not import application module '{module_name}': {error}"
+            f"Could not import application module '{module_name}'"
         ) from error
 
     try:

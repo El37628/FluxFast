@@ -14,6 +14,7 @@ const engineName = path.basename(containerEngine).toLowerCase();
 const isPodman = engineName === "podman";
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const identifier = `${process.pid}-${Date.now()}`;
+const securitySentinel = `fluxfast-security-${identifier}`;
 const image = `fluxfast-production-test:${identifier}`;
 const container = `fluxfast-production-test-${identifier}`;
 let imageBuilt = false;
@@ -127,10 +128,37 @@ function mappedPublicPort() {
   return Number(match[1]);
 }
 
+function listeningAddresses(containerId, port) {
+  const script = [
+    "const fs=require('node:fs');",
+    "const port=Number(process.argv[1]);",
+    "const files=['/proc/net/tcp','/proc/net/tcp6'];",
+    "const addresses=[];",
+    "for(const file of files){",
+    "if(!fs.existsSync(file))continue;",
+    "for(const line of fs.readFileSync(file,'utf8').trim().split('\\n').slice(1)){",
+    "const fields=line.trim().split(/\\s+/);",
+    "if(fields[3]!=='0A')continue;",
+    "const [address,hexPort]=fields[1].split(':');",
+    "if(Number.parseInt(hexPort,16)===port)addresses.push(address);",
+    "}}",
+    "process.stdout.write(JSON.stringify(addresses));",
+  ].join("");
+  return JSON.parse(output(containerEngine, [
+    "exec",
+    containerId,
+    "node",
+    "-e",
+    script,
+    String(port),
+  ]));
+}
+
 function inspectRuntime() {
   const inspected = JSON.parse(output(containerEngine, ["inspect", container]))[0];
   assert.ok(inspected, "container inspection returned no container");
   assert.equal(inspected.HostConfig.ReadonlyRootfs, true);
+  assert.equal(inspected.HostConfig.Privileged, false);
   assert.deepEqual(
     Object.keys(inspected.HostConfig.PortBindings ?? {}),
     ["3000/tcp"],
@@ -142,6 +170,11 @@ function inspectRuntime() {
     ),
     "the runtime must prevent privilege escalation",
   );
+  for (const mount of inspected.Mounts ?? []) {
+    const rendered = JSON.stringify(mount).toLowerCase();
+    assert.equal(rendered.includes("docker.sock"), false);
+    assert.equal(rendered.includes("podman.sock"), false);
+  }
 
   const uid = output(containerEngine, ["exec", container, "id", "-u"]);
   const gid = output(containerEngine, ["exec", container, "id", "-g"]);
@@ -176,10 +209,21 @@ function inspectRuntime() {
     "process.stdout.write(require('node:fs').readFileSync('/proc/1/cmdline').toString().replaceAll('\\0', ' ').trim())",
   ]);
   assert.match(pidOne, /fluxfast start tests\.browser\.backend:app/);
+  const backendAddresses = listeningAddresses(container, 8123);
+  assert.ok(
+    backendAddresses.includes("0100007F"),
+    `FastAPI must listen on 127.0.0.1:8123, got ${backendAddresses.join(", ")}`,
+  );
+  assert.equal(
+    backendAddresses.includes("00000000"),
+    false,
+    "FastAPI must not listen on all IPv4 interfaces",
+  );
   console.log(`✓ runtime uses non-root UID:GID ${uid}:${gid}`);
   console.log("✓ runtime Linux capability masks are empty");
   console.log("✓ FluxFast supervisor is container PID 1");
-  console.log("✓ root filesystem is read-only and the backend port is private");
+  console.log("✓ backend listens only on loopback and its port is private");
+  console.log("✓ runtime is unprivileged, socket-free, and read-only");
 }
 
 async function verifyPublicApplication(baseURL) {
@@ -188,13 +232,19 @@ async function verifyPublicApplication(baseURL) {
     return response.ok;
   });
 
+  const health = await fetch(`${baseURL}/_fluxfast/healthz`);
+  assert.equal(health.status, 200);
+  assert.deepEqual(await health.json(), { status: "ok" });
+
   const readiness = await fetch(`${baseURL}/_fluxfast/readyz`);
   assert.equal(readiness.status, 200);
   assert.deepEqual(await readiness.json(), { status: "ready" });
 
   const home = await fetch(`${baseURL}/`);
   assert.equal(home.status, 200);
-  assert.match(await home.text(), /Control Center/);
+  const homeText = await home.text();
+  assert.match(homeText, /Control Center/);
+  assert.equal(homeText.includes(securitySentinel), false);
 
   await waitFor("the image health check", () => {
     if (isPodman) {
@@ -255,6 +305,11 @@ function stopGracefully() {
   const logs = output(containerEngine, ["logs", container]);
   assert.match(logs, /\[fluxfast\] FastAPI: 127\.0\.0\.1:8123/);
   assert.match(logs, /\[fluxfast\] application ready/);
+  assert.equal(
+    logs.includes(securitySentinel),
+    false,
+    "runtime logs must not expose environment secrets",
+  );
   console.log(`✓ ${engineName} stop produced a clean FluxFast shutdown`);
 }
 
@@ -284,6 +339,12 @@ try {
     "ALL",
     "--security-opt",
     "no-new-privileges",
+    "--env",
+    `DATABASE_URL=postgres://admin:${securitySentinel}@database.internal/app`,
+    "--env",
+    `REDIS_URL=redis://worker:${securitySentinel}@redis.internal:6379/0`,
+    "--env",
+    `API_KEY=${securitySentinel}`,
     "--publish",
     "127.0.0.1::3000",
     image,

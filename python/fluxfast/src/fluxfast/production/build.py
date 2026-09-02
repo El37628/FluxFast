@@ -40,6 +40,7 @@ def check_frontend_command(frontend: Path, command: str) -> None:
         package_manager_exec_command(frontend, "fluxfast", command, "--check"),
         cwd=frontend,
         check=False,
+        shell=False,
     )
     if result.returncode != 0:
         raise ProductionBuildError(
@@ -55,5 +56,6 @@ def run_frontend_build(frontend: Path) -> int:
         package_manager_run_command(frontend, "build"),
         cwd=frontend,
         check=False,
+        shell=False,
     )
     return int(result.returncode)

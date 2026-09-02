@@ -288,6 +288,7 @@ def test_frontend_diagnostic_executes_only_installed_read_only_check(
     ]
     assert observed["cwd"] == frontend
     assert observed["check"] is False
+    assert observed["shell"] is False
     assert observed["timeout"] == 30
 
 
@@ -364,3 +365,35 @@ def test_report_rendering_neutralizes_control_characters() -> None:
     assert "value??forged" in rendered
     assert "replace?metadata" in rendered
     assert "\x1b" not in rendered
+
+
+def test_report_rendering_redacts_url_credentials_and_secret_environment_values() -> None:
+    report = ProductionDiagnosticReport(
+        (
+            ProductionDiagnostic(
+                "Environment",
+                "fail",
+                "REDIS_URL=redis://worker:redis-password@redis.internal:6379/0",
+                detail=(
+                    "DATABASE_URL=postgres://admin:database-password@db.internal/app "
+                    "API_KEY=api-key-value TOKEN=token-value PASSWORD=password-value "
+                    "AWS_ACCESS_KEY_ID=access-key-value"
+                ),
+            ),
+        )
+    )
+
+    rendered = render_production_report(report)
+
+    assert "redis://***@redis.internal:6379/0" in rendered
+    assert "postgres://***@db.internal/app" in rendered
+    assert "API_KEY=***" in rendered
+    assert "TOKEN=***" in rendered
+    assert "PASSWORD=***" in rendered
+    assert "AWS_ACCESS_KEY_ID=***" in rendered
+    assert "redis-password" not in rendered
+    assert "database-password" not in rendered
+    assert "api-key-value" not in rendered
+    assert "token-value" not in rendered
+    assert "password-value" not in rendered
+    assert "access-key-value" not in rendered

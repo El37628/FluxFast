@@ -24,6 +24,7 @@ from ..cache import MemoryResourceCache
 from ..live import MemoryLiveBroker
 from .config import ProductionConfig
 from .frontend import package_manager_exec_command
+from .redaction import safe_production_text
 
 DiagnosticStatus = Literal["pass", "warning", "fail"]
 
@@ -168,10 +169,7 @@ def render_production_report(
 def _safe_display(value: str, *, limit: int = 240) -> str:
     """Keep diagnostic values on one bounded, terminal-safe line."""
 
-    rendered = "".join(character if character.isprintable() else "?" for character in value)
-    if len(rendered) <= limit:
-        return rendered
-    return rendered[: limit - 1] + "…"
+    return safe_production_text(value, limit=limit)
 
 
 def _runtime_diagnostics(frontend: Path) -> list[ProductionDiagnostic]:
@@ -440,6 +438,7 @@ def _node_version() -> tuple[int, int, int] | None:
             [executable, "--version"],
             check=False,
             capture_output=True,
+            shell=False,
             text=True,
             timeout=5,
         )
@@ -485,6 +484,7 @@ def _frontend_check(frontend: Path, command: str) -> bool:
             arguments,
             cwd=frontend,
             check=False,
+            shell=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=30,

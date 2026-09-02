@@ -58,8 +58,14 @@ def test_frontend_check_uses_local_adapter_and_read_only_flag(
         lambda *args: ["/tools/pnpm", "exec", "fluxfast", "generate", "--check"],
     )
 
-    def run(command: list[str], *, cwd: Path, check: bool) -> CompletedProcess[str]:
-        observed.update(command=command, cwd=cwd, check=check)
+    def run(
+        command: list[str],
+        *,
+        cwd: Path,
+        check: bool,
+        shell: bool,
+    ) -> CompletedProcess[str]:
+        observed.update(command=command, cwd=cwd, check=check, shell=shell)
         return CompletedProcess(command, 0)
 
     monkeypatch.setattr("fluxfast.production.build.subprocess.run", run)
@@ -70,6 +76,7 @@ def test_frontend_check_uses_local_adapter_and_read_only_flag(
         "command": ["/tools/pnpm", "exec", "fluxfast", "generate", "--check"],
         "cwd": frontend,
         "check": False,
+        "shell": False,
     }
 
 
@@ -102,8 +109,14 @@ def test_frontend_build_returns_package_script_status(
         lambda *args: ["/tools/npm", "run", "build"],
     )
 
-    def run(command: list[str], *, cwd: Path, check: bool) -> CompletedProcess[str]:
-        observed.update(command=command, cwd=cwd, check=check)
+    def run(
+        command: list[str],
+        *,
+        cwd: Path,
+        check: bool,
+        shell: bool,
+    ) -> CompletedProcess[str]:
+        observed.update(command=command, cwd=cwd, check=check, shell=shell)
         return CompletedProcess(command, 9)
 
     monkeypatch.setattr("fluxfast.production.build.subprocess.run", run)
@@ -113,4 +126,5 @@ def test_frontend_build_returns_package_script_status(
         "command": ["/tools/npm", "run", "build"],
         "cwd": frontend,
         "check": False,
+        "shell": False,
     }

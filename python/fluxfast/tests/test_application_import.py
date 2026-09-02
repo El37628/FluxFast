@@ -41,3 +41,20 @@ def test_application_import_reports_invalid_targets_without_invoking_them(
 
     with pytest.raises(ApplicationImportError, match="must resolve to a FastAPI"):
         load_fastapi_application("invalid_fixture:app", cwd=tmp_path)
+
+
+def test_application_import_does_not_expose_import_exception_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = "postgres://admin:do-not-log@database.internal/app"
+    monkeypatch.setattr(
+        "fluxfast.application_import.importlib.import_module",
+        lambda _module: (_ for _ in ()).throw(RuntimeError(sentinel)),
+    )
+
+    with pytest.raises(ApplicationImportError) as captured:
+        load_fastapi_application("backend:app")
+
+    assert str(captured.value) == "Could not import application module 'backend'"
+    assert "do-not-log" not in str(captured.value)
+    assert captured.value.__cause__ is not None
