@@ -9,7 +9,9 @@ const repositoryRoot = path.resolve(
   "..",
 );
 const frontendRoot = path.join(repositoryRoot, "tests", "browser", "frontend");
-const docker = process.env.FLUXFAST_CONTAINER_ENGINE ?? "docker";
+const containerEngine = process.env.FLUXFAST_CONTAINER_ENGINE ?? "docker";
+const engineName = path.basename(containerEngine).toLowerCase();
+const isPodman = engineName === "podman";
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const identifier = `${process.pid}-${Date.now()}`;
 const image = `fluxfast-production-test:${identifier}`;
@@ -51,11 +53,28 @@ function output(command, args) {
 
 function removeGeneratedArtifacts() {
   if (containerCreated) {
-    spawnSync(docker, ["rm", "--force", container], { stdio: "ignore" });
+    spawnSync(containerEngine, ["rm", "--force", container], {
+      stdio: "ignore",
+    });
   }
   if (imageBuilt) {
-    spawnSync(docker, ["image", "rm", "--force", image], { stdio: "ignore" });
+    spawnSync(containerEngine, ["image", "rm", "--force", image], {
+      stdio: "ignore",
+    });
   }
+}
+
+function verifyContainerEngine() {
+  if (!isPodman) return;
+  assert.notEqual(process.getuid?.(), 0, "Podman must run as an unprivileged user");
+  const info = JSON.parse(output(containerEngine, ["info", "--format", "json"]));
+  assert.equal(info.host?.security?.rootless, true, "Podman must run rootlessly");
+  assert.equal(
+    info.host?.serviceIsRemote,
+    false,
+    "the Podman test must not depend on a daemon socket",
+  );
+  console.log(`✓ Podman is local and rootless under host UID ${process.getuid?.()}`);
 }
 
 async function waitFor(description, check, timeoutMs = 120_000) {
@@ -76,8 +95,10 @@ async function waitFor(description, check, timeoutMs = 120_000) {
 }
 
 function inspectImage() {
-  const inspected = JSON.parse(output(docker, ["image", "inspect", image]))[0];
-  assert.ok(inspected, "Docker image inspection returned no image");
+  const inspected = JSON.parse(
+    output(containerEngine, ["image", "inspect", image]),
+  )[0];
+  assert.ok(inspected, "container image inspection returned no image");
   assert.deepEqual(
     Object.keys(inspected.Config.ExposedPorts ?? {}),
     ["3000/tcp"],
@@ -86,12 +107,19 @@ function inspectImage() {
   assert.notEqual(inspected.Config.User, "", "the image must declare a user");
   assert.notEqual(inspected.Config.User, "0", "the image must not run as UID 0");
   assert.notEqual(inspected.Config.User, "root", "the image must not run as root");
+  const healthcheck = inspected.Config.Healthcheck ?? inspected.Healthcheck;
+  assert.equal(
+    healthcheck?.Test?.[0],
+    "CMD",
+    "the image must declare an exec-form health check",
+  );
   console.log(`✓ image declares non-root user ${inspected.Config.User}`);
   console.log("✓ image exposes only 3000/tcp");
+  console.log("✓ image declares an exec-form health check");
 }
 
 function mappedPublicPort() {
-  const mapping = output(docker, ["port", container, "3000/tcp"])
+  const mapping = output(containerEngine, ["port", container, "3000/tcp"])
     .split("\n")
     .find(Boolean);
   const match = mapping?.match(/:(\d+)$/);
@@ -100,17 +128,13 @@ function mappedPublicPort() {
 }
 
 function inspectRuntime() {
-  const inspected = JSON.parse(output(docker, ["inspect", container]))[0];
-  assert.ok(inspected, "Docker container inspection returned no container");
+  const inspected = JSON.parse(output(containerEngine, ["inspect", container]))[0];
+  assert.ok(inspected, "container inspection returned no container");
   assert.equal(inspected.HostConfig.ReadonlyRootfs, true);
   assert.deepEqual(
     Object.keys(inspected.HostConfig.PortBindings ?? {}),
     ["3000/tcp"],
     "the internal FastAPI port must not be published",
-  );
-  assert.ok(
-    (inspected.HostConfig.CapDrop ?? []).includes("ALL"),
-    "the runtime must drop Linux capabilities",
   );
   assert.ok(
     (inspected.HostConfig.SecurityOpt ?? []).some(value =>
@@ -119,12 +143,32 @@ function inspectRuntime() {
     "the runtime must prevent privilege escalation",
   );
 
-  const uid = output(docker, ["exec", container, "id", "-u"]);
-  const gid = output(docker, ["exec", container, "id", "-g"]);
+  const uid = output(containerEngine, ["exec", container, "id", "-u"]);
+  const gid = output(containerEngine, ["exec", container, "id", "-g"]);
   assert.notEqual(uid, "0", "the running container must not use UID 0");
   assert.notEqual(gid, "0", "the running container must not use GID 0");
 
-  const pidOne = output(docker, [
+  const capabilityStatus = output(containerEngine, [
+    "exec",
+    container,
+    "node",
+    "-e",
+    "process.stdout.write(require('node:fs').readFileSync('/proc/1/status', 'utf8'))",
+  ]);
+  const capabilities = Object.fromEntries(
+    [...capabilityStatus.matchAll(/^(Cap(?:Inh|Prm|Eff|Bnd|Amb)):\s+([0-9a-f]+)$/gim)].map(
+      ([, name, mask]) => [name, mask],
+    ),
+  );
+  for (const name of ["CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"]) {
+    assert.match(
+      capabilities[name] ?? "",
+      /^0+$/,
+      `the runtime capability mask ${name} must be empty`,
+    );
+  }
+
+  const pidOne = output(containerEngine, [
     "exec",
     container,
     "node",
@@ -133,6 +177,7 @@ function inspectRuntime() {
   ]);
   assert.match(pidOne, /fluxfast start tests\.browser\.backend:app/);
   console.log(`✓ runtime uses non-root UID:GID ${uid}:${gid}`);
+  console.log("✓ runtime Linux capability masks are empty");
   console.log("✓ FluxFast supervisor is container PID 1");
   console.log("✓ root filesystem is read-only and the backend port is private");
 }
@@ -152,7 +197,28 @@ async function verifyPublicApplication(baseURL) {
   assert.match(await home.text(), /Control Center/);
 
   await waitFor("the image health check", () => {
-    const state = JSON.parse(output(docker, ["inspect", container]))[0]?.State;
+    if (isPodman) {
+      const result = spawnSync(
+        containerEngine,
+        ["healthcheck", "run", container],
+        {
+          cwd: repositoryRoot,
+          env: process.env,
+          encoding: "utf8",
+        },
+      );
+      if (result.error) throw result.error;
+      if (result.status === 0) return true;
+      if (result.status === 1) return false;
+      throw commandFailure(
+        containerEngine,
+        ["healthcheck", "run", container],
+        result,
+      );
+    }
+    const state = JSON.parse(
+      output(containerEngine, ["inspect", container]),
+    )[0]?.State;
     return state?.Health?.Status === "healthy";
   });
   console.log("✓ public readiness, health check, and SSR respond on port 3000");
@@ -180,23 +246,33 @@ function runBrowser(baseURL) {
 }
 
 function stopGracefully() {
-  execute(docker, ["stop", "--timeout", "25", container]);
+  execute(containerEngine, ["stop", "--timeout", "25", container]);
   containerRunning = false;
-  const state = JSON.parse(output(docker, ["inspect", container]))[0]?.State;
+  const state = JSON.parse(output(containerEngine, ["inspect", container]))[0]
+    ?.State;
   assert.equal(state?.Running, false);
   assert.equal(state?.ExitCode, 0, "SIGTERM shutdown must exit cleanly");
-  const logs = output(docker, ["logs", container]);
+  const logs = output(containerEngine, ["logs", container]);
   assert.match(logs, /\[fluxfast\] FastAPI: 127\.0\.0\.1:8123/);
   assert.match(logs, /\[fluxfast\] application ready/);
-  console.log("✓ docker stop produced a clean FluxFast shutdown");
+  console.log(`✓ ${engineName} stop produced a clean FluxFast shutdown`);
 }
 
 try {
-  execute(docker, ["build", "--tag", image, "--file", "Dockerfile", "."]);
+  verifyContainerEngine();
+  execute(containerEngine, [
+    "build",
+    ...(isPodman ? ["--format", "docker"] : []),
+    "--tag",
+    image,
+    "--file",
+    "Dockerfile",
+    ".",
+  ]);
   imageBuilt = true;
   inspectImage();
 
-  output(docker, [
+  output(containerEngine, [
     "run",
     "--detach",
     "--name",
@@ -222,14 +298,16 @@ try {
   stopGracefully();
 } catch (error) {
   if (containerCreated) {
-    const logs = spawnSync(docker, ["logs", container], { encoding: "utf8" });
+    const logs = spawnSync(containerEngine, ["logs", container], {
+      encoding: "utf8",
+    });
     if (logs.stdout) console.error(logs.stdout.trim());
     if (logs.stderr) console.error(logs.stderr.trim());
   }
   throw error;
 } finally {
   if (containerRunning) {
-    spawnSync(docker, ["stop", "--timeout", "5", container], {
+    spawnSync(containerEngine, ["stop", "--timeout", "5", container], {
       stdio: "ignore",
     });
   }
