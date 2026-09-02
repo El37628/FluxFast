@@ -13,8 +13,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  javascript-ci:
+    name: JavaScript CI
+    uses: ./.github/workflows/javascript.yml
+
+  python-ci:
+    name: Python CI
+    uses: ./.github/workflows/python.yml
+
+  release-artifacts-ci:
+    name: Release artifact CI
+    uses: ./.github/workflows/release-smoke.yml
+
+  integration-ci:
+    name: Production and integration CI
+    needs: [javascript-ci, python-ci]
+    uses: ./.github/workflows/integration.yml
+
+  container-ci:
+    name: Docker and rootless Podman CI
+    needs: integration-ci
+    uses: ./.github/workflows/container.yml
+
   build:
     name: Test and build distributions
+    needs: [container-ci, release-artifacts-ci]
     runs-on: ubuntu-latest
     services:
       redis:
