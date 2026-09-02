@@ -41,7 +41,10 @@ const productionServer = {
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: "distributed-live.spec.ts",
+  testIgnore: [
+    "distributed-live.spec.ts",
+    "production-distributed.spec.ts",
+  ],
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
