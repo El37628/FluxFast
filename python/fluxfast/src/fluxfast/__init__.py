@@ -1,5 +1,7 @@
 """FluxFast — high-performance server-driven application runtime for FastAPI."""
 
+__version__ = "0.6.0"
+
 from .app import FluxFast
 from .cache import CachedResource, MemoryResourceCache, ResourceCacheBackend
 from .cache_metrics import RedisCacheMetrics, RedisCacheMetricsSnapshot
@@ -83,8 +85,6 @@ from .redis_cache import (
 from .resource import ResourceLoader, ResourceSpec, resource
 from .router import FluxRouter
 from .scope import CacheScope, ScopeType, scope
-
-__version__ = "0.6.0"
 
 __all__ = [
     "CAPABILITY_DEFERRED_RESOURCES",

@@ -28,6 +28,8 @@ from fluxfast.production import (
     ProductionBuildMissingError,
     ProductionChildError,
     ProductionConfig,
+    ProductionDiagnostic,
+    ProductionDiagnosticReport,
     ProductionStartupError,
     ProductionValidationError,
 )
@@ -237,7 +239,10 @@ def test_schema_app_import_reports_invalid_targets(monkeypatch: pytest.MonkeyPat
     with pytest.raises(SchemaCommandError, match="module:attribute"):
         _load_schema_app("backend")
 
-    monkeypatch.setattr("fluxfast.cli.importlib.import_module", lambda _name: object())
+    monkeypatch.setattr(
+        "fluxfast.application_import.importlib.import_module",
+        lambda _name: object(),
+    )
     with pytest.raises(SchemaCommandError, match="does not resolve to an attribute"):
         _load_schema_app("backend:app")
 
@@ -411,6 +416,91 @@ def test_start_command_maps_invalid_configuration_to_exit_code_2(
 ) -> None:
     assert main(["start", "backend:app", "--workers", "0"]) == 2
     assert "workers must be an integer" in capsys.readouterr().err
+
+
+def test_production_doctor_resolves_configuration_and_prints_report(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    frontend = tmp_path / "frontend"
+    observed: list[ProductionConfig] = []
+    report = ProductionDiagnosticReport(
+        (ProductionDiagnostic("Runtime", "pass", "Python supported"),)
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.resolve_build_frontend",
+        lambda path: frontend if path == Path("web") else None,
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.resolve_production_app",
+        lambda app: "backend.main:app" if app is None else app,
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.diagnose_production",
+        lambda config: observed.append(config) or report,
+    )
+
+    assert main(
+        [
+            "doctor",
+            "--production",
+            "--frontend",
+            "web",
+            "--workers",
+            "4",
+            "--port",
+            "3100",
+        ]
+    ) == 0
+    assert observed == [
+        ProductionConfig(
+            app="backend.main:app",
+            frontend=frontend,
+            port=3100,
+            workers=4,
+        )
+    ]
+    assert capsys.readouterr().out == (
+        "FluxFast Production Doctor\n"
+        "\n"
+        "Runtime\n"
+        "  ✓ Python supported\n"
+        "\n"
+        "Result\n"
+        "  ✓ Production configuration looks ready.\n"
+    )
+
+
+def test_production_doctor_warnings_are_nonblocking_and_failures_exit_three(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("fluxfast.cli.resolve_build_frontend", lambda _path: tmp_path)
+    monkeypatch.setattr("fluxfast.cli.resolve_production_app", lambda _app: "app:app")
+    warning = ProductionDiagnosticReport(
+        (ProductionDiagnostic("Workers", "warning", "Memory broker"),)
+    )
+    monkeypatch.setattr("fluxfast.cli.diagnose_production", lambda _config: warning)
+    assert main(["doctor", "--production"]) == 0
+
+    failure = ProductionDiagnosticReport(
+        (ProductionDiagnostic("Application", "fail", "Build missing"),)
+    )
+    monkeypatch.setattr("fluxfast.cli.diagnose_production", lambda _config: failure)
+    assert main(["doctor", "--production"]) == 3
+
+
+def test_production_doctor_requires_an_unambiguous_application(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr("fluxfast.cli.resolve_build_frontend", lambda _path: tmp_path)
+    monkeypatch.setattr("fluxfast.cli.resolve_production_app", lambda _app: None)
+
+    assert main(["doctor", "--production"]) == 2
+    assert "Pass --app MODULE:ATTRIBUTE" in capsys.readouterr().err
 
 
 def test_build_validates_generated_files_before_package_build(
