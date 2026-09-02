@@ -18,14 +18,15 @@ export function withFluxFast(
   nextConfig: NextConfig = {},
   options: FluxFastNextOptions = {}
 ): NextConfig {
-  if (options.generate !== false) {
+  const immutableProductionStart =
+    process.env.FLUXFAST_PRODUCTION_START === "1";
+  if (options.generate !== false && !immutableProductionStart) {
     generatePagesRegistry({
       pagesDir: options.pagesDir,
       outputFile: options.outputFile,
     });
   }
 
-  const backendUrl = resolveFluxBackendUrl(options.backendUrl);
   const configuredRewrites = nextConfig.rewrites;
 
   return {
@@ -34,6 +35,11 @@ export function withFluxFast(
       const existing = configuredRewrites
         ? await configuredRewrites.call(nextConfig)
         : [];
+      const productionTransport =
+        options.backendUrl === undefined && process.env.NODE_ENV === "production";
+      const backendUrl = productionTransport
+        ? undefined
+        : resolveFluxBackendUrl(options.backendUrl);
       const proxy = {
         source: "/:path*",
         has: [
@@ -43,7 +49,9 @@ export function withFluxFast(
             value: "1",
           },
         ],
-        destination: `${backendUrl}/:path*`,
+        destination: productionTransport
+          ? "/_fluxfast/transport/:path*"
+          : `${backendUrl!}/:path*`,
       };
 
       if (Array.isArray(existing)) {

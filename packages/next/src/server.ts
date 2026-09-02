@@ -15,6 +15,11 @@ import { FluxNextConfig, resolveFluxBackendUrl } from "./config";
 
 export { createFluxHealthHandler } from "./health";
 export type { FluxHealthHandlerOptions } from "./health";
+export { createFluxTransportHandler } from "./transport";
+export type {
+  FluxTransportHandlerOptions,
+  FluxTransportRouteContext,
+} from "./transport";
 
 export interface FetchInitialEnvelopeOptions {
   backendUrl: string;
@@ -133,12 +138,19 @@ export async function fetchInitialEnvelope(
   return result;
 }
 
-function FluxNotFound(): never {
-  notFound();
-}
-
 function FluxNotFoundTimingAnchor() {
   return null;
+}
+
+function createNotFoundElement() {
+  // React 19.2's development RSC profiler measures a rejected component with
+  // childrenEndTime = -Infinity (tracked as vercel/next.js#86060). Keep this
+  // control-flow component anonymous so React does not emit that invalid
+  // measurement. The completed sibling below still gives the fulfilled parent
+  // component a valid timing boundary.
+  return React.createElement(function (): never {
+    notFound();
+  });
 }
 
 export function createFluxNextPage(config: FluxNextConfig) {
@@ -169,15 +181,13 @@ export function createFluxNextPage(config: FluxNextConfig) {
       headers: forwarded,
     });
     if (initialEnvelope === INITIAL_NOT_FOUND) {
-      // React 19.2's local-development RSC profiler records an invalid end time
-      // when the first child of this fulfilled async page throws notFound(). A
-      // completed, invisible sibling gives the profiler a valid timing anchor.
-      // Unlike Suspense, this preserves Next's real 404 response status.
+      // Unlike Suspense or rendering a fallback directly, this preserves
+      // Next's real 404 response status.
       return React.createElement(
         React.Fragment,
         null,
         React.createElement(FluxNotFoundTimingAnchor),
-        React.createElement(FluxNotFound)
+        createNotFoundElement()
       );
     }
     return React.createElement(config.application, {

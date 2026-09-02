@@ -50,7 +50,7 @@ describe("Next adapter paths", () => {
     expect(buildFluxPath(undefined)).toBe("/");
   });
 
-  it("completes a timing anchor before interrupting a missing async page", async () => {
+  it("uses an anonymous not-found child after a completed timing anchor", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ detail: "Not Found" }),
       {
@@ -74,6 +74,7 @@ describe("Next adapter paths", () => {
     const TimingAnchor = children[0]?.type as () => null;
     expect(TimingAnchor()).toBeNull();
     const NotFoundComponent = children[1]?.type as () => never;
+    expect(NotFoundComponent.name).toBe("");
     expect(() => NotFoundComponent()).toThrow("NEXT_NOT_FOUND");
     expect(notFoundMock).toHaveBeenCalledOnce();
   });

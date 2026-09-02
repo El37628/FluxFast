@@ -47,6 +47,7 @@ def create_production_supervisor(config: ProductionConfig) -> ProductionSupervis
     frontend_environment = os.environ.copy()
     frontend_environment["NODE_ENV"] = "production"
     frontend_environment["FLUXFAST_BACKEND_URL"] = backend_url
+    frontend_environment["FLUXFAST_PRODUCTION_START"] = "1"
     frontend_environment.pop("NEXT_PUBLIC_FLUXFAST_BACKEND_URL", None)
     frontend_process = ManagedProcess(
         "Next.js",

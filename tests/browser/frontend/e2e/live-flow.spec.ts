@@ -315,14 +315,21 @@ test("production build synchronizes two clients through one origin", async ({
   );
   const run = uniqueRun(testInfo);
   const origins = new Set<string>();
+  const unexpectedOrigins = new Set<string>();
+  const expectedOrigin = new URL(baseURL!).origin;
   const firstContext = await browser.newContext();
   const secondContext = await browser.newContext();
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
   for (const page of [first, second]) {
     page.on("request", request => {
+      const url = new URL(request.url());
+      if (["http:", "https:", "ws:", "wss:"].includes(url.protocol)) {
+        const requestOrigin = url.origin.replace(/^ws/, "http");
+        if (requestOrigin !== expectedOrigin) unexpectedOrigins.add(requestOrigin);
+      }
       if (request.headers()["x-fluxfast"] === "1") {
-        origins.add(new URL(request.url()).origin);
+        origins.add(url.origin);
       }
     });
   }
@@ -332,7 +339,8 @@ test("production build synchronizes two clients through one origin", async ({
     await Promise.all([waitForLive(first), waitForLive(second)]);
     await first.getByRole("button", { name: "Increment tenant counter" }).click();
     await expect(second.getByTestId("live-counter-value")).toHaveText("1");
-    expect([...origins]).toEqual([new URL(baseURL!).origin]);
+    expect([...origins]).toEqual([expectedOrigin]);
+    expect([...unexpectedOrigins]).toEqual([]);
   } finally {
     await closeContexts([firstContext, secondContext]);
   }

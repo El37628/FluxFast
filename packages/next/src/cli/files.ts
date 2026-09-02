@@ -17,6 +17,13 @@ export function isFluxHealthRoute(content: string): boolean {
   );
 }
 
+export function isFluxTransportRoute(content: string): boolean {
+  return (
+    content.includes(FLUXFAST_GENERATED_MARKER) &&
+    /\bcreateFluxTransportHandler\s*\(/.test(content)
+  );
+}
+
 type RelativePathApi = Pick<typeof path, "dirname" | "relative">;
 
 function withoutSourceExtension(filePath: string): string {
@@ -60,6 +67,17 @@ export function desiredHealthRoutePath(project: FluxProjectInfo): string {
   return path.join(project.appDir, "%5Ffluxfast", "[probe]", `route.${extension}`);
 }
 
+export function desiredTransportRoutePath(project: FluxProjectInfo): string {
+  const extension = project.language === "typescript" ? "ts" : "js";
+  return path.join(
+    project.appDir,
+    "%5Ffluxfast",
+    "transport",
+    "[[...path]]",
+    `route.${extension}`
+  );
+}
+
 function configImportForCatchAll(
   project: FluxProjectInfo,
   catchAllPath: string
@@ -82,6 +100,10 @@ export function renderCatchAll(project: FluxProjectInfo): string {
 
 export function renderHealthRoute(): string {
   return `${FLUXFAST_GENERATED_MARKER}\n// Run \`fluxfast init --force\` to repair this file.\n\nimport { createFluxHealthHandler } from "@fluxfast/next/server";\n\nexport const dynamic = "force-dynamic";\nexport const GET = createFluxHealthHandler();\n`;
+}
+
+export function renderTransportRoute(): string {
+  return `${FLUXFAST_GENERATED_MARKER}\n// Run \`fluxfast init --force\` to repair this file.\n\nimport { createFluxTransportHandler } from "@fluxfast/next/server";\n\nexport const dynamic = "force-dynamic";\nconst transport = createFluxTransportHandler();\n\nexport const GET = transport;\nexport const HEAD = transport;\nexport const POST = transport;\nexport const PUT = transport;\nexport const PATCH = transport;\nexport const DELETE = transport;\n`;
 }
 
 export function renderFluxConfig(project: FluxProjectInfo): string {

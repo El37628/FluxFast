@@ -13,8 +13,10 @@ import {
 import {
   desiredCatchAllPath,
   desiredHealthRoutePath,
+  desiredTransportRoutePath,
   isFluxCatchAll,
   isFluxHealthRoute,
+  isFluxTransportRoute,
 } from "./files";
 import { transformNextConfig } from "./next-config";
 import type {
@@ -501,6 +503,29 @@ export function validateFluxProject(
           "FluxFast public health route is missing or invalid.",
           {
             fix: healthRouteContent
+              ? "npx fluxfast init --force"
+              : "npx fluxfast init",
+          }
+        )
+  );
+
+  const transportRoutePath = desiredTransportRoutePath(project);
+  const transportRouteContent = readFile(transportRoutePath);
+  diagnostics.push(
+    transportRouteContent && isFluxTransportRoute(transportRouteContent)
+      ? diagnostic(
+          "config.transport-route",
+          "Configuration",
+          "pass",
+          `FluxFast production transport route at ${path.relative(project.root, transportRoutePath)}`
+        )
+      : diagnostic(
+          "config.transport-route",
+          "Configuration",
+          "fail",
+          "FluxFast production transport route is missing or invalid.",
+          {
+            fix: transportRouteContent
               ? "npx fluxfast init --force"
               : "npx fluxfast init",
           }

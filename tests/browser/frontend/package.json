@@ -17,8 +17,8 @@
     "test:e2e": "playwright test",
     "pretest:e2e:distributed": "pnpm run check:schema",
     "test:e2e:distributed": "playwright test --config playwright.distributed.config.ts",
-    "pretest:e2e:production": "pnpm run check:schema",
-    "test:e2e:production": "playwright test e2e/live-flow.spec.ts --grep \"production build\""
+    "pretest:e2e:production": "node ./generate-types.mjs --check-schema --check-generated",
+    "test:e2e:production": "playwright test e2e/critical-flow.spec.ts e2e/deferred-flow.spec.ts e2e/live-flow.spec.ts"
   },
   "dependencies": {
     "@fluxfast/core": "workspace:*",
