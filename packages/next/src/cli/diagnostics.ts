@@ -10,7 +10,12 @@ import {
   parseFluxFastSchemaManifest,
   SchemaManifestValidationError,
 } from "../schema-manifest";
-import { desiredCatchAllPath, isFluxCatchAll } from "./files";
+import {
+  desiredCatchAllPath,
+  desiredHealthRoutePath,
+  isFluxCatchAll,
+  isFluxHealthRoute,
+} from "./files";
 import { transformNextConfig } from "./next-config";
 import type {
   CompatibilityStatus,
@@ -473,6 +478,29 @@ export function validateFluxProject(
           "FluxFast catch-all is missing or invalid.",
           {
             fix: catchAllContent
+              ? "npx fluxfast init --force"
+              : "npx fluxfast init",
+          }
+        )
+  );
+
+  const healthRoutePath = desiredHealthRoutePath(project);
+  const healthRouteContent = readFile(healthRoutePath);
+  diagnostics.push(
+    healthRouteContent && isFluxHealthRoute(healthRouteContent)
+      ? diagnostic(
+          "config.health-route",
+          "Configuration",
+          "pass",
+          `FluxFast public health route at ${path.relative(project.root, healthRoutePath)}`
+        )
+      : diagnostic(
+          "config.health-route",
+          "Configuration",
+          "fail",
+          "FluxFast public health route is missing or invalid.",
+          {
+            fix: healthRouteContent
               ? "npx fluxfast init --force"
               : "npx fluxfast init",
           }

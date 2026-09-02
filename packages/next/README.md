@@ -19,6 +19,10 @@ export default withFluxFast({
 });
 ```
 
+`fluxfast init` also creates a reserved server-only route for
+`/_fluxfast/healthz` and `/_fluxfast/readyz`. These checks proxy the private
+FastAPI runtime through the public Next.js origin without exposing its address.
+
 Page paths may use ASCII letters, digits, `_`, `.`, `@`, parentheses, brackets,
 and hyphens, with `/` between directories and a `.tsx` or `.jsx` extension.
 The generator rejects other characters before emitting import paths.

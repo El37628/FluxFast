@@ -337,3 +337,22 @@ test("production build synchronizes two clients through one origin", async ({
     await closeContexts([firstContext, secondContext]);
   }
 });
+
+test("production build exposes minimal health checks through one origin", async ({
+  request,
+}) => {
+  test.skip(
+    process.env.FLUXFAST_E2E_PRODUCTION !== "1",
+    "production-only Next build coverage"
+  );
+
+  const health = await request.get("/_fluxfast/healthz");
+  expect(health.status()).toBe(200);
+  expect(health.headers()["cache-control"]).toBe("no-store");
+  expect(await health.json()).toEqual({ status: "ok" });
+
+  const readiness = await request.get("/_fluxfast/readyz");
+  expect(readiness.status()).toBe(200);
+  expect(readiness.headers()["cache-control"]).toBe("no-store");
+  expect(await readiness.json()).toEqual({ status: "ready" });
+});

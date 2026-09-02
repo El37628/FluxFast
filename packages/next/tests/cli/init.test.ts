@@ -2,7 +2,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { desiredCatchAllPath, desiredHomePagePath, renderCatchAll } from "../../src/cli/files";
+import {
+  desiredCatchAllPath,
+  desiredHealthRoutePath,
+  desiredHomePagePath,
+  renderCatchAll,
+  renderHealthRoute,
+} from "../../src/cli/files";
 import { changedOperations, createInitPlan } from "../../src/cli/init";
 import { detectFluxProject } from "../../src/cli/project";
 import { createTestProject, writeTestFile } from "./helpers";
@@ -42,12 +48,17 @@ describe("FluxFast init planner", () => {
     const plan = createInitPlan(project);
     const homePage = desiredHomePagePath(project);
     const catchAll = desiredCatchAllPath(project);
+    const healthRoute = desiredHealthRoutePath(project);
 
     expect(plan.errors).toEqual([]);
     expect(plan.warnings).toEqual([]);
     expect(operation("mkdir", project.fluxPagesDir)).toBeDefined();
     expect(operation("create", project.configPath)).toBeDefined();
     expect(operation("create", catchAll)).toBeDefined();
+    expect(operation("create", healthRoute)).toMatchObject({
+      type: "create",
+      content: renderHealthRoute(),
+    });
     expect(operation("move", homePage)).toMatchObject({
       type: "move",
       from: rootPage,
@@ -59,6 +70,7 @@ describe("FluxFast init planner", () => {
     );
     expect(fs.existsSync(homePage)).toBe(false);
     expect(fs.existsSync(catchAll)).toBe(false);
+    expect(fs.existsSync(healthRoute)).toBe(false);
     expect(fs.readFileSync(rootPage, "utf8")).toContain("next/image");
   });
 
@@ -117,6 +129,11 @@ describe("FluxFast init planner", () => {
     );
     writeTestFile(
       tmpDir,
+      path.relative(tmpDir, desiredHealthRoutePath(project)),
+      renderHealthRoute()
+    );
+    writeTestFile(
+      tmpDir,
       "next.config.ts",
       'import { withFluxFast } from "@fluxfast/next/next-config";\nexport default withFluxFast({});\n'
     );
@@ -125,6 +142,28 @@ describe("FluxFast init planner", () => {
 
     expect(plan.errors).toEqual([]);
     expect(changedOperations(plan)).toEqual([]);
+  });
+
+  it("preserves a custom reserved health route unless force repairs it", () => {
+    createTestProject(tmpDir);
+    const project = detectFluxProject(tmpDir);
+    const healthRoutePath = desiredHealthRoutePath(project);
+    const custom = "export function GET() { return new Response('custom'); }\n";
+    writeTestFile(tmpDir, path.relative(tmpDir, healthRoutePath), custom);
+
+    const safePlan = createInitPlan(detectFluxProject(tmpDir));
+    expect(safePlan.manualActions.join("\n")).toContain("init --force");
+    expect(safePlan.operations).toContainEqual(
+      expect.objectContaining({ type: "skip", path: healthRoutePath })
+    );
+
+    const forcedPlan = createInitPlan(detectFluxProject(tmpDir), { force: true });
+    expect(forcedPlan.operations).toContainEqual({
+      type: "modify",
+      path: healthRoutePath,
+      before: custom,
+      after: renderHealthRoute(),
+    });
   });
 
   it("preserves an invalid catch-all unless force explicitly repairs it", () => {

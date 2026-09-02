@@ -3,7 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyInitPlan } from "../../src/cli/apply";
-import { desiredCatchAllPath, desiredHomePagePath } from "../../src/cli/files";
+import {
+  desiredCatchAllPath,
+  desiredHealthRoutePath,
+  desiredHomePagePath,
+} from "../../src/cli/files";
 import { changedOperations, createInitPlan } from "../../src/cli/init";
 import { detectFluxProject } from "../../src/cli/project";
 import { createTestProject, writeTestFile } from "./helpers";
@@ -43,6 +47,9 @@ describe("FluxFast init plan application", () => {
     );
     expect(fs.readFileSync(desiredCatchAllPath(project), "utf8")).toContain(
       "createFluxNextPage"
+    );
+    expect(fs.readFileSync(desiredHealthRoutePath(project), "utf8")).toContain(
+      "createFluxHealthHandler"
     );
     expect(fs.readFileSync(project.configPath, "utf8")).toContain(
       "defineFluxConfig"
@@ -84,6 +91,7 @@ describe("FluxFast init plan application", () => {
     );
     expect(fs.existsSync(project.configPath)).toBe(false);
     expect(fs.existsSync(desiredCatchAllPath(project))).toBe(false);
+    expect(fs.existsSync(desiredHealthRoutePath(project))).toBe(false);
     expect(fs.existsSync(desiredHomePagePath(project))).toBe(false);
     expect(fs.existsSync(project.registryPath)).toBe(false);
     expect(fs.readFileSync(nextConfigPath, "utf8")).toBe(originalConfig);
