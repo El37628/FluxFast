@@ -23,16 +23,19 @@ export default function DistributedLivePage() {
   const identity = useMemo(() => identityFromUrl(page.url), [page.url]);
   const counter = useResource("distributed-counter");
 
+  async function incrementOnAvailableWorker(): Promise<void> {
+    await router.mutate("/distributed-live/increment", identity);
+  }
+
   return (
     <main>
       <h1>Distributed live dashboard</h1>
       <p data-testid="distributed-live-status">{live.status}</p>
       <p data-testid="distributed-counter-value">{counter.value}</p>
+      <p data-testid="distributed-page-worker">{String(page.meta.worker ?? "")}</p>
       <button
         type="button"
-        onClick={() =>
-          void router.mutate("/distributed-live/increment", identity)
-        }
+        onClick={() => void incrementOnAvailableWorker()}
       >
         Increment distributed counter
       </button>
