@@ -142,15 +142,15 @@ function FluxNotFoundTimingAnchor() {
   return null;
 }
 
+const FluxNotFoundControl = React.lazy(() => notFound());
+
 function createNotFoundElement() {
   // React 19.2's development RSC profiler measures a rejected component with
-  // childrenEndTime = -Infinity (tracked as vercel/next.js#86060). Keep this
-  // control-flow component anonymous so React does not emit that invalid
-  // measurement. The completed sibling below still gives the fulfilled parent
-  // component a valid timing boundary.
-  return React.createElement(function (): never {
-    notFound();
-  });
+  // childrenEndTime = -Infinity (tracked as vercel/next.js#86060). A lazy
+  // control-flow boundary avoids attributing that rejection to a named server
+  // component. The completed sibling below still gives the fulfilled parent a
+  // valid timing boundary.
+  return React.createElement(FluxNotFoundControl);
 }
 
 export function createFluxNextPage(config: FluxNextConfig) {

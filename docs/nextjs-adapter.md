@@ -211,12 +211,12 @@ remain `unknown`, and explicit generic overrides remain supported.
 - If the initial envelope returns `404 Not Found`, confirm that FastAPI defines
   the requested path and that its `Page.component` exactly matches a registered
   `flux-pages` component such as `home/index`.
-- If Next development reports `Failed to execute 'measure' on 'Performance'`
-  with a negative timestamp while rendering a redirect or not-found page, this
-  is a confirmed [Next.js Turbopack development issue](https://github.com/vercel/next.js/issues/86060).
-  As a temporary workaround, set the frontend package script to
-  `"dev": "next dev --webpack"` and restart `fluxfast dev`. Do not patch the
-  browser Performance API; the issue does not affect the production build.
+- If an older `@fluxfast/next` version reports `Failed to execute 'measure' on
+  'Performance'` with a negative timestamp while rendering a redirect or
+  not-found page in development, upgrade the adapter. FluxFast avoids the
+  rejected server-component path affected by the confirmed
+  [Next.js development issue](https://github.com/vercel/next.js/issues/86060).
+  Do not patch the browser Performance API.
 - If the browser is calling a second port, remove an unnecessary `clientUrl`
   and start the application through `fluxfast dev`.
 
