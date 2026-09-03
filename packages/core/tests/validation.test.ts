@@ -315,7 +315,7 @@ describe("FluxFast validation runtime", () => {
     expect(() => createValidator({ kind: "string", pattern: "(?P<word>a+)" })).toThrow(
       /named capture groups/
     );
-    expect(() => createValidator({ kind: "string", pattern: "^a*a*a*a*b$" })).toThrow(
+    expect(() => createValidator({ kind: "string", pattern: "^a{1,3}b{1,3}$" })).toThrow(
       /multiple quantifiers/
     );
     expect(createValidator({ kind: "string", pattern: "^é+$" }).is("éé")).toBe(true);
