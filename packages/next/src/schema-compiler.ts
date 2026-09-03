@@ -1,4 +1,5 @@
 import {
+  type FluxFastMutationRouteSchema,
   type FluxFastSchemaManifest,
   type JsonSchema,
   type JsonValue,
@@ -97,7 +98,7 @@ function shortFingerprint(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function pascalIdentifier(value: string, fallback: string): string {
+export function pascalIdentifier(value: string, fallback: string): string {
   const words = value
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .match(/[A-Za-z0-9]+/g);
@@ -116,6 +117,29 @@ function pascalIdentifier(value: string, fallback: string): string {
 export function camelIdentifier(value: string): string {
   const identifier = pascalIdentifier(value, "ResourceKey");
   return `${identifier[0].toLowerCase()}${identifier.slice(1)}`;
+}
+
+/** Derive the same stable identifier used by generated mutation helpers. */
+export function mutationOperationIdentifier(
+  name: string,
+  method: string,
+  groupSize: number
+): string {
+  return groupSize > 1
+    ? camelIdentifier(`${name}_${method.toLowerCase()}`)
+    : camelIdentifier(name);
+}
+
+/** Derive the reusable generated contract name for one mutation body. */
+export function mutationBodyTypeName(
+  name: string,
+  method: string,
+  groupSize: number
+): string {
+  return `${pascalIdentifier(
+    mutationOperationIdentifier(name, method, groupSize),
+    "Mutation"
+  )}Body`;
 }
 
 /** Compile one validated JSON Schema as a self-contained TypeScript expression. */
@@ -528,6 +552,7 @@ class ResourceTypeCompiler {
   compile(): string {
     this.collectExplicitTypes();
     this.collectResources();
+    this.collectMutationBodies();
     const resources = [...this.resources].sort((left, right) =>
       compareText(left.context.resourceKey, right.context.resourceKey)
     );
@@ -687,6 +712,58 @@ class ResourceTypeCompiler {
         this.registerDefinition(rootType, schema, context, path);
       }
       this.resources.push({ context, name: alias, path, schema });
+    }
+  }
+
+  private collectMutationBodies(): void {
+    const mutations = this.manifest.mutations
+      .map((mutation, sourceIndex) => ({ mutation, sourceIndex }))
+      .filter(
+        (entry): entry is {
+          mutation: FluxFastMutationRouteSchema & { body: JsonSchema };
+          sourceIndex: number;
+        } => entry.mutation.body !== undefined && entry.mutation.body !== null
+      )
+      .sort(
+        (left, right) =>
+          compareText(left.mutation.name, right.mutation.name) ||
+          compareText(left.mutation.path, right.mutation.path) ||
+          compareText(left.mutation.method, right.mutation.method)
+      );
+    const groupSizes = new Map<string, number>();
+    for (const { mutation } of mutations) {
+      const key = `${mutation.name}\u0000${mutation.path}`;
+      groupSizes.set(key, (groupSizes.get(key) ?? 0) + 1);
+    }
+    const bodyNames = new Map<string, string>();
+
+    for (const { mutation, sourceIndex } of mutations) {
+      const groupKey = `${mutation.name}\u0000${mutation.path}`;
+      const bodyName = mutationBodyTypeName(
+        mutation.name,
+        mutation.method,
+        groupSizes.get(groupKey)!
+      );
+      const bodyPath = `$.mutations[${sourceIndex}].body`;
+      const existing = bodyNames.get(bodyName);
+      if (existing) {
+        fail(
+          bodyPath,
+          `mutation body ${JSON.stringify(mutation.name)} collides with ${JSON.stringify(
+            existing
+          )} as TypeScript name ${bodyName}`
+        );
+      }
+      bodyNames.set(bodyName, mutation.name);
+
+      const context: CompilationContext = {
+        references: new Map(),
+        resourceAlias: bodyName,
+        resourceKey: mutation.name,
+        rootType: bodyName
+      };
+      this.collectDefinitions(mutation.body, context, bodyPath);
+      this.registerDefinition(bodyName, mutation.body, context, bodyPath);
     }
   }
 

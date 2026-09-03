@@ -5,8 +5,9 @@ import {
   validateFluxFastSchemaManifest
 } from "./schema-manifest";
 import {
-  camelIdentifier,
   compileInlineJsonSchemaType,
+  mutationBodyTypeName,
+  mutationOperationIdentifier,
   SchemaCompilationError
 } from "./schema-compiler";
 
@@ -15,6 +16,7 @@ interface TypedMutationRouteSchema extends FluxFastMutationRouteSchema {
 }
 
 interface MutationOperation {
+  bodyTypeName: string;
   identifier: string;
   mutation: TypedMutationRouteSchema;
   sourceIndex: number;
@@ -88,7 +90,13 @@ class MutationCompiler {
   search.append(key, String(value));
 }`;
     const entries = operations.map(operation => this.renderOperation(operation));
-    return `${header.join("\n")}\n\nimport type { FluxRouter, MutationEnvelope } from "@fluxfast/core";\n\n${helper}\n\nexport const mutations = {\n${entries.join("\n")}\n} as const;\n`;
+    const bodyTypes = [...new Set(operations.map(operation => operation.bodyTypeName))]
+      .sort(compareText);
+    const imports = [
+      "import type { FluxRouter, MutationEnvelope } from \"@fluxfast/core\";",
+      `import type { ${bodyTypes.join(", ")} } from \"./types.generated\";`
+    ].join("\n");
+    return `${header.join("\n")}\n\n${imports}\n\n${helper}\n\nexport const mutations = {\n${entries.join("\n")}\n} as const;\n`;
   }
 
   private collectOperations(): MutationOperation[] {
@@ -114,9 +122,17 @@ class MutationCompiler {
     const identifiers = new Map<string, TypedMutationRouteSchema>();
     return mutations.map(({ mutation, sourceIndex }) => {
       const groupKey = `${mutation.name}\u0000${mutation.path}`;
-      const identifier = groupSizes.get(groupKey)! > 1
-        ? camelIdentifier(`${mutation.name}_${mutation.method.toLowerCase()}`)
-        : camelIdentifier(mutation.name);
+      const groupSize = groupSizes.get(groupKey)!;
+      const identifier = mutationOperationIdentifier(
+        mutation.name,
+        mutation.method,
+        groupSize
+      );
+      const bodyTypeName = mutationBodyTypeName(
+        mutation.name,
+        mutation.method,
+        groupSize
+      );
       const existing = identifiers.get(identifier);
       if (existing) {
         fail(
@@ -128,7 +144,7 @@ class MutationCompiler {
       }
       identifiers.set(identifier, mutation);
       this.validatePlaceholders(mutation, sourceIndex);
-      return { identifier, mutation, sourceIndex };
+      return { bodyTypeName, identifier, mutation, sourceIndex };
     });
   }
 
@@ -179,7 +195,8 @@ class MutationCompiler {
       mutation,
       pathParameters,
       queryParameters,
-      mutationPath
+      mutationPath,
+      operation.bodyTypeName
     );
     const body = [`    let path = ${JSON.stringify(mutation.path)};`];
     const routePlaceholders = placeholders(mutation.path);
@@ -211,7 +228,8 @@ class MutationCompiler {
     mutation: TypedMutationRouteSchema,
     pathParameters: FluxFastRouteParameterSchema[],
     queryParameters: FluxFastRouteParameterSchema[],
-    mutationPath: string
+    mutationPath: string,
+    bodyTypeName: string
   ): string {
     const entries: string[] = [];
     if (pathParameters.length > 0) {
@@ -237,12 +255,7 @@ class MutationCompiler {
         `  query${queryRequired ? "" : "?"}: {\n${parameterEntries.join("\n")}\n  };`
       );
     }
-    entries.push(
-      `  body: ${compileInlineJsonSchemaType(
-        mutation.body,
-        `${mutationPath}.body`
-      )};`
-    );
+    entries.push(`  body: ${bodyTypeName};`);
     return `{\n${entries.join("\n")}\n}`;
   }
 }

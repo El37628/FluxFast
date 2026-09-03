@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { compileFluxFastMutations } from "../src/mutation-compiler";
+import { compileFluxFastTypes } from "../src/schema-compiler";
 
 const fingerprint = "d".repeat(64);
 
@@ -21,14 +22,19 @@ function manifest(mutations: unknown[]) {
 function compileAndRun(
   source: string,
   consumer: string,
-  evaluation: string
+  evaluation: string,
+  typesSource?: string
 ): string {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-mutations-"));
   const sourceFile = path.join(directory, "mutations.generated.ts");
+  const typesFile = path.join(directory, "types.generated.ts");
   const consumerFile = path.join(directory, "consumer.ts");
   const configFile = path.join(directory, "tsconfig.json");
   const outputDirectory = path.join(directory, "dist");
   fs.writeFileSync(sourceFile, source, "utf8");
+  if (typesSource !== undefined) {
+    fs.writeFileSync(typesFile, typesSource, "utf8");
+  }
   fs.writeFileSync(consumerFile, consumer, "utf8");
   fs.writeFileSync(
     configFile,
@@ -48,7 +54,9 @@ function compileAndRun(
           ]
         }
       },
-      files: [sourceFile, consumerFile]
+      files: typesSource === undefined
+        ? [sourceFile, consumerFile]
+        : [sourceFile, typesFile, consumerFile]
     }, null, 2)}\n`,
     "utf8"
   );
@@ -139,12 +147,19 @@ function updateRoom(method = "PATCH") {
 
 describe("FluxFast mutation compiler", () => {
   it("generates typed FluxRouter helpers with encoded paths and queries", () => {
-    const output = compileFluxFastMutations(manifest([updateRoom()]));
+    const inputManifest = manifest([updateRoom()]);
+    const output = compileFluxFastMutations(inputManifest);
+    const types = compileFluxFastTypes(inputManifest);
     expect(output).toContain("updateRoom: (");
     expect(output).toContain("router: FluxRouter");
     expect(output).toContain("room_id: number;");
     expect(output).toContain("notify?: boolean;");
-    expect(output).toContain('status: "available" | "occupied";');
+    expect(output).toContain("body: UpdateRoomBody;");
+    expect(output).toContain(
+      'import type { UpdateRoomBody } from "./types.generated";'
+    );
+    expect(types).toContain("export type UpdateRoomBody = UpdateRoom;");
+    expect(types).toContain('status: "available" | "occupied";');
     expect(output).toContain('{ method: "PATCH" }');
 
     const consumer = `import type { FluxRouter } from "@fluxfast/core";
@@ -176,7 +191,8 @@ mutations.updateRoom(router, {
   params: { room_id: 101 },
   query: { notify: true },
   body: { status: "occupied", note: "a&b" }
-}).then(() => process.stdout.write(JSON.stringify(calls)));`
+}).then(() => process.stdout.write(JSON.stringify(calls)));`,
+      types
     );
     expect(JSON.parse(stdout)).toEqual([
       [
@@ -188,28 +204,32 @@ mutations.updateRoom(router, {
   });
 
   it("suffixes multi-method operations and omits non-JSON mutations", () => {
-    const output = compileFluxFastMutations(
-      manifest([
-        { ...updateRoom("PUT"), name: "save_room" },
-        { ...updateRoom("PATCH"), name: "save_room" },
-        {
-          name: "upload_room_photo",
-          path: "/rooms/{room_id}/photo",
-          method: "POST",
-          parameters: [
-            {
-              name: "room_id",
-              location: "path",
-              required: true,
-              schema: { type: "integer" }
-            }
-          ],
-          body: null
-        }
-      ])
-    );
+    const inputManifest = manifest([
+      { ...updateRoom("PUT"), name: "save_room" },
+      { ...updateRoom("PATCH"), name: "save_room" },
+      {
+        name: "upload_room_photo",
+        path: "/rooms/{room_id}/photo",
+        method: "POST",
+        parameters: [
+          {
+            name: "room_id",
+            location: "path",
+            required: true,
+            schema: { type: "integer" }
+          }
+        ],
+        body: null
+      }
+    ]);
+    const output = compileFluxFastMutations(inputManifest);
+    const types = compileFluxFastTypes(inputManifest);
     expect(output).toContain("saveRoomPatch: (");
     expect(output).toContain("saveRoomPut: (");
+    expect(output).toContain("body: SaveRoomPatchBody;");
+    expect(output).toContain("body: SaveRoomPutBody;");
+    expect(types).toContain("export type SaveRoomPatchBody = UpdateRoom;");
+    expect(types).toContain("export type SaveRoomPutBody = UpdateRoom;");
     expect(output).not.toContain("uploadRoomPhoto");
     expect(output.indexOf("saveRoomPatch:")).toBeLessThan(
       output.indexOf("saveRoomPut:")
@@ -245,29 +265,29 @@ mutations.updateRoom(router, {
   it("treats hostile mutation names, paths, and query keys as data", () => {
     const queryName = 'q");globalThis.compromised=true;//';
     const staticPath = '/rooms/";globalThis.compromised=true;/{room_id}';
-    const output = compileFluxFastMutations(
-      manifest([
-        {
-          ...updateRoom(),
-          name: 'update"); globalThis.compromised = true; //',
-          path: staticPath,
-          parameters: [
-            {
-              name: "room_id",
-              location: "path",
-              required: true,
-              schema: { type: "integer" }
-            },
-            {
-              name: queryName,
-              location: "query",
-              required: true,
-              schema: { type: "string" }
-            }
-          ]
-        }
-      ])
-    );
+    const inputManifest = manifest([
+      {
+        ...updateRoom(),
+        name: 'update"); globalThis.compromised = true; //',
+        path: staticPath,
+        parameters: [
+          {
+            name: "room_id",
+            location: "path",
+            required: true,
+            schema: { type: "integer" }
+          },
+          {
+            name: queryName,
+            location: "query",
+            required: true,
+            schema: { type: "string" }
+          }
+        ]
+      }
+    ]);
+    const output = compileFluxFastMutations(inputManifest);
+    const types = compileFluxFastTypes(inputManifest);
     expect(output).toContain("updateGlobalThisCompromisedTrue:");
 
     const consumer = `import type { FluxRouter } from "@fluxfast/core";
@@ -295,7 +315,8 @@ mutations.updateGlobalThisCompromisedTrue(router, {
   params: { room_id: 7 },
   query: { [${JSON.stringify(queryName)}]: "a&b" },
   body: { status: "available" }
-}).then(() => process.stdout.write(JSON.stringify([calls, globalThis.compromised])));`
+}).then(() => process.stdout.write(JSON.stringify([calls, globalThis.compromised])));`,
+      types
     );
     const query = new URLSearchParams([[queryName, "a&b"]]).toString();
     expect(JSON.parse(stdout)).toEqual([

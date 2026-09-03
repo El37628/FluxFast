@@ -20,7 +20,8 @@ function manifest(resources: Record<string, { schema: Record<string, unknown> }>
 
 function schema2Manifest(
   types: Record<string, { mode: "serialization" | "validation"; schema: Record<string, unknown> }>,
-  resources: Record<string, { schema: Record<string, unknown> }> = {}
+  resources: Record<string, { schema: Record<string, unknown> }> = {},
+  mutations: unknown[] = []
 ) {
   return {
     schema: "fluxfast-schema/2",
@@ -29,7 +30,7 @@ function schema2Manifest(
     types,
     resources,
     pages: [],
-    mutations: []
+    mutations
   };
 }
 
@@ -104,6 +105,56 @@ describe("FluxFast JSON Schema compiler", () => {
     expect(output).toContain("id: number;");
     expect(output).toContain("name: string;");
     expect(output).not.toContain("ServerUserTitleMustNotOverrideExplicitName");
+  });
+
+  it("emits reusable mutation body contracts and reuses compatible explicit types", () => {
+    const body = {
+      type: "object",
+      properties: { number: { type: "string" } },
+      required: ["number"]
+    };
+    const output = compileFluxFastResourceTypes(
+      schema2Manifest(
+        {
+          CreateRoomBody: { mode: "validation", schema: body }
+        },
+        {},
+        [
+          {
+            name: "create_room",
+            path: "/rooms",
+            method: "POST",
+            parameters: [],
+            body
+          }
+        ]
+      )
+    );
+
+    expect(output.match(/export interface CreateRoomBody/g)).toHaveLength(1);
+    expect(output).toContain("number: string;");
+  });
+
+  it("rejects an incompatible explicit type and mutation body collision", () => {
+    expect(() =>
+      compileFluxFastResourceTypes(
+        schema2Manifest(
+          {
+            CreateRoomBody: { mode: "validation", schema: { type: "string" } }
+          },
+          {},
+          [
+            {
+              name: "create_room",
+              path: "/rooms",
+              method: "POST",
+              parameters: [],
+              body: { type: "object", properties: {} }
+            }
+          ]
+        )
+      )
+    ).toThrow(/model name CreateRoomBody collides with an incompatible definition/);
   });
 
   it("rejects normalized explicit-name collisions and incompatible graph definitions", () => {
