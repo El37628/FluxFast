@@ -26,6 +26,7 @@ COPY tests/browser/frontend/package.json tests/browser/frontend/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY packages packages
+COPY scripts/write-esm-package.mjs scripts/write-esm-package.mjs
 COPY python/fluxfast python/fluxfast
 COPY tests/browser/backend.py tests/browser/backend.py
 COPY tests/browser/distributed_backend.py tests/browser/distributed_backend.py
