@@ -85,8 +85,16 @@ const MUTATION_METHODS = new Set<FluxFastMutationMethod>([
 
 type UnknownRecord = Record<string, unknown>;
 
-const MAX_SCHEMA_VALUE_NODES = 10_000;
+const MAX_SCHEMA_VALUE_COUNT = 100_000;
+const MAX_SCHEMA_VALUE_CONTAINERS = 10_000;
+const MAX_SCHEMA_VALUE_CHILDREN = 10_000;
 const MAX_SCHEMA_VALUE_DEPTH = 64;
+const MAX_SCHEMA_VALUE_STRING_LENGTH = 65_536;
+
+interface SchemaValueBudget {
+  values: number;
+  containers: number;
+}
 
 function fail(path: string, reason: string): never {
   throw new SchemaManifestValidationError(path, reason);
@@ -166,24 +174,42 @@ function assertRoutePath(value: unknown, path: string): asserts value is string 
   }
 }
 
-function assertJsonSchema(value: unknown, path: string): asserts value is JsonSchema {
+function assertJsonSchema(
+  value: unknown,
+  path: string,
+  budget: SchemaValueBudget
+): asserts value is JsonSchema {
   assertRecord(value, path);
 
   const pending: Array<{ path: string; value: unknown; depth: number }> = [
     { path, value, depth: 0 }
   ];
   const visited = new WeakSet<object>();
-  let nodes = 0;
-
   while (pending.length > 0) {
     const current = pending.pop()!;
     const item = current.value;
+    budget.values += 1;
+    if (budget.values > MAX_SCHEMA_VALUE_COUNT) {
+      fail(
+        current.path,
+        `schemas must not contain more than ${MAX_SCHEMA_VALUE_COUNT} JSON values`
+      );
+    }
 
     if (
       item === null ||
       typeof item === "string" ||
       typeof item === "boolean"
     ) {
+      if (
+        typeof item === "string" &&
+        item.length > MAX_SCHEMA_VALUE_STRING_LENGTH
+      ) {
+        fail(
+          current.path,
+          `must not contain strings longer than ${MAX_SCHEMA_VALUE_STRING_LENGTH} characters`
+        );
+      }
       continue;
     }
     if (current.depth > MAX_SCHEMA_VALUE_DEPTH) {
@@ -208,19 +234,19 @@ function assertJsonSchema(value: unknown, path: string): asserts value is JsonSc
       fail(current.path, "must not contain circular or shared object references");
     }
     visited.add(item);
-    nodes += 1;
-    if (nodes > MAX_SCHEMA_VALUE_NODES) {
+    budget.containers += 1;
+    if (budget.containers > MAX_SCHEMA_VALUE_CONTAINERS) {
       fail(
         current.path,
-        `must not contain more than ${MAX_SCHEMA_VALUE_NODES} JSON value nodes`
+        `schemas must not contain more than ${MAX_SCHEMA_VALUE_CONTAINERS} JSON containers`
       );
     }
 
     if (Array.isArray(item)) {
-      if (item.length > MAX_SCHEMA_VALUE_NODES) {
+      if (item.length > MAX_SCHEMA_VALUE_CHILDREN) {
         fail(
           current.path,
-          `must not contain arrays with more than ${MAX_SCHEMA_VALUE_NODES} entries`
+          `must not contain arrays with more than ${MAX_SCHEMA_VALUE_CHILDREN} entries`
         );
       }
       for (let index = item.length - 1; index >= 0; index -= 1) {
@@ -235,13 +261,19 @@ function assertJsonSchema(value: unknown, path: string): asserts value is JsonSc
 
     assertRecord(item, current.path);
     const keys = Object.keys(item);
-    if (keys.length > MAX_SCHEMA_VALUE_NODES) {
+    if (keys.length > MAX_SCHEMA_VALUE_CHILDREN) {
       fail(
         current.path,
-        `must not contain objects with more than ${MAX_SCHEMA_VALUE_NODES} properties`
+        `must not contain objects with more than ${MAX_SCHEMA_VALUE_CHILDREN} properties`
       );
     }
     for (const key of keys) {
+      if (key.length > MAX_SCHEMA_VALUE_STRING_LENGTH) {
+        fail(
+          childPath(current.path, key),
+          `must not contain strings longer than ${MAX_SCHEMA_VALUE_STRING_LENGTH} characters`
+        );
+      }
       pending.push({
         path: childPath(current.path, key),
         value: item[key],
@@ -446,7 +478,8 @@ function assertResourceKey(value: string, path: string): void {
 
 function validateParameter(
   value: unknown,
-  path: string
+  path: string,
+  budget: SchemaValueBudget
 ): asserts value is FluxFastRouteParameterSchema {
   assertRecord(value, path);
   assertExactKeys(value, path, ["name", "location", "required", "schema"]);
@@ -460,12 +493,13 @@ function validateParameter(
   if (value.location === "path" && !value.required) {
     fail(`${path}.required`, "must be true for path parameters");
   }
-  assertJsonSchema(value.schema, `${path}.schema`);
+  assertJsonSchema(value.schema, `${path}.schema`, budget);
 }
 
 function validateParameters(
   value: unknown,
-  path: string
+  path: string,
+  budget: SchemaValueBudget
 ): FluxFastRouteParameterSchema[] {
   if (!Array.isArray(value)) {
     fail(path, `must be an array; received ${valueDescription(value)}`);
@@ -474,7 +508,7 @@ function validateParameters(
   for (let index = 0; index < value.length; index += 1) {
     const parameterPath = `${path}[${index}]`;
     const parameter = value[index];
-    validateParameter(parameter, parameterPath);
+    validateParameter(parameter, parameterPath, budget);
     const identity = `${parameter.location}\u0000${parameter.name}`;
     if (identities.has(identity)) {
       fail(
@@ -489,7 +523,8 @@ function validateParameters(
 
 function validateResources(
   value: unknown,
-  path: string
+  path: string,
+  budget: SchemaValueBudget
 ): asserts value is Record<string, FluxFastResourceSchemaEntry> {
   assertRecord(value, path);
   for (const key of Object.keys(value)) {
@@ -498,13 +533,14 @@ function validateResources(
     const entry = value[key];
     assertRecord(entry, resourcePath);
     assertExactKeys(entry, resourcePath, ["schema"]);
-    assertJsonSchema(entry.schema, `${resourcePath}.schema`);
+    assertJsonSchema(entry.schema, `${resourcePath}.schema`, budget);
   }
 }
 
 function validateTypes(
   value: unknown,
-  path: string
+  path: string,
+  budget: SchemaValueBudget
 ): asserts value is Record<string, FluxFastTypeSchemaEntry> {
   assertRecord(value, path);
   for (const key of Object.keys(value)) {
@@ -519,13 +555,14 @@ function validateTypes(
         'must be either "serialization" or "validation"'
       );
     }
-    assertJsonSchema(entry.schema, `${typePath}.schema`);
+    assertJsonSchema(entry.schema, `${typePath}.schema`, budget);
   }
 }
 
 function validatePages(
   value: unknown,
-  path: string
+  path: string,
+  budget: SchemaValueBudget
 ): asserts value is FluxFastPageRouteSchema[] {
   if (!Array.isArray(value)) {
     fail(path, `must be an array; received ${valueDescription(value)}`);
@@ -537,13 +574,14 @@ function validatePages(
     assertExactKeys(page, pagePath, ["name", "path", "parameters"]);
     assertMetadataName(page.name, `${pagePath}.name`);
     assertRoutePath(page.path, `${pagePath}.path`);
-    validateParameters(page.parameters, `${pagePath}.parameters`);
+    validateParameters(page.parameters, `${pagePath}.parameters`, budget);
   }
 }
 
 function validateMutations(
   value: unknown,
-  path: string
+  path: string,
+  budget: SchemaValueBudget
 ): asserts value is FluxFastMutationRouteSchema[] {
   if (!Array.isArray(value)) {
     fail(path, `must be an array; received ${valueDescription(value)}`);
@@ -569,9 +607,9 @@ function validateMutations(
         'must be one of "DELETE", "PATCH", "POST", or "PUT"'
       );
     }
-    validateParameters(mutation.parameters, `${mutationPath}.parameters`);
+    validateParameters(mutation.parameters, `${mutationPath}.parameters`, budget);
     if (mutation.body !== undefined && mutation.body !== null) {
-      assertJsonSchema(mutation.body, `${mutationPath}.body`);
+      assertJsonSchema(mutation.body, `${mutationPath}.body`, budget);
     }
   }
 }
@@ -610,7 +648,6 @@ export function validateFluxFastSchemaManifest(
     if (value.types === undefined) {
       fail("$.types", "is required for fluxfast-schema/2");
     }
-    validateTypes(value.types, "$.types");
   }
 
   assertString(value.producer, "$.producer");
@@ -623,9 +660,13 @@ export function validateFluxFastSchemaManifest(
     fail("$.fingerprint", "must be a lowercase SHA-256 digest");
   }
 
-  validateResources(value.resources, "$.resources");
-  validatePages(value.pages, "$.pages");
-  validateMutations(value.mutations, "$.mutations");
+  const schemaBudget: SchemaValueBudget = { values: 0, containers: 0 };
+  if (value.schema === FLUXFAST_SCHEMA_MANIFEST_V2) {
+    validateTypes(value.types, "$.types", schemaBudget);
+  }
+  validateResources(value.resources, "$.resources", schemaBudget);
+  validatePages(value.pages, "$.pages", schemaBudget);
+  validateMutations(value.mutations, "$.mutations", schemaBudget);
 
   return value as unknown as FluxFastSchemaManifest;
 }

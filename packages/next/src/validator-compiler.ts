@@ -251,8 +251,10 @@ const SUBSCHEMA_KEYS = new Set([
 ]);
 
 const MAX_SCHEMA_NODES = 10_000;
+const MAX_SCHEMA_VALUES = 100_000;
 const MAX_SCHEMA_DEPTH = 64;
 const MAX_ROOT_CONTRACTS = 10_000;
+const MAX_SCHEMA_STRING_LENGTH = 65_536;
 
 const SUPPORTED_FORMATS = new Set([
   "date",
@@ -273,6 +275,7 @@ interface SchemaWorkItem {
 
 interface SchemaBoundsState {
   nodes: number;
+  values: number;
 }
 
 interface JsonValueWorkItem {
@@ -292,6 +295,13 @@ function assertJsonValueBounds(
 
   while (pending.length > 0) {
     const current = pending.pop()!;
+    state.values += 1;
+    if (state.values > MAX_SCHEMA_VALUES) {
+      fail(
+        current.path,
+        `schema contains more than ${MAX_SCHEMA_VALUES} JSON values`
+      );
+    }
     const item = current.value;
     if (
       item === null ||
@@ -299,6 +309,15 @@ function assertJsonValueBounds(
       typeof item === "number" ||
       typeof item === "boolean"
     ) {
+      if (
+        typeof item === "string" &&
+        item.length > MAX_SCHEMA_STRING_LENGTH
+      ) {
+        fail(
+          current.path,
+          `schema values contain strings longer than ${MAX_SCHEMA_STRING_LENGTH} characters`
+        );
+      }
       continue;
     }
     if (current.depth > MAX_SCHEMA_DEPTH) {
@@ -353,6 +372,12 @@ function assertJsonValueBounds(
     }
     for (let index = keys.length - 1; index >= 0; index -= 1) {
       const key = keys[index];
+      if (key.length > MAX_SCHEMA_STRING_LENGTH) {
+        fail(
+          childPath(current.path, key),
+          `schema values contain strings longer than ${MAX_SCHEMA_STRING_LENGTH} characters`
+        );
+      }
       pending.push({
         value: item[key],
         path: childPath(current.path, key),
@@ -367,13 +392,23 @@ function assertJsonValueBounds(
  * manifest is developer-authored, but generated code must fail with a stable
  * diagnostic rather than overflowing the call stack on an adversarial schema.
  */
-function assertSchemaBounds(schema: SchemaNode, path: string): void {
+function assertSchemaBounds(
+  schema: SchemaNode,
+  path: string,
+  state: SchemaBoundsState = { nodes: 0, values: 0 }
+): void {
   const pending: SchemaWorkItem[] = [{ schema, path, depth: 0 }];
   const visited = new WeakSet<object>();
-  const state: SchemaBoundsState = { nodes: 0 };
 
   while (pending.length > 0) {
     const current = pending.pop()!;
+    state.values += 1;
+    if (state.values > MAX_SCHEMA_VALUES) {
+      fail(
+        current.path,
+        `schema contains more than ${MAX_SCHEMA_VALUES} JSON values`
+      );
+    }
     if (current.depth > MAX_SCHEMA_DEPTH) {
       fail(
         current.path,
@@ -405,6 +440,12 @@ function assertSchemaBounds(schema: SchemaNode, path: string): void {
       );
     }
     for (const key of keys) {
+      if (key.length > MAX_SCHEMA_STRING_LENGTH) {
+        fail(
+          childPath(current.path, key),
+          `schema values contain strings longer than ${MAX_SCHEMA_STRING_LENGTH} characters`
+        );
+      }
       if (!SUBSCHEMA_KEYS.has(key)) {
         if (Object.prototype.hasOwnProperty.call(record, key)) {
           assertJsonValueBounds(
@@ -1136,8 +1177,9 @@ function compileContracts(
       `manifest contains more than ${MAX_ROOT_CONTRACTS} validator contracts`
     );
   }
+  const bounds: SchemaBoundsState = { nodes: 0, values: 0 };
   for (const contract of rootContracts) {
-    assertSchemaBounds(contract.schema, contract.path);
+    assertSchemaBounds(contract.schema, contract.path, bounds);
     const existing = contracts.get(contract.name);
     if (
       existing &&

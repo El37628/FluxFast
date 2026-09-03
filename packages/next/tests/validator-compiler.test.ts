@@ -393,7 +393,44 @@ describe("FluxFast validator compiler", () => {
           }
         })
       )
-    ).toThrow(/schema value nesting exceeds the maximum/);
+      ).toThrow(/schema value nesting exceeds the maximum/);
+  });
+
+  it("enforces aggregate schema-value and scalar-length limits", () => {
+    const values = Array.from({ length: 1_000 }, () =>
+      Array.from({ length: 100 }, (_, index) => index)
+    );
+    expect(() =>
+      compileJsonSchemaToValidationPlan({
+        type: "array",
+        enum: values
+      } as Record<string, unknown>)
+    ).toThrow(/schema contains more than 100000 JSON values/);
+
+    expect(() =>
+      compileJsonSchemaToValidationPlan({
+        type: "string",
+        const: "x".repeat(65_537)
+      } as Record<string, unknown>)
+    ).toThrow(/strings longer than 65536 characters/);
+  });
+
+  it("shares the schema-value budget across manifest contracts", () => {
+    const resources = Object.fromEntries(
+      Array.from({ length: 50 }, (_, resourceIndex) => [
+        `resource-${resourceIndex}`,
+        {
+          schema: {
+            type: "array",
+            enum: Array.from({ length: 2_000 }, (_, value) => value)
+          }
+        }
+      ])
+    );
+
+    expect(() => compileFluxFastValidators(manifest(resources))).toThrow(
+      /schemas must not contain more than 100000 JSON values/
+    );
   });
 
   it("supports schema/1 and remains byte-for-byte deterministic", () => {
