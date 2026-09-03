@@ -143,7 +143,12 @@ describe("FluxFast validation runtime", () => {
     expect(createValidator({ kind: "string", format: "date" }).is("2024-02-29")).toBe(true);
     expect(createValidator({ kind: "string", format: "date" }).is("2023-02-29")).toBe(false);
     expect(createValidator({ kind: "string", format: "date-time" }).is("2024-02-29T12:30:00Z")).toBe(true);
+    expect(createValidator({ kind: "string", format: "date-time" }).is("2024-02-29T12:30")).toBe(true);
+    expect(createValidator({ kind: "string", format: "date-time" }).is("2024-02-29T12:30:00")).toBe(true);
+    expect(createValidator({ kind: "string", format: "time" }).is("12:30")).toBe(true);
+    expect(createValidator({ kind: "string", format: "time" }).is("12:30:00")).toBe(true);
     expect(createValidator({ kind: "string", format: "time" }).is("12:30:00+00:00")).toBe(true);
+    expect(createValidator({ kind: "string", format: "time" }).is("24:00")).toBe(false);
     expect(createValidator({ kind: "string", format: "uri" }).is("https://example.com/rooms")).toBe(true);
     expect(createValidator({ kind: "string", format: "ipv4" }).is("192.168.1.1")).toBe(true);
     expect(createValidator({ kind: "string", format: "ipv6" }).is("2001:db8::1")).toBe(true);
@@ -218,6 +223,94 @@ describe("FluxFast validation runtime", () => {
     const result = many.validate({});
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.issues).toHaveLength(2);
+
+    const bounded = createValidator(
+      { kind: "array", items: { kind: "integer" } },
+      { maxOperations: 4 }
+    );
+    const boundedResult = bounded.validate([1, 2, 3, 4]);
+    expect(boundedResult.valid).toBe(false);
+    expect(boundedResult.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "maxOperations" })])
+    );
+    expect(() => createValidator({ kind: "any" }, { maxOperations: 0 })).toThrow(
+      /maxOperations must be a positive integer/
+    );
+  });
+
+  it("does not throw for hostile object, array, revoked, or enumeration proxies", () => {
+    const objectValidator = createValidator({
+      kind: "object",
+      properties: { value: { kind: "string" } },
+      required: ["value"]
+    });
+    const throwingDescriptor = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error("descriptor trap");
+        }
+      }
+    );
+    expect(() => objectValidator.validate(throwingDescriptor)).not.toThrow();
+    expect(objectValidator.validate(throwingDescriptor)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ code: "read" })])
+    });
+
+    const throwingKeys = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("keys trap");
+        }
+      }
+    );
+    expect(() => objectValidator.validate(throwingKeys)).not.toThrow();
+    expect(objectValidator.validate(throwingKeys)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ code: "read" })])
+    });
+
+    const arrayValidator = createValidator({
+      kind: "array",
+      items: { kind: "string" }
+    });
+    const throwingIndex = new Proxy(["ok"], {
+      get(target, property, receiver) {
+        if (property === "0") throw new Error("index trap");
+        return Reflect.get(target, property, receiver);
+      }
+    });
+    expect(() => arrayValidator.validate(throwingIndex)).not.toThrow();
+    expect(arrayValidator.validate(throwingIndex)).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ path: [0], code: "read" })]
+    });
+
+    const revoked = Proxy.revocable([], {});
+    revoked.revoke();
+    expect(() => arrayValidator.validate(revoked.proxy)).not.toThrow();
+  });
+
+  it("uses exact multipleOf checks for safe integers and decimal boundaries", () => {
+    const even = createValidator({ kind: "number", multipleOf: 2 });
+    expect(even.is(Number.MAX_SAFE_INTEGER)).toBe(false);
+    expect(even.is(Number.MAX_SAFE_INTEGER - 1)).toBe(true);
+
+    const tenth = createValidator({ kind: "number", multipleOf: 0.1 });
+    expect(tenth.is(0.3)).toBe(true);
+    expect(tenth.is(0.30000000000000004)).toBe(false);
+  });
+
+  it("rejects unsafe or non-portable patterns before runtime evaluation", () => {
+    expect(() => createValidator({ kind: "string", pattern: "^(a+)+$" })).toThrow(
+      /quantified groups/
+    );
+    expect(() => createValidator({ kind: "string", pattern: "^\\w+$" })).toThrow(
+      /escape whose semantics are not portable/
+    );
+    expect(createValidator({ kind: "string", pattern: "^é+$" }).is("éé")).toBe(true);
   });
 
   it("rejects malformed or unsupported plans instead of silently dropping rules", () => {

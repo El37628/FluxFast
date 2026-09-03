@@ -13,6 +13,35 @@ export const VALIDATION_FORMATS = [
 
 export type ValidationFormat = (typeof VALIDATION_FORMATS)[number];
 
+/** Maximum pattern source accepted by the native validator. */
+export const VALIDATION_PATTERN_MAX_LENGTH = 8192;
+
+/**
+ * Return a diagnostic for a pattern that cannot be safely translated to the
+ * native JavaScript runtime, or `undefined` when it is in the supported
+ * subset. Patterns are authored by trusted developers but run against
+ * hostile input, so the subset deliberately excludes constructs with
+ * cross-engine semantics or common backtracking hazards.
+ */
+export function validationPatternError(pattern: string): string | undefined {
+  if (pattern.length > VALIDATION_PATTERN_MAX_LENGTH) {
+    return `pattern is too long (maximum ${VALIDATION_PATTERN_MAX_LENGTH} characters)`;
+  }
+  if (/\\(?:[0-9]|k<|[wWdDsSpPbBAZ])/.test(pattern)) {
+    return "pattern uses a regex escape whose semantics are not portable to the native validator";
+  }
+  if (/\\p\{/.test(pattern)) {
+    return "Unicode property escapes are not supported by the native validator";
+  }
+  if (/\(\?(?:[=!]|<[=!]|[a-zA-Z-]+(?:\)|:|=|!))/.test(pattern)) {
+    return "lookaround or inline regex flags are not supported by the native validator";
+  }
+  if (/\)(?:[*+?]|\{\d+(?:,\d*)?\})(?:[?+])?/.test(pattern)) {
+    return "quantified groups are rejected to keep validation traversal bounded";
+  }
+  return undefined;
+}
+
 const SUPPORTED_FORMATS = new Set<string>(VALIDATION_FORMATS);
 
 export function isSupportedValidationFormat(
@@ -50,15 +79,15 @@ function isValidDateParts(
 }
 
 const DATE_PATTERN = /^(\d{4,})-(\d{2})-(\d{2})$/;
-const TIME_PATTERN = /^(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
-const DATE_TIME_PATTERN = /^(\d{4,})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const TIME_PATTERN = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
+const DATE_TIME_PATTERN = /^(\d{4,})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
 
 function isValidTime(value: string, requireZone: boolean): boolean {
   const match = TIME_PATTERN.exec(value);
   if (!match) return false;
-  const [, hours, minutes, seconds, zone] = match;
+  const [, hours, minutes, seconds = "00", zone] = match;
   const validClock =
-    Number(hours) <= 23 && Number(minutes) <= 59 && Number(seconds) <= 60;
+    Number(hours) <= 23 && Number(minutes) <= 59 && Number(seconds) <= 59;
   if (!validClock) return false;
   if (requireZone && !zone) return false;
   if (!zone || zone === "Z") return true;
@@ -78,8 +107,8 @@ function isValidDateTime(value: string): boolean {
   return (
     isValidDateParts(match[1], match[2], match[3]) &&
     isValidTime(
-      `${match[4]}:${match[5]}:${match[6]}${match[7]}`,
-      true
+      `${match[4]}:${match[5]}${match[6] ? `:${match[6]}` : ""}${match[7] ?? ""}`,
+      false
     )
   );
 }
@@ -194,7 +223,7 @@ export function validateValidationFormat(
     case "ipv6":
       return isValidIpv6(value);
     case "time":
-      return isValidTime(value, true);
+      return isValidTime(value, false);
     case "uri":
       return isValidUri(value);
     case "uuid":
