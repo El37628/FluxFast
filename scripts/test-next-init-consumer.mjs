@@ -311,13 +311,15 @@ function assertTypedConsumerArtifacts() {
   assert.match(types, /interface Analytics/);
   assert.match(types, /liveCounter: "live-counter"/);
   assert.match(types, /interface FluxResourceMap/);
+  assert.match(types, /interface IncrementBody/);
+  assert.match(types, /amount: number/);
 
   const mutations = fs.readFileSync(
     path.join(generatedRoot, "mutations.generated.ts"),
     "utf8"
   );
   assert.match(mutations, /increment:/);
-  assert.match(mutations, /amount: number/);
+  assert.match(mutations, /body: IncrementBody/);
 
   const page = fs.readFileSync(
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx"),
