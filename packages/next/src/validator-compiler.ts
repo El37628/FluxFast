@@ -3,9 +3,6 @@ import type {
   ValidationPlanDocument
 } from "@fluxfast/core";
 import {
-  validationPatternError
-} from "@fluxfast/core";
-import {
   mutationBodyTypeName,
   pascalIdentifier,
   SchemaCompilationError
@@ -19,6 +16,32 @@ import {
 
 type SchemaNode = JsonSchema | boolean;
 type PlanDocument = ValidationPlanDocument;
+
+const VALIDATION_PATTERN_MAX_LENGTH = 8192;
+
+/**
+ * Keep compiler output portable when it is consumed with the published core
+ * package. This check intentionally lives in the compiler too: the compiler
+ * PR must build independently of the separate core-runtime hardening PR.
+ */
+function validationPatternError(pattern: string): string | undefined {
+  if (pattern.length > VALIDATION_PATTERN_MAX_LENGTH) {
+    return `pattern is too long (maximum ${VALIDATION_PATTERN_MAX_LENGTH} characters)`;
+  }
+  if (/\\(?:[0-9]|k<|[wWdDsSpPbBAZ])/.test(pattern)) {
+    return "pattern uses a regex escape whose semantics are not portable to the native validator";
+  }
+  if (/\\p\{/.test(pattern)) {
+    return "Unicode property escapes are not supported by the native validator";
+  }
+  if (/\(\?(?:[=!]|<[=!]|[a-zA-Z-]+(?:\)|:|=|!))/.test(pattern)) {
+    return "lookaround or inline regex flags are not supported by the native validator";
+  }
+  if (/\)(?:[*+?]|\{\d+(?:,\d*)?\})(?:[?+])?/.test(pattern)) {
+    return "quantified groups are rejected to keep validation traversal bounded";
+  }
+  return undefined;
+}
 
 /** A deterministic code-generation error tied to one manifest location. */
 export class ValidatorCompilationError extends SchemaCompilationError {
