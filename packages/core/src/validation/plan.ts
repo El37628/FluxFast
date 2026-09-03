@@ -78,12 +78,22 @@ function requireBoolean(value: unknown, path: string): void {
 }
 
 function requireString(value: unknown, path: string): string {
-  if (typeof value !== "string" || value.length === 0) {
+  if (typeof value !== "string") {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: expected a string`
+    );
+  }
+  return value;
+}
+
+function requireNonEmptyString(value: unknown, path: string): string {
+  const string = requireString(value, path);
+  if (string.length === 0) {
     throw new TypeError(
       `[fluxfast] Invalid validation plan at ${path}: expected a non-empty string`
     );
   }
-  return value;
+  return string;
 }
 
 function requireNonNegativeInteger(value: unknown, path: string): void {
@@ -121,38 +131,102 @@ function requireArray(value: unknown, path: string): readonly unknown[] {
   return value as readonly unknown[];
 }
 
-function assertJsonValue(value: unknown, path: string, seen = new WeakSet<object>()): void {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "boolean"
-  ) {
-    return;
-  }
-  if (typeof value === "number") {
-    requireFiniteNumber(value, path);
-    return;
-  }
-  if (typeof value !== "object") {
-    throw new TypeError(
-      `[fluxfast] Invalid validation plan at ${path}: literal values must be JSON-compatible`
-    );
-  }
-  if (seen.has(value)) {
-    throw new TypeError(
-      `[fluxfast] Invalid validation plan at ${path}: literal values cannot be circular`
-    );
-  }
-  seen.add(value);
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => assertJsonValue(item, `${path}[${index}]`, seen));
-  } else {
-    const record = requireRecord(value, path);
-    for (const key of Object.keys(record)) {
-      assertJsonValue(record[key], pathKey(path, key), seen);
+const MAX_VALIDATION_PLAN_VALUE_NODES = 10_000;
+const MAX_VALIDATION_PLAN_VALUE_DEPTH = 64;
+
+interface JsonValueFrame {
+  readonly value: unknown;
+  readonly path: string;
+  readonly depth: number;
+  readonly exit?: boolean;
+}
+
+function assertJsonValue(value: unknown, path: string): void {
+  const pending: JsonValueFrame[] = [{ value, path, depth: 0 }];
+  const active = new WeakSet<object>();
+  let nodes = 0;
+
+  while (pending.length > 0) {
+    const frame = pending.pop()!;
+    if (frame.exit) {
+      active.delete(frame.value as object);
+      continue;
+    }
+    const item = frame.value;
+    if (
+      item === null ||
+      typeof item === "string" ||
+      typeof item === "boolean"
+    ) {
+      continue;
+    }
+    if (typeof item === "number") {
+      requireFiniteNumber(item, frame.path);
+      continue;
+    }
+    if (typeof item !== "object") {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: literal values must be JSON-compatible`
+      );
+    }
+    if (frame.depth > MAX_VALIDATION_PLAN_VALUE_DEPTH) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: literal values exceed the maximum nesting depth of ${MAX_VALIDATION_PLAN_VALUE_DEPTH}`
+      );
+    }
+    if (active.has(item)) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: literal values cannot be circular`
+      );
+    }
+    active.add(item);
+    nodes += 1;
+    if (nodes > MAX_VALIDATION_PLAN_VALUE_NODES) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: literal values contain more than ${MAX_VALIDATION_PLAN_VALUE_NODES} containers`
+      );
+    }
+    pending.push({ value: item, path: frame.path, depth: frame.depth, exit: true });
+
+    if (safeIsArray(item)) {
+      if (item.length > MAX_VALIDATION_PLAN_VALUE_NODES) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: literal arrays contain more than ${MAX_VALIDATION_PLAN_VALUE_NODES} entries`
+        );
+      }
+      for (let index = item.length - 1; index >= 0; index -= 1) {
+        pending.push({
+          value: item[index],
+          path: `${frame.path}[${index}]`,
+          depth: frame.depth + 1
+        });
+      }
+      continue;
+    }
+
+    const record = requireRecord(item, frame.path);
+    let keys: string[];
+    try {
+      keys = Object.keys(record);
+    } catch {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: literal object properties could not be enumerated`
+      );
+    }
+    if (keys.length > MAX_VALIDATION_PLAN_VALUE_NODES) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: literal objects contain more than ${MAX_VALIDATION_PLAN_VALUE_NODES} properties`
+      );
+    }
+    for (let index = keys.length - 1; index >= 0; index -= 1) {
+      const key = keys[index];
+      pending.push({
+        value: record[key],
+        path: pathKey(frame.path, key),
+        depth: frame.depth + 1
+      });
     }
   }
-  seen.delete(value);
 }
 
 function validateLimits(options: ValidationOptions = {}): NormalizedLimits {
@@ -271,7 +345,12 @@ function validateCommonFields(plan: Record<string, unknown>, path: string): void
   if (plan.description !== undefined && typeof plan.description !== "string") {
     throw new TypeError(`[fluxfast] Invalid validation plan at ${path}.description`);
   }
-  if (plan.examples !== undefined) requireArray(plan.examples, `${path}.examples`);
+  if (plan.examples !== undefined) {
+    const examples = requireArray(plan.examples, `${path}.examples`);
+    examples.forEach((example, index) =>
+      assertJsonValue(example, `${path}.examples[${index}]`)
+    );
+  }
 }
 
 function validateNumberFields(plan: Record<string, unknown>, path: string): void {
@@ -308,7 +387,7 @@ function validateNode(
 ): void {
   if (typeof value === "boolean") return;
   const plan = requireRecord(value, path);
-  const kind = requireString(plan.kind, `${path}.kind`);
+  const kind = requireNonEmptyString(plan.kind, `${path}.kind`);
   assertKnownKeys(plan, path);
   validateCommonFields(plan, path);
 
@@ -348,7 +427,7 @@ function validateNode(
         }
       }
       if (plan.format !== undefined) {
-        const format = requireString(plan.format, `${path}.format`);
+        const format = requireNonEmptyString(plan.format, `${path}.format`);
         if (!isSupportedValidationFormat(format)) {
           throw new TypeError(
             `[fluxfast] Unsupported validation format ${JSON.stringify(format)} at ${path}.format`
@@ -459,7 +538,10 @@ function validateNode(
       if (hasName === hasRef) {
         throw new TypeError(`[fluxfast] ${path} must contain exactly one of name or ref`);
       }
-      requireString(hasName ? plan.name : plan.ref, `${path}.${hasName ? "name" : "ref"}`);
+      requireNonEmptyString(
+        hasName ? plan.name : plan.ref,
+        `${path}.${hasName ? "name" : "ref"}`
+      );
       break;
     }
     default:
@@ -471,7 +553,7 @@ function validateNode(
   if (plan.definitions !== undefined) {
     const definitions = requireRecord(plan.definitions, `${path}.definitions`);
     for (const name of Object.keys(definitions).sort()) {
-      requireString(name, pathKey(`${path}.definitions`, name));
+      requireNonEmptyString(name, pathKey(`${path}.definitions`, name));
       validateNestedPlan(
         definitions[name],
         pathKey(`${path}.definitions`, name),
@@ -705,15 +787,24 @@ function readKeys(
   path: readonly (string | number)[]
 ): ReadKeysResult {
   if (!consumeOperation(state, path)) return { error: "maxOperations" };
+  const keys: string[] = [];
   try {
-    const keys = Object.keys(value);
-    if (keys.length > state.compiled.limits.maxProperties) {
-      state.collector.add(
-        path,
-        "maxProperties",
-        `Object contains more than ${state.compiled.limits.maxProperties} properties.`
-      );
-      return { error: "maxProperties" };
+    for (const key in value) {
+      const own = hasOwnValue(value, key);
+      if (own === undefined) return { error: "read" };
+      if (!own) continue;
+      if (!consumeOperation(state, [...path, key])) {
+        return { error: "maxOperations" };
+      }
+      keys.push(key);
+      if (keys.length > state.compiled.limits.maxProperties) {
+        state.collector.add(
+          path,
+          "maxProperties",
+          `Object contains more than ${state.compiled.limits.maxProperties} properties.`
+        );
+        return { error: "maxProperties" };
+      }
     }
     return { keys: keys.sort() };
   } catch {
@@ -1056,40 +1147,37 @@ function evaluateObject(
       }
     }
 
-    const keysResult = readKeys(value, state, path);
-    if (!keysResult.keys) {
-      if (keysResult.error === "maxProperties" || keysResult.error === "maxOperations") {
+    const additional = plan.additionalProperties;
+    if (additional !== undefined && additional !== true) {
+      const keysResult = readKeys(value, state, path);
+      if (!keysResult.keys) {
+        if (keysResult.error === "maxProperties" || keysResult.error === "maxOperations") {
+          return false;
+        }
+        state.collector.add(path, "read", "Object properties could not be enumerated.");
         return false;
       }
-      state.collector.add(path, "read", "Object properties could not be enumerated.");
-      return false;
-    }
-    const declared = new Set(propertyNames);
-    for (const key of keysResult.keys) {
-      if (!consumeOperation(state, [...path, key])) {
-        valid = false;
-        break;
-      }
-      if (declared.has(key)) continue;
-      const additional = plan.additionalProperties;
-      if (additional === false) {
-        state.collector.add(
-          [...path, key],
-          "additionalProperties",
-          `Additional property ${displayValidationKey(key)} is not allowed.`
-        );
-        valid = false;
-        continue;
-      }
-      if (additional === undefined || additional === true) continue;
-      const read = readOwnValue(value, key);
-      if (!read.found || read.threw) {
-        state.collector.add([...path, key], "read", "Property could not be read.");
-        valid = false;
-        continue;
-      }
-      if (!evaluate(additional, read.value, [...path, key], depth + 1, state)) {
-        valid = false;
+      const declared = new Set(propertyNames);
+      for (const key of keysResult.keys) {
+        if (declared.has(key)) continue;
+        if (additional === false) {
+          state.collector.add(
+            [...path, key],
+            "additionalProperties",
+            `Additional property ${displayValidationKey(key)} is not allowed.`
+          );
+          valid = false;
+          continue;
+        }
+        const read = readOwnValue(value, key);
+        if (!read.found || read.threw) {
+          state.collector.add([...path, key], "read", "Property could not be read.");
+          valid = false;
+          continue;
+        }
+        if (!evaluate(additional, read.value, [...path, key], depth + 1, state)) {
+          valid = false;
+        }
       }
     }
     return valid;

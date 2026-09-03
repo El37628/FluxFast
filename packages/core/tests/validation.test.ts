@@ -154,6 +154,19 @@ describe("FluxFast validation runtime", () => {
     expect(createValidator({ kind: "string", format: "ipv6" }).is("2001:db8::1")).toBe(true);
   });
 
+  it("accepts empty JSON Schema strings emitted by Pydantic", () => {
+    const string = createValidator({ kind: "string", pattern: "" });
+    expect(string.is("anything")).toBe(true);
+
+    const object = createValidator({
+      kind: "object",
+      properties: { "": { kind: "string" } },
+      required: [""],
+      additionalProperties: false
+    });
+    expect(object.is({ "": "present" })).toBe(true);
+  });
+
   it("resolves local and recursive references while rejecting cyclic values", () => {
     const tree: ValidationPlan = {
       kind: "ref",
@@ -266,11 +279,25 @@ describe("FluxFast validation runtime", () => {
         }
       }
     );
-    expect(() => objectValidator.validate(throwingKeys)).not.toThrow();
-    expect(objectValidator.validate(throwingKeys)).toMatchObject({
+    const rejectingKeys = createValidator({
+      kind: "object",
+      additionalProperties: false
+    });
+    expect(() => rejectingKeys.validate(throwingKeys)).not.toThrow();
+    expect(rejectingKeys.validate(throwingKeys)).toMatchObject({
       valid: false,
       issues: expect.arrayContaining([expect.objectContaining({ code: "read" })])
     });
+
+    const unboundedKeys = new Proxy(
+      { value: "ok" },
+      {
+        ownKeys() {
+          throw new Error("keys trap");
+        }
+      }
+    );
+    expect(objectValidator.validate(unboundedKeys)).toMatchObject({ valid: true });
 
     const arrayValidator = createValidator({
       kind: "array",
@@ -306,7 +333,7 @@ describe("FluxFast validation runtime", () => {
   });
 
   it("rejects unsafe or non-portable patterns before runtime evaluation", () => {
-    expect(() => createValidator({ kind: "string", pattern: "^(a+)+$" })).toThrow(
+    expect(() => createValidator({ kind: "string", pattern: "^(a){1,3}$" })).toThrow(
       /quantified groups/
     );
     expect(() => createValidator({ kind: "string", pattern: "^\\w+$" })).toThrow(
@@ -361,6 +388,23 @@ describe("FluxFast validation runtime", () => {
       valid: false,
       issues: [expect.objectContaining({ code: "maxProperties" })]
     });
+  });
+
+  it("bounds literal, enum, and metadata values before plan construction", () => {
+    let nested: unknown = "leaf";
+    for (let depth = 0; depth < 66; depth += 1) {
+      nested = { value: nested };
+    }
+
+    expect(() => createValidator({ kind: "literal", value: nested })).toThrow(
+      /literal values exceed the maximum nesting depth/
+    );
+    expect(() => createValidator({ kind: "enum", values: [nested] })).toThrow(
+      /literal values exceed the maximum nesting depth/
+    );
+    expect(() => createValidator({ kind: "any", examples: [nested] })).toThrow(
+      /literal values exceed the maximum nesting depth/
+    );
   });
 
   it("rejects malformed or unsupported plans instead of silently dropping rules", () => {
