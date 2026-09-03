@@ -269,6 +269,7 @@ function assertTypedConsumerArtifacts() {
   const expectedFiles = [
     "schema.generated.json",
     "types.generated.ts",
+    "validators.generated.ts",
     "routes.generated.ts",
     "mutations.generated.ts",
     "pages.generated.ts",

@@ -174,16 +174,62 @@ describe("Pages Registry Generator", () => {
       path.join(generatedDir, "mutations.generated.ts"),
       path.join(generatedDir, "pages.generated.ts"),
       path.join(generatedDir, "routes.generated.ts"),
-      path.join(generatedDir, "types.generated.ts")
+      path.join(generatedDir, "types.generated.ts"),
+      path.join(generatedDir, "validators.generated.ts")
     ]);
     expect(fs.readdirSync(generatedDir).sort()).toEqual([
       "mutations.generated.ts",
       "pages.generated.ts",
       "routes.generated.ts",
       "schema.generated.json",
-      "types.generated.ts"
+      "types.generated.ts",
+      "validators.generated.ts"
     ]);
     expect(fs.existsSync(path.join(tmpDir, "malicious.ts"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, "model.ts"))).toBe(false);
+  });
+
+  it("keeps schema/1 TypeScript generation available for unsupported validators", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    const outputFile = path.join(generatedDir, "pages.generated.ts");
+
+    expect(() =>
+      generateFluxFastProject({
+        pagesDir,
+        generatedDir,
+        outputFile,
+        schemaContent: schemaManifest({
+          tags: {
+            schema: {
+              type: "array",
+              items: { type: "string" },
+              uniqueItems: true
+            }
+          },
+          users: {
+            schema: {
+              type: "array",
+              items: { type: "string" }
+            }
+          }
+        }),
+        log: false
+      })
+    ).not.toThrow();
+
+    const types = fs.readFileSync(
+      path.join(generatedDir, "types.generated.ts"),
+      "utf8"
+    );
+    const validators = fs.readFileSync(
+      path.join(generatedDir, "validators.generated.ts"),
+      "utf8"
+    );
+    expect(types).toContain("TagsResource");
+    expect(types).toContain("UsersResource");
+    expect(validators).toContain("UsersResourceValidator");
+    expect(validators).not.toContain("TagsResourceValidator");
+    expect(validators).toContain('"uniqueItems"');
   });
 });
