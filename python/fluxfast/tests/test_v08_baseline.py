@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from fluxfast import FluxFast
 from fluxfast.schema_export import build_schema_manifest
-from fluxfast.schema_manifest import SCHEMA_MANIFEST_VERSION
+from fluxfast.schema_manifest import SCHEMA_MANIFEST_V2, SCHEMA_MANIFEST_VERSION
 
 
 class BaselineRoom(BaseModel):
@@ -32,3 +32,15 @@ def test_resource_only_manifests_keep_schema1_shape() -> None:
         "pages",
         "mutations",
     }
+
+
+def test_v08_resource_only_manifests_emit_schema2_with_empty_types() -> None:
+    flux = FluxFast(FastAPI())
+    flux.define_resource("rooms", list[BaselineRoom])
+
+    manifest = build_schema_manifest(flux.schema_registry, producer="0.8.0")
+
+    assert manifest.schema_version == SCHEMA_MANIFEST_V2
+    assert manifest.types == {}
+    serialized = manifest.model_dump(mode="json", by_alias=True, exclude_none=True)
+    assert serialized["types"] == {}
