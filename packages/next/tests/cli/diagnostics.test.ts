@@ -234,7 +234,7 @@ describe("FluxFast project diagnostics", () => {
 
   it("warns about unsupported manifest versions without blocking runtime", () => {
     const project = initialize();
-    writeSchemaManifest(tmpDir, { schema: "fluxfast-schema/2" });
+    writeSchemaManifest(tmpDir, { schema: "fluxfast-schema/3" });
 
     const report = validateFluxProject(detectFluxProject(tmpDir), {
       includeTypeDiagnostics: true,
