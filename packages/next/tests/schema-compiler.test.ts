@@ -18,6 +18,21 @@ function manifest(resources: Record<string, { schema: Record<string, unknown> }>
   };
 }
 
+function schema2Manifest(
+  types: Record<string, { mode: "serialization" | "validation"; schema: Record<string, unknown> }>,
+  resources: Record<string, { schema: Record<string, unknown> }> = {}
+) {
+  return {
+    schema: "fluxfast-schema/2",
+    producer: "0.8.0",
+    fingerprint,
+    types,
+    resources,
+    pages: [],
+    mutations: []
+  };
+}
+
 function expectValidTypeScript(source: string): void {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-types-"));
   const sourceFile = path.join(directory, "types.generated.ts");
@@ -58,6 +73,69 @@ function expectValidTypeScript(source: string): void {
 }
 
 describe("FluxFast JSON Schema compiler", () => {
+  it("emits explicitly registered application contracts in the shared type graph", () => {
+    const output = compileFluxFastResourceTypes(
+      schema2Manifest({
+        User: {
+          mode: "serialization",
+          schema: {
+            title: "ServerUserTitleMustNotOverrideExplicitName",
+            type: "object",
+            properties: {
+              id: { type: "integer" },
+              name: { type: "string" }
+            },
+            required: ["id", "name"]
+          }
+        },
+        CreateUserInput: {
+          mode: "validation",
+          schema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+            required: ["name"]
+          }
+        }
+      })
+    );
+
+    expect(output).toContain("export interface User {");
+    expect(output).toContain("export interface CreateUserInput {");
+    expect(output).toContain("id: number;");
+    expect(output).toContain("name: string;");
+    expect(output).not.toContain("ServerUserTitleMustNotOverrideExplicitName");
+  });
+
+  it("rejects normalized explicit-name collisions and incompatible graph definitions", () => {
+    expect(() =>
+      compileFluxFastResourceTypes(
+        schema2Manifest({
+          "user-profile": { mode: "serialization", schema: { type: "string" } },
+          user_profile: { mode: "serialization", schema: { type: "number" } }
+        })
+      )
+    ).toThrow(/collides .* as TypeScript name UserProfile/);
+
+    expect(() =>
+      compileFluxFastResourceTypes(
+        schema2Manifest(
+          { User: { mode: "serialization", schema: { type: "string" } } },
+          {
+            users: {
+              schema: {
+                $defs: {
+                  User: { type: "number" }
+                },
+                type: "array",
+                items: { $ref: "#/$defs/User" }
+              }
+            }
+          }
+        )
+      )
+    ).toThrow(/model name User collides with an incompatible definition/);
+  });
+
   it("generates readable model, enum, array, optional, and formatted string types", () => {
     const output = compileFluxFastResourceTypes(
       manifest({
