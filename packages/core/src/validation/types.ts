@@ -31,6 +31,10 @@ export interface ValidationLimits {
   maxDepth?: number;
   /** Maximum number of issues retained for one validation call. */
   maxIssues?: number;
+  /** Maximum evaluator operations spent on one validation call. */
+  maxOperations?: number;
+  /** Maximum object properties or literal collection items compared at runtime. */
+  maxProperties?: number;
 }
 
 export interface ValidationOptions extends ValidationLimits {

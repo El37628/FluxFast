@@ -143,10 +143,28 @@ describe("FluxFast validation runtime", () => {
     expect(createValidator({ kind: "string", format: "date" }).is("2024-02-29")).toBe(true);
     expect(createValidator({ kind: "string", format: "date" }).is("2023-02-29")).toBe(false);
     expect(createValidator({ kind: "string", format: "date-time" }).is("2024-02-29T12:30:00Z")).toBe(true);
+    expect(createValidator({ kind: "string", format: "date-time" }).is("2024-02-29T12:30")).toBe(true);
+    expect(createValidator({ kind: "string", format: "date-time" }).is("2024-02-29T12:30:00")).toBe(true);
+    expect(createValidator({ kind: "string", format: "time" }).is("12:30")).toBe(true);
+    expect(createValidator({ kind: "string", format: "time" }).is("12:30:00")).toBe(true);
     expect(createValidator({ kind: "string", format: "time" }).is("12:30:00+00:00")).toBe(true);
+    expect(createValidator({ kind: "string", format: "time" }).is("24:00")).toBe(false);
     expect(createValidator({ kind: "string", format: "uri" }).is("https://example.com/rooms")).toBe(true);
     expect(createValidator({ kind: "string", format: "ipv4" }).is("192.168.1.1")).toBe(true);
     expect(createValidator({ kind: "string", format: "ipv6" }).is("2001:db8::1")).toBe(true);
+  });
+
+  it("accepts empty JSON Schema strings emitted by Pydantic", () => {
+    const string = createValidator({ kind: "string", pattern: "" });
+    expect(string.is("anything")).toBe(true);
+
+    const object = createValidator({
+      kind: "object",
+      properties: { "": { kind: "string" } },
+      required: [""],
+      additionalProperties: false
+    });
+    expect(object.is({ "": "present" })).toBe(true);
   });
 
   it("resolves local and recursive references while rejecting cyclic values", () => {
@@ -218,6 +236,196 @@ describe("FluxFast validation runtime", () => {
     const result = many.validate({});
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.issues).toHaveLength(2);
+
+    const bounded = createValidator(
+      { kind: "array", items: { kind: "integer" } },
+      { maxOperations: 4 }
+    );
+    const boundedResult = bounded.validate([1, 2, 3, 4]);
+    expect(boundedResult.valid).toBe(false);
+    expect(boundedResult.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "maxOperations" })])
+    );
+    expect(() => createValidator({ kind: "any" }, { maxOperations: 0 })).toThrow(
+      /maxOperations must be a positive integer/
+    );
+  });
+
+  it("rejects deeply nested validation plans before recursive traversal", () => {
+    let plan: ValidationPlan = { kind: "any" };
+    for (let depth = 0; depth < 20_000; depth += 1) {
+      plan = { kind: "array", items: plan };
+    }
+
+    expect(() => createValidator(plan)).toThrow(
+      /plan values exceed the maximum nesting depth/
+    );
+  });
+
+  it("does not throw for hostile object, array, revoked, or enumeration proxies", () => {
+    const objectValidator = createValidator({
+      kind: "object",
+      properties: { value: { kind: "string" } },
+      required: ["value"]
+    });
+    const throwingDescriptor = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error("descriptor trap");
+        }
+      }
+    );
+    expect(() => objectValidator.validate(throwingDescriptor)).not.toThrow();
+    expect(objectValidator.validate(throwingDescriptor)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ code: "read" })])
+    });
+
+    const throwingKeys = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("keys trap");
+        }
+      }
+    );
+    const rejectingKeys = createValidator({
+      kind: "object",
+      additionalProperties: false
+    });
+    expect(() => rejectingKeys.validate(throwingKeys)).not.toThrow();
+    expect(rejectingKeys.validate(throwingKeys)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ code: "read" })])
+    });
+
+    const unboundedKeys = new Proxy(
+      { value: "ok" },
+      {
+        ownKeys() {
+          throw new Error("keys trap");
+        }
+      }
+    );
+    expect(objectValidator.validate(unboundedKeys)).toMatchObject({ valid: true });
+
+    const arrayValidator = createValidator({
+      kind: "array",
+      items: { kind: "string" }
+    });
+    const throwingIndex = new Proxy(["ok"], {
+      get(target, property, receiver) {
+        if (property === "0") throw new Error("index trap");
+        return Reflect.get(target, property, receiver);
+      }
+    });
+    expect(() => arrayValidator.validate(throwingIndex)).not.toThrow();
+    expect(arrayValidator.validate(throwingIndex)).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ path: [0], code: "read" })]
+    });
+
+    const revoked = Proxy.revocable([], {});
+    revoked.revoke();
+    expect(() => arrayValidator.validate(revoked.proxy)).not.toThrow();
+  });
+
+  it("uses exact multipleOf checks for safe integers and decimal boundaries", () => {
+    const even = createValidator({ kind: "number", multipleOf: 2 });
+    expect(even.is(Number.MAX_SAFE_INTEGER)).toBe(false);
+    expect(even.is(Number.MAX_SAFE_INTEGER - 1)).toBe(true);
+
+    const tenth = createValidator({ kind: "number", multipleOf: 0.1 });
+    expect(tenth.is(0.3)).toBe(true);
+    expect(tenth.is(0.30000000000000004)).toBe(true);
+    expect(tenth.is(1.0000000000000002)).toBe(true);
+    expect(tenth.is(0.31)).toBe(false);
+  });
+
+  it("rejects unsafe or non-portable patterns before runtime evaluation", () => {
+    expect(() => createValidator({ kind: "string", pattern: "^(a){1,3}$" })).toThrow(
+      /quantified groups/
+    );
+    expect(() => createValidator({ kind: "string", pattern: "^\\w+$" })).toThrow(
+      /escape whose semantics are not portable/
+    );
+    expect(() => createValidator({ kind: "string", pattern: "(?P<word>a+)" })).toThrow(
+      /named capture groups/
+    );
+    expect(() => createValidator({ kind: "string", pattern: "^a{1,3}b{1,3}$" })).toThrow(
+      /multiple quantifiers/
+    );
+    expect(createValidator({ kind: "string", pattern: "^é+$" }).is("éé")).toBe(true);
+  });
+
+  it("accepts Pydantic date and time spellings while rejecting impossible years", () => {
+    const date = createValidator({ kind: "string", format: "date" });
+    const dateTime = createValidator({ kind: "string", format: "date-time" });
+    const time = createValidator({ kind: "string", format: "time" });
+
+    expect(date.is("0001-01-01")).toBe(true);
+    expect(date.is("0000-01-01")).toBe(false);
+    expect(date.is("10000-01-01")).toBe(false);
+    expect(dateTime.is("2024-01-01T12:30:00z")).toBe(true);
+    expect(time.is("12:30:00z")).toBe(true);
+  });
+
+  it("bounds literal and enum comparisons and object enumeration", () => {
+    const literal = createValidator(
+      {
+        kind: "literal",
+        value: Object.fromEntries(
+          Array.from({ length: 20 }, (_, index) => [`key${index}`, index])
+        )
+      },
+      { maxProperties: 4 }
+    );
+    const literalResult = literal.validate(
+      Object.fromEntries(
+        Array.from({ length: 20 }, (_, index) => [`key${index}`, index])
+      )
+    );
+    expect(literalResult).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ code: "maxProperties" })])
+    });
+
+    const object = createValidator(
+      { kind: "object", additionalProperties: false },
+      { maxProperties: 2 }
+    );
+    expect(object.validate({ a: 1, b: 2, c: 3 })).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "maxProperties" })]
+    });
+  });
+
+  it("bounds literal, enum, and metadata values before plan construction", () => {
+    let nested: unknown = "leaf";
+    for (let depth = 0; depth < 66; depth += 1) {
+      nested = { value: nested };
+    }
+
+    expect(() => createValidator({ kind: "literal", value: nested })).toThrow(
+      /plan values exceed the maximum nesting depth/
+    );
+    expect(() => createValidator({ kind: "enum", values: [nested] })).toThrow(
+      /plan values exceed the maximum nesting depth/
+    );
+    expect(() => createValidator({ kind: "any", examples: [nested] })).toThrow(
+      /plan values exceed the maximum nesting depth/
+    );
+  });
+
+  it("enforces one aggregate budget across plan JSON values", () => {
+    const examples = Array.from({ length: 1_000 }, () =>
+      Array.from({ length: 100 }, (_, index) => index)
+    );
+
+    expect(() => createValidator({ kind: "any", examples })).toThrow(
+      /plan contains more than 100000 JSON values/
+    );
   });
 
   it("rejects malformed or unsupported plans instead of silently dropping rules", () => {

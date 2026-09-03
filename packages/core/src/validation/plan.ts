@@ -1,6 +1,7 @@
 import { createValidationIssue, displayValidationKey } from "./issues";
 import {
   isSupportedValidationFormat,
+  validationPatternError,
   validateValidationFormat
 } from "./formats";
 import type { ValidationFormat } from "./formats";
@@ -25,10 +26,14 @@ import { isValidationPlanDocument } from "./types";
 
 export const DEFAULT_VALIDATION_MAX_DEPTH = 64;
 export const DEFAULT_VALIDATION_MAX_ISSUES = 100;
+export const DEFAULT_VALIDATION_MAX_OPERATIONS = 100_000;
+export const DEFAULT_VALIDATION_MAX_PROPERTIES = 10_000;
 
 interface NormalizedLimits {
   readonly maxDepth: number;
   readonly maxIssues: number;
+  readonly maxOperations: number;
+  readonly maxProperties: number;
 }
 
 export interface CompiledValidationPlan {
@@ -45,10 +50,11 @@ function pathKey(path: string, key: string): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (value === null || typeof value !== "object") {
     return false;
   }
   try {
+    if (Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
   } catch {
@@ -72,12 +78,22 @@ function requireBoolean(value: unknown, path: string): void {
 }
 
 function requireString(value: unknown, path: string): string {
-  if (typeof value !== "string" || value.length === 0) {
+  if (typeof value !== "string") {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: expected a string`
+    );
+  }
+  return value;
+}
+
+function requireNonEmptyString(value: unknown, path: string): string {
+  const string = requireString(value, path);
+  if (string.length === 0) {
     throw new TypeError(
       `[fluxfast] Invalid validation plan at ${path}: expected a non-empty string`
     );
   }
-  return value;
+  return string;
 }
 
 function requireNonNegativeInteger(value: unknown, path: string): void {
@@ -101,58 +117,196 @@ function requireFiniteNumber(value: unknown, path: string): void {
 }
 
 function requireArray(value: unknown, path: string): readonly unknown[] {
-  if (!Array.isArray(value)) {
+  let isArray = false;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    isArray = false;
+  }
+  if (!isArray) {
     throw new TypeError(
       `[fluxfast] Invalid validation plan at ${path}: expected an array`
     );
   }
-  return value;
+  return value as readonly unknown[];
 }
 
-function assertJsonValue(value: unknown, path: string, seen = new WeakSet<object>()): void {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "boolean"
-  ) {
-    return;
+const MAX_VALIDATION_PLAN_VALUES = 100_000;
+const MAX_VALIDATION_PLAN_DEPTH = 64;
+const MAX_VALIDATION_PLAN_CHILDREN = 10_000;
+const MAX_VALIDATION_PLAN_STRING_LENGTH = 65_536;
+
+interface PlanBoundsFrame {
+  readonly value: unknown;
+  readonly path: string;
+  readonly depth: number;
+  readonly exit?: boolean;
+}
+
+function assertPlanBounds(
+  root: ValidationPlan,
+  documentDefinitions: unknown
+): void {
+  const pending: PlanBoundsFrame[] = [{ value: root, path: "$", depth: 0 }];
+  if (documentDefinitions !== undefined) {
+    pending.push({ value: documentDefinitions, path: "$.definitions", depth: 0 });
   }
-  if (typeof value === "number") {
-    requireFiniteNumber(value, path);
-    return;
-  }
-  if (typeof value !== "object") {
-    throw new TypeError(
-      `[fluxfast] Invalid validation plan at ${path}: literal values must be JSON-compatible`
-    );
-  }
-  if (seen.has(value)) {
-    throw new TypeError(
-      `[fluxfast] Invalid validation plan at ${path}: literal values cannot be circular`
-    );
-  }
-  seen.add(value);
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => assertJsonValue(item, `${path}[${index}]`, seen));
-  } else {
-    const record = requireRecord(value, path);
-    for (const key of Object.keys(record)) {
-      assertJsonValue(record[key], pathKey(path, key), seen);
+  const active = new WeakSet<object>();
+  const visited = new WeakSet<object>();
+  let values = 0;
+
+  while (pending.length > 0) {
+    const frame = pending.pop()!;
+    if (frame.exit) {
+      active.delete(frame.value as object);
+      continue;
+    }
+    values += 1;
+    if (values > MAX_VALIDATION_PLAN_VALUES) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan contains more than ${MAX_VALIDATION_PLAN_VALUES} JSON values`
+      );
+    }
+    const item = frame.value;
+    if (
+      item === null ||
+      typeof item === "string" ||
+      typeof item === "boolean"
+    ) {
+      if (
+        typeof item === "string" &&
+        item.length > MAX_VALIDATION_PLAN_STRING_LENGTH
+      ) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: string exceeds the maximum length of ${MAX_VALIDATION_PLAN_STRING_LENGTH}`
+        );
+      }
+      continue;
+    }
+    if (typeof item === "number") {
+      if (!Number.isFinite(item)) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: plan values must be finite numbers`
+        );
+      }
+      continue;
+    }
+    if (typeof item !== "object") {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan values must be JSON-compatible`
+      );
+    }
+    if (frame.depth > MAX_VALIDATION_PLAN_DEPTH) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan values exceed the maximum nesting depth of ${MAX_VALIDATION_PLAN_DEPTH}`
+      );
+    }
+    if (active.has(item)) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan values cannot be circular`
+      );
+    }
+    if (visited.has(item)) continue;
+    visited.add(item);
+    active.add(item);
+    pending.push({ value: item, path: frame.path, depth: frame.depth, exit: true });
+
+    if (safeIsArray(item)) {
+      let length: number;
+      try {
+        length = item.length;
+      } catch {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: plan array length could not be read`
+        );
+      }
+      if (!Number.isSafeInteger(length) || length < 0) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: plan array length must be a non-negative integer`
+        );
+      }
+      if (length > MAX_VALIDATION_PLAN_CHILDREN) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: plan arrays contain more than ${MAX_VALIDATION_PLAN_CHILDREN} entries`
+        );
+      }
+      for (let index = length - 1; index >= 0; index -= 1) {
+        let child: unknown;
+        try {
+          child = item[index];
+        } catch {
+          throw new TypeError(
+            `[fluxfast] Invalid validation plan at ${frame.path}[${index}]: value could not be read`
+          );
+        }
+        pending.push({
+          value: child,
+          path: `${frame.path}[${index}]`,
+          depth: frame.depth + 1
+        });
+      }
+      continue;
+    }
+
+    const record = requireRecord(item, frame.path);
+    let keys: string[];
+    try {
+      keys = Object.keys(record);
+    } catch {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan object properties could not be enumerated`
+      );
+    }
+    if (keys.length > MAX_VALIDATION_PLAN_CHILDREN) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan objects contain more than ${MAX_VALIDATION_PLAN_CHILDREN} properties`
+      );
+    }
+    for (let index = keys.length - 1; index >= 0; index -= 1) {
+      const key = keys[index];
+      let child: unknown;
+      try {
+        child = record[key];
+      } catch {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${pathKey(frame.path, key)}: value could not be read`
+        );
+      }
+      pending.push({
+        value: child,
+        path: pathKey(frame.path, key),
+        depth: frame.depth + 1
+      });
     }
   }
-  seen.delete(value);
 }
 
 function validateLimits(options: ValidationOptions = {}): NormalizedLimits {
   const maxDepth = options.maxDepth ?? options.limits?.maxDepth ?? DEFAULT_VALIDATION_MAX_DEPTH;
   const maxIssues = options.maxIssues ?? options.limits?.maxIssues ?? DEFAULT_VALIDATION_MAX_ISSUES;
+  const maxOperations = options.maxOperations ?? options.limits?.maxOperations ?? DEFAULT_VALIDATION_MAX_OPERATIONS;
+  const maxProperties = options.maxProperties ?? options.limits?.maxProperties ?? DEFAULT_VALIDATION_MAX_PROPERTIES;
   if (typeof maxDepth !== "number" || !Number.isSafeInteger(maxDepth) || maxDepth < 0) {
     throw new TypeError("[fluxfast] maxDepth must be a non-negative integer");
   }
   if (typeof maxIssues !== "number" || !Number.isSafeInteger(maxIssues) || maxIssues < 1) {
     throw new TypeError("[fluxfast] maxIssues must be a positive integer");
   }
-  return { maxDepth, maxIssues };
+  if (
+    typeof maxOperations !== "number" ||
+    !Number.isSafeInteger(maxOperations) ||
+    maxOperations < 1
+  ) {
+    throw new TypeError("[fluxfast] maxOperations must be a positive integer");
+  }
+  if (
+    typeof maxProperties !== "number" ||
+    !Number.isSafeInteger(maxProperties) ||
+    maxProperties < 1
+  ) {
+    throw new TypeError("[fluxfast] maxProperties must be a positive integer");
+  }
+  return { maxDepth, maxIssues, maxOperations, maxProperties };
 }
 
 function registerDefinitions(
@@ -280,7 +434,7 @@ function validateNode(
 ): void {
   if (typeof value === "boolean") return;
   const plan = requireRecord(value, path);
-  const kind = requireString(plan.kind, `${path}.kind`);
+  const kind = requireNonEmptyString(plan.kind, `${path}.kind`);
   assertKnownKeys(plan, path);
   validateCommonFields(plan, path);
 
@@ -303,11 +457,14 @@ function validateNode(
       }
       if (plan.pattern !== undefined) {
         const pattern = requireString(plan.pattern, `${path}.pattern`);
-        if (pattern.length > 8192) {
-          throw new TypeError(`[fluxfast] ${path}.pattern is too long`);
+        const patternError = validationPatternError(pattern);
+        if (patternError !== undefined) {
+          throw new TypeError(
+            `[fluxfast] Invalid validation pattern at ${path}.pattern: ${patternError}`
+          );
         }
         try {
-          patterns.set(value as object, new RegExp(pattern));
+          patterns.set(value as object, new RegExp(pattern, "u"));
         } catch (error) {
           throw new TypeError(
             `[fluxfast] Invalid regular expression at ${path}.pattern: ${
@@ -317,7 +474,7 @@ function validateNode(
         }
       }
       if (plan.format !== undefined) {
-        const format = requireString(plan.format, `${path}.format`);
+        const format = requireNonEmptyString(plan.format, `${path}.format`);
         if (!isSupportedValidationFormat(format)) {
           throw new TypeError(
             `[fluxfast] Unsupported validation format ${JSON.stringify(format)} at ${path}.format`
@@ -334,14 +491,12 @@ function validateNode(
       if (!("value" in plan)) {
         throw new TypeError(`[fluxfast] Invalid validation plan at ${path}.value`);
       }
-      assertJsonValue(plan.value, `${path}.value`);
       break;
     case "enum": {
       const values = requireArray(plan.values, `${path}.values`);
       if (values.length === 0) {
         throw new TypeError(`[fluxfast] ${path}.values must not be empty`);
       }
-      values.forEach((item, index) => assertJsonValue(item, `${path}.values[${index}]`));
       break;
     }
     case "array": {
@@ -428,7 +583,10 @@ function validateNode(
       if (hasName === hasRef) {
         throw new TypeError(`[fluxfast] ${path} must contain exactly one of name or ref`);
       }
-      requireString(hasName ? plan.name : plan.ref, `${path}.${hasName ? "name" : "ref"}`);
+      requireNonEmptyString(
+        hasName ? plan.name : plan.ref,
+        `${path}.${hasName ? "name" : "ref"}`
+      );
       break;
     }
     default:
@@ -440,7 +598,7 @@ function validateNode(
   if (plan.definitions !== undefined) {
     const definitions = requireRecord(plan.definitions, `${path}.definitions`);
     for (const name of Object.keys(definitions).sort()) {
-      requireString(name, pathKey(`${path}.definitions`, name));
+      requireNonEmptyString(name, pathKey(`${path}.definitions`, name));
       validateNestedPlan(
         definitions[name],
         pathKey(`${path}.definitions`, name),
@@ -455,32 +613,63 @@ function collectAndValidate(
   documentDefinitions: unknown,
   patterns: WeakMap<object, RegExp>
 ): Map<string, ValidationPlan> {
+  assertPlanBounds(root, documentDefinitions);
   const definitions = new Map<string, ValidationPlan>();
   if (documentDefinitions !== undefined) {
     registerDefinitions(definitions, documentDefinitions, "$.definitions");
   }
   const visited = new WeakSet<object>();
   const visiting = new WeakSet<object>();
-  const visit = (value: ValidationPlan, path: string): void => {
-    if (typeof value === "boolean") return;
-    const object = requireRecord(value, path);
-    if (visiting.has(object)) {
-      throw new TypeError(`[fluxfast] Circular validation plan at ${path}`);
-    }
-    if (visited.has(object)) return;
-    visiting.add(object);
-    if (object.definitions !== undefined) {
-      registerDefinitions(definitions, object.definitions, `${path}.definitions`);
-    }
-    validateNode(value, path, visit, patterns);
-    visiting.delete(object);
-    visited.add(object);
+  interface WorkItem {
+    readonly value: ValidationPlan;
+    readonly path: string;
+    readonly exit?: boolean;
+  }
+  const pending: WorkItem[] = [{ value: root, path: "$" }];
+  const enqueue = (value: ValidationPlan, path: string): void => {
+    pending.push({ value, path });
   };
-  visit(root, "$");
-  for (const [name, definition] of [...definitions.entries()].sort(([left], [right]) =>
-    left < right ? -1 : left > right ? 1 : 0
-  )) {
-    visit(definition, `$.definitions[${JSON.stringify(name)}]`);
+
+  const drain = (): void => {
+    while (pending.length > 0) {
+      const item = pending.pop()!;
+      if (item.exit) {
+        if (typeof item.value !== "boolean") {
+          const object = requireRecord(item.value, item.path);
+          visiting.delete(object);
+          visited.add(object);
+        }
+        continue;
+      }
+      if (typeof item.value === "boolean") continue;
+      const object = requireRecord(item.value, item.path);
+      if (visiting.has(object)) {
+        throw new TypeError(`[fluxfast] Circular validation plan at ${item.path}`);
+      }
+      if (visited.has(object)) continue;
+      visiting.add(object);
+      pending.push({ value: item.value, path: item.path, exit: true });
+      if (object.definitions !== undefined) {
+        registerDefinitions(definitions, object.definitions, `${item.path}.definitions`);
+      }
+      validateNode(item.value, item.path, enqueue, patterns);
+    }
+  };
+
+  drain();
+  const scheduledDefinitions = new Set<string>();
+  while (true) {
+    let scheduled = false;
+    for (const [name, definition] of [...definitions.entries()].sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0
+    )) {
+      if (scheduledDefinitions.has(name)) continue;
+      scheduledDefinitions.add(name);
+      enqueue(definition, `$.definitions[${JSON.stringify(name)}]`);
+      scheduled = true;
+    }
+    if (!scheduled) break;
+    drain();
   }
   return definitions;
 }
@@ -523,9 +712,12 @@ interface RefFrame {
 interface EvaluationState {
   readonly compiled: CompiledValidationPlan;
   collector: IssueCollector;
+  readonly primaryCollector: IssueCollector;
   readonly activeValues: WeakSet<object>;
   readonly refs: RefFrame[];
   readonly root: ValidationPlan;
+  operations: number;
+  operationLimitReported: boolean;
 }
 
 function withCollector<T>(
@@ -546,8 +738,16 @@ function isObjectLike(value: unknown): value is object {
   return value !== null && typeof value === "object";
 }
 
+function safeIsArray(value: unknown): value is unknown[] {
+  try {
+    return Array.isArray(value);
+  } catch {
+    return false;
+  }
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (!isObjectLike(value) || Array.isArray(value)) return false;
+  if (!isObjectLike(value) || safeIsArray(value)) return false;
   try {
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
@@ -558,8 +758,27 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function expectedType(value: unknown): string {
   if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
+  if (safeIsArray(value)) return "array";
   return typeof value;
+}
+
+function consumeOperation(
+  state: EvaluationState,
+  path: readonly (string | number)[]
+): boolean {
+  if (state.operations >= state.compiled.limits.maxOperations) {
+    if (!state.operationLimitReported) {
+      state.operationLimitReported = true;
+      state.primaryCollector.add(
+        path,
+        "maxOperations",
+        "Validation operation limit exceeded."
+      );
+    }
+    return false;
+  }
+  state.operations += 1;
+  return true;
 }
 
 function addTypeIssue(
@@ -592,54 +811,189 @@ function readOwnValue(
   value: Record<string, unknown>,
   key: string
 ): { found: boolean; value?: unknown; threw?: boolean } {
-  if (!Object.prototype.hasOwnProperty.call(value, key)) return { found: false };
   try {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) return { found: false };
     return { found: true, value: value[key] };
   } catch {
     return { found: true, threw: true };
   }
 }
 
-function readKeys(value: Record<string, unknown>): string[] | undefined {
+function hasOwnValue(value: Record<string, unknown>, key: string): boolean | undefined {
   try {
-    return Object.keys(value).sort();
+    return Object.prototype.hasOwnProperty.call(value, key);
   } catch {
     return undefined;
   }
 }
 
-function deepEqual(left: unknown, right: unknown, seen = new Map<object, object>()): boolean {
-  if (Object.is(left, right)) return true;
-  if (!isObjectLike(left) || !isObjectLike(right)) return false;
-  if (Array.isArray(left) !== Array.isArray(right)) return false;
-  const previous = seen.get(left);
-  if (previous) return previous === right;
-  seen.set(left, right);
-
-  if (Array.isArray(left) && Array.isArray(right)) {
-    if (left.length !== right.length) return false;
-    for (let index = 0; index < left.length; index += 1) {
-      if (!deepEqual(left[index], right[index], seen)) return false;
+function readArrayLength(value: unknown[], path: readonly (string | number)[], state: EvaluationState): number | undefined {
+  try {
+    const length = value.length;
+    if (!Number.isSafeInteger(length) || length < 0) {
+      state.collector.add(path, "read", "Array length could not be read.");
+      return undefined;
     }
-    return true;
+    return length;
+  } catch {
+    state.collector.add(path, "read", "Array length could not be read.");
+    return undefined;
   }
-  if (!isPlainObject(left) || !isPlainObject(right)) return false;
-  const leftKeys = readKeys(left);
-  const rightKeys = readKeys(right);
-  if (!leftKeys || !rightKeys || leftKeys.length !== rightKeys.length) return false;
-  for (let index = 0; index < leftKeys.length; index += 1) {
-    const leftKey = leftKeys[index];
-    if (leftKey !== rightKeys[index]) return false;
-    const leftValue = readOwnValue(left, leftKey);
-    const rightValue = readOwnValue(right, leftKey);
+}
+
+function readArrayValue(
+  value: unknown[],
+  index: number
+): { value?: unknown; threw?: boolean } {
+  try {
+    return { value: value[index] };
+  } catch {
+    return { threw: true };
+  }
+}
+
+interface ReadKeysResult {
+  readonly keys?: string[];
+  readonly error?: "read" | "maxProperties" | "maxOperations";
+}
+
+function readKeys(
+  value: Record<string, unknown>,
+  state: EvaluationState,
+  path: readonly (string | number)[]
+): ReadKeysResult {
+  if (!consumeOperation(state, path)) return { error: "maxOperations" };
+  const keys: string[] = [];
+  try {
+    for (const key in value) {
+      const own = hasOwnValue(value, key);
+      if (own === undefined) return { error: "read" };
+      if (!own) continue;
+      if (!consumeOperation(state, [...path, key])) {
+        return { error: "maxOperations" };
+      }
+      keys.push(key);
+      if (keys.length > state.compiled.limits.maxProperties) {
+        state.collector.add(
+          path,
+          "maxProperties",
+          `Object contains more than ${state.compiled.limits.maxProperties} properties.`
+        );
+        return { error: "maxProperties" };
+      }
+    }
+    return { keys: keys.sort() };
+  } catch {
+    return { error: "read" };
+  }
+}
+
+interface EqualPair {
+  readonly left: unknown;
+  readonly right: unknown;
+  readonly path: readonly (string | number)[];
+}
+
+function deepEqual(
+  left: unknown,
+  right: unknown,
+  state: EvaluationState,
+  path: readonly (string | number)[]
+): boolean {
+  const seen = new Map<object, object>();
+  const pending: EqualPair[] = [{ left, right, path }];
+  while (pending.length > 0) {
+    const pair = pending.pop()!;
+    if (!consumeOperation(state, pair.path)) return false;
+    if (Object.is(pair.left, pair.right)) continue;
+    if (!isObjectLike(pair.left) || !isObjectLike(pair.right)) return false;
+
+    const leftArray = safeIsArray(pair.left);
+    const rightArray = safeIsArray(pair.right);
+    if (leftArray !== rightArray) return false;
+    const previous = seen.get(pair.left);
+    if (previous !== undefined) {
+      if (previous !== pair.right) return false;
+      continue;
+    }
+    seen.set(pair.left, pair.right);
+
+    if (leftArray && rightArray) {
+      let leftLength: number;
+      let rightLength: number;
+      if (!consumeOperation(state, pair.path)) return false;
+      try {
+        leftLength = (pair.left as unknown[]).length;
+        rightLength = (pair.right as unknown[]).length;
+      } catch {
+        return false;
+      }
+      if (
+        !Number.isSafeInteger(leftLength) ||
+        !Number.isSafeInteger(rightLength) ||
+        leftLength < 0 ||
+        rightLength < 0
+      ) {
+        return false;
+      }
+      if (
+        leftLength > state.compiled.limits.maxProperties ||
+        rightLength > state.compiled.limits.maxProperties
+      ) {
+        state.collector.add(
+          pair.path,
+          "maxProperties",
+          `Collection contains more than ${state.compiled.limits.maxProperties} items.`
+        );
+        return false;
+      }
+      if (leftLength !== rightLength) return false;
+      for (let index = leftLength - 1; index >= 0; index -= 1) {
+        const itemPath = [...pair.path, index];
+        if (!consumeOperation(state, itemPath)) return false;
+        let leftValue: unknown;
+        let rightValue: unknown;
+        try {
+          leftValue = (pair.left as unknown[])[index];
+          rightValue = (pair.right as unknown[])[index];
+        } catch {
+          return false;
+        }
+        pending.push({ left: leftValue, right: rightValue, path: itemPath });
+      }
+      continue;
+    }
+
+    if (!isPlainObject(pair.left) || !isPlainObject(pair.right)) return false;
+    const leftKeys = readKeys(pair.left, state, pair.path);
+    const rightKeys = readKeys(pair.right, state, pair.path);
     if (
-      !leftValue.found ||
-      !rightValue.found ||
-      leftValue.threw ||
-      rightValue.threw ||
-      !deepEqual(leftValue.value, rightValue.value, seen)
+      !leftKeys.keys ||
+      !rightKeys.keys ||
+      leftKeys.keys.length !== rightKeys.keys.length
     ) {
       return false;
+    }
+    for (let index = leftKeys.keys.length - 1; index >= 0; index -= 1) {
+      const leftKey = leftKeys.keys[index];
+      if (leftKey !== rightKeys.keys[index]) return false;
+      const itemPath = [...pair.path, leftKey];
+      if (!consumeOperation(state, itemPath)) return false;
+      const leftValue = readOwnValue(pair.left, leftKey);
+      const rightValue = readOwnValue(pair.right, leftKey);
+      if (
+        !leftValue.found ||
+        !rightValue.found ||
+        leftValue.threw ||
+        rightValue.threw
+      ) {
+        return false;
+      }
+      pending.push({
+        left: leftValue.value,
+        right: rightValue.value,
+        path: itemPath
+      });
     }
   }
   return true;
@@ -663,6 +1017,57 @@ function sameReferenceValue(left: unknown, right: unknown): boolean {
   return isObjectLike(left) || isObjectLike(right)
     ? left === right
     : Object.is(left, right);
+}
+
+interface DecimalParts {
+  readonly coefficient: bigint;
+  readonly power: number;
+}
+
+function decimalParts(value: number): DecimalParts {
+  const source = value.toString().toLowerCase();
+  const [mantissa, exponentText] = source.split("e");
+  const exponent = exponentText === undefined ? 0 : Number(exponentText);
+  const negative = mantissa.startsWith("-");
+  const unsigned = negative || mantissa.startsWith("+")
+    ? mantissa.slice(1)
+    : mantissa;
+  const dot = unsigned.indexOf(".");
+  const fractionalDigits = dot === -1 ? 0 : unsigned.length - dot - 1;
+  const digits = (dot === -1 ? unsigned : unsigned.replace(".", ""));
+  return {
+    coefficient: BigInt((negative ? "-" : "") + digits),
+    power: exponent - fractionalDigits
+  };
+}
+
+function isMultipleOf(value: number, multipleOf: number): boolean {
+  if (Number.isSafeInteger(value) && Number.isSafeInteger(multipleOf)) {
+    return value % multipleOf === 0;
+  }
+  const left = decimalParts(value);
+  const right = decimalParts(multipleOf);
+  const difference = left.power - right.power;
+  const numerator = difference >= 0
+    ? left.coefficient * 10n ** BigInt(difference)
+    : left.coefficient;
+  const denominator = difference >= 0
+    ? right.coefficient
+    : right.coefficient * 10n ** BigInt(-difference);
+  if (denominator === 0n) return false;
+  if (numerator % denominator === 0n) return true;
+
+  // Pydantic's float validator allows the tiny rounding error introduced by
+  // ordinary decimal arithmetic (for example, 0.1 + 0.2). Keep that
+  // compatibility without allowing a half-quotient error at large values.
+  const quotient = value / multipleOf;
+  const nearest = Math.round(quotient);
+  const differenceFromInteger = Math.abs(quotient - nearest);
+  const floatingTolerance = Math.min(
+    1e-7,
+    Number.EPSILON * Math.max(1, Math.abs(quotient)) * 8
+  );
+  return differenceFromInteger <= floatingTolerance;
 }
 
 function evaluateNumber(
@@ -705,9 +1110,7 @@ function evaluateNumber(
     valid = false;
   }
   if (plan.multipleOf !== undefined) {
-    const quotient = value / plan.multipleOf;
-    const tolerance = Number.EPSILON * Math.max(1, Math.abs(quotient)) * 8;
-    if (Math.abs(quotient - Math.round(quotient)) > tolerance) {
+    if (!isMultipleOf(value, plan.multipleOf)) {
       state.collector.add(
         path,
         "multipleOf",
@@ -729,7 +1132,11 @@ function evaluateString(
     addTypeIssue(state, path, "string", value);
     return false;
   }
-  const length = [...value].length;
+  let length = 0;
+  for (const _character of value) {
+    if (!consumeOperation(state, path)) return false;
+    length += 1;
+  }
   let valid = true;
   if (plan.minLength !== undefined && length < plan.minLength) {
     state.collector.add(path, "minLength", `String must contain at least ${plan.minLength} characters.`);
@@ -780,7 +1187,17 @@ function evaluateObject(
     const required = [...(plan.required ?? [])].sort();
     let valid = true;
     for (const key of required) {
-      if (!Object.prototype.hasOwnProperty.call(value, key)) {
+      if (!consumeOperation(state, [...path, key])) {
+        valid = false;
+        break;
+      }
+      const present = hasOwnValue(value, key);
+      if (present === undefined) {
+        state.collector.add([...path, key], "read", "Property could not be inspected.");
+        valid = false;
+        continue;
+      }
+      if (!present) {
         state.collector.add(
           [...path, key],
           "required",
@@ -790,6 +1207,10 @@ function evaluateObject(
       }
     }
     for (const key of propertyNames) {
+      if (!consumeOperation(state, [...path, key])) {
+        valid = false;
+        break;
+      }
       const read = readOwnValue(value, key);
       if (!read.found) continue;
       if (read.threw) {
@@ -802,33 +1223,37 @@ function evaluateObject(
       }
     }
 
-    const keys = readKeys(value);
-    if (!keys) {
-      state.collector.add(path, "read", "Object properties could not be enumerated.");
-      return false;
-    }
-    const declared = new Set(propertyNames);
-    for (const key of keys) {
-      if (declared.has(key)) continue;
-      const additional = plan.additionalProperties;
-      if (additional === false) {
-        state.collector.add(
-          [...path, key],
-          "additionalProperties",
-          `Additional property ${displayValidationKey(key)} is not allowed.`
-        );
-        valid = false;
-        continue;
+    const additional = plan.additionalProperties;
+    if (additional !== undefined && additional !== true) {
+      const keysResult = readKeys(value, state, path);
+      if (!keysResult.keys) {
+        if (keysResult.error === "maxProperties" || keysResult.error === "maxOperations") {
+          return false;
+        }
+        state.collector.add(path, "read", "Object properties could not be enumerated.");
+        return false;
       }
-      if (additional === undefined || additional === true) continue;
-      const read = readOwnValue(value, key);
-      if (!read.found || read.threw) {
-        state.collector.add([...path, key], "read", "Property could not be read.");
-        valid = false;
-        continue;
-      }
-      if (!evaluate(additional, read.value, [...path, key], depth + 1, state)) {
-        valid = false;
+      const declared = new Set(propertyNames);
+      for (const key of keysResult.keys) {
+        if (declared.has(key)) continue;
+        if (additional === false) {
+          state.collector.add(
+            [...path, key],
+            "additionalProperties",
+            `Additional property ${displayValidationKey(key)} is not allowed.`
+          );
+          valid = false;
+          continue;
+        }
+        const read = readOwnValue(value, key);
+        if (!read.found || read.threw) {
+          state.collector.add([...path, key], "read", "Property could not be read.");
+          valid = false;
+          continue;
+        }
+        if (!evaluate(additional, read.value, [...path, key], depth + 1, state)) {
+          valid = false;
+        }
       }
     }
     return valid;
@@ -844,34 +1269,56 @@ function evaluateArray(
   depth: number,
   state: EvaluationState
 ): boolean {
-  if (!Array.isArray(value)) {
+  if (!safeIsArray(value)) {
     addTypeIssue(state, path, "array", value);
     return false;
   }
   if (!enterValue(state, value, path)) return false;
   try {
+    const length = readArrayLength(value, path, state);
+    if (length === undefined) return false;
     let valid = true;
-    if (plan.minItems !== undefined && value.length < plan.minItems) {
+    if (plan.minItems !== undefined && length < plan.minItems) {
       state.collector.add(path, "minItems", `Array must contain at least ${plan.minItems} items.`);
       valid = false;
     }
-    if (plan.maxItems !== undefined && value.length > plan.maxItems) {
+    if (plan.maxItems !== undefined && length > plan.maxItems) {
       state.collector.add(path, "maxItems", `Array must contain at most ${plan.maxItems} items.`);
       valid = false;
     }
     const prefixItems = plan.prefixItems ?? [];
-    for (let index = 0; index < Math.min(value.length, prefixItems.length); index += 1) {
-      if (!evaluate(prefixItems[index], value[index], [...path, index], depth + 1, state)) {
+    for (let index = 0; index < Math.min(length, prefixItems.length); index += 1) {
+      const itemPath = [...path, index];
+      if (!consumeOperation(state, itemPath)) {
+        valid = false;
+        break;
+      }
+      const read = readArrayValue(value, index);
+      if (read.threw) {
+        state.collector.add(itemPath, "read", "Array item could not be read.");
+        valid = false;
+        continue;
+      }
+      if (!evaluate(prefixItems[index], read.value, itemPath, depth + 1, state)) {
         valid = false;
       }
     }
-    for (let index = prefixItems.length; index < value.length; index += 1) {
+    for (let index = prefixItems.length; index < length; index += 1) {
+      const itemPath = [...path, index];
+      if (!consumeOperation(state, itemPath)) {
+        valid = false;
+        break;
+      }
       const itemPlan = plan.items;
       if (itemPlan === false) {
-        state.collector.add([...path, index], "items", "Additional array items are not allowed.");
+        state.collector.add(itemPath, "items", "Additional array items are not allowed.");
         valid = false;
       } else if (itemPlan !== undefined && itemPlan !== true) {
-        if (!evaluate(itemPlan, value[index], [...path, index], depth + 1, state)) {
+        const read = readArrayValue(value, index);
+        if (read.threw) {
+          state.collector.add(itemPath, "read", "Array item could not be read.");
+          valid = false;
+        } else if (!evaluate(itemPlan, read.value, itemPath, depth + 1, state)) {
           valid = false;
         }
       }
@@ -889,22 +1336,35 @@ function evaluateTuple(
   depth: number,
   state: EvaluationState
 ): boolean {
-  if (!Array.isArray(value)) {
+  if (!safeIsArray(value)) {
     addTypeIssue(state, path, "array", value);
     return false;
   }
   if (!enterValue(state, value, path)) return false;
   try {
+    const length = readArrayLength(value, path, state);
+    if (length === undefined) return false;
     let valid = true;
     for (let index = 0; index < plan.items.length; index += 1) {
-      if (index >= value.length) {
+      const itemPath = [...path, index];
+      if (!consumeOperation(state, itemPath)) {
+        valid = false;
+        break;
+      }
+      if (index >= length) {
         state.collector.add([...path, index], "required", "Tuple item is missing.");
         valid = false;
-      } else if (!evaluate(plan.items[index], value[index], [...path, index], depth + 1, state)) {
-        valid = false;
+      } else {
+        const read = readArrayValue(value, index);
+        if (read.threw) {
+          state.collector.add(itemPath, "read", "Array item could not be read.");
+          valid = false;
+        } else if (!evaluate(plan.items[index], read.value, itemPath, depth + 1, state)) {
+          valid = false;
+        }
       }
     }
-    if (value.length > plan.items.length) {
+    if (length > plan.items.length) {
       if (plan.rest === false || plan.rest === undefined) {
         state.collector.add(
           [...path, plan.items.length],
@@ -913,8 +1373,17 @@ function evaluateTuple(
         );
         valid = false;
       } else {
-        for (let index = plan.items.length; index < value.length; index += 1) {
-          if (!evaluate(plan.rest, value[index], [...path, index], depth + 1, state)) {
+        for (let index = plan.items.length; index < length; index += 1) {
+          const itemPath = [...path, index];
+          if (!consumeOperation(state, itemPath)) {
+            valid = false;
+            break;
+          }
+          const read = readArrayValue(value, index);
+          if (read.threw) {
+            state.collector.add(itemPath, "read", "Array item could not be read.");
+            valid = false;
+          } else if (!evaluate(plan.rest, read.value, itemPath, depth + 1, state)) {
             valid = false;
           }
         }
@@ -936,9 +1405,10 @@ function evaluateUnion(
 ): boolean {
   let matches = 0;
   for (const branch of plan.anyOf) {
+    if (!consumeOperation(state, path)) break;
     const branchCollector = new IssueCollector(1);
     const branchValid = withCollector(state, branchCollector, () =>
-      evaluate(branch, value, path, depth, state)
+      evaluate(branch, value, path, depth + 1, state)
     );
     if (branchValid) matches += 1;
   }
@@ -964,7 +1434,11 @@ function evaluateIntersection(
 ): boolean {
   let valid = true;
   for (const branch of plan.allOf) {
-    if (!evaluate(branch, value, path, depth, state)) valid = false;
+    if (!consumeOperation(state, path)) {
+      valid = false;
+      break;
+    }
+    if (!evaluate(branch, value, path, depth + 1, state)) valid = false;
   }
   return valid;
 }
@@ -976,6 +1450,7 @@ function evaluateReference(
   depth: number,
   state: EvaluationState
 ): boolean {
+  if (!consumeOperation(state, path)) return false;
   const reference = normalizeReference(plan.name ?? plan.ref!);
   const target = reference === "#" ? state.root : state.compiled.definitions.get(reference);
   if (target === undefined) {
@@ -994,7 +1469,7 @@ function evaluateReference(
   }
   state.refs.push({ name: reference, value });
   try {
-    return evaluate(target, value, path, depth, state);
+    return evaluate(target, value, path, depth + 1, state);
   } finally {
     state.refs.pop();
   }
@@ -1007,6 +1482,7 @@ function evaluate(
   depth: number,
   state: EvaluationState
 ): boolean {
+  if (!consumeOperation(state, path)) return false;
   if (typeof plan === "boolean") {
     if (!plan) state.collector.add(path, "never", "Value is not allowed.");
     return plan;
@@ -1038,11 +1514,14 @@ function evaluate(
     case "integer":
       return evaluateNumber(plan, value, path, state);
     case "literal":
-      if (deepEqual(plan.value, value)) return true;
+      if (deepEqual(plan.value, value, state, path)) return true;
       state.collector.add(path, "const", "Value does not equal the required literal.");
       return false;
     case "enum":
-      if (plan.values.some(candidate => deepEqual(candidate, value))) return true;
+      for (const candidate of plan.values) {
+        if (!consumeOperation(state, path)) return false;
+        if (deepEqual(candidate, value, state, path)) return true;
+      }
       state.collector.add(path, "enum", "Value is not one of the allowed values.");
       return false;
     case "array":
@@ -1074,9 +1553,12 @@ export function evaluateValidationPlan<T>(
   const state: EvaluationState = {
     compiled,
     collector,
+    primaryCollector: collector,
     activeValues: new WeakSet<object>(),
     refs: [],
-    root: compiled.root
+    root: compiled.root,
+    operations: 0,
+    operationLimitReported: false
   };
   const valid = evaluate(compiled.root, value, [], 0, state);
   if (valid) {
