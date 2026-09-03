@@ -4,6 +4,7 @@ import { compileFluxFastMutations } from "./mutation-compiler";
 import { compileFluxFastPageRoutes } from "./route-compiler";
 import { compileFluxFastResourceTypes } from "./schema-compiler";
 import { parseFluxFastSchemaManifest } from "./schema-manifest";
+import { compileFluxFastValidators } from "./validator-compiler";
 
 export interface GenerateOptions {
   pagesDir?: string;
@@ -234,6 +235,11 @@ function createFluxFastProjectSnapshot(
         path: path.join(generatedDir, "types.generated.ts"),
         content: compileFluxFastResourceTypes(manifest),
         label: "resource types"
+      },
+      {
+        path: path.join(generatedDir, "validators.generated.ts"),
+        content: compileFluxFastValidators(manifest),
+        label: "validators"
       },
       {
         path: path.join(generatedDir, "routes.generated.ts"),

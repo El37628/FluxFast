@@ -174,14 +174,16 @@ describe("Pages Registry Generator", () => {
       path.join(generatedDir, "mutations.generated.ts"),
       path.join(generatedDir, "pages.generated.ts"),
       path.join(generatedDir, "routes.generated.ts"),
-      path.join(generatedDir, "types.generated.ts")
+      path.join(generatedDir, "types.generated.ts"),
+      path.join(generatedDir, "validators.generated.ts")
     ]);
     expect(fs.readdirSync(generatedDir).sort()).toEqual([
       "mutations.generated.ts",
       "pages.generated.ts",
       "routes.generated.ts",
       "schema.generated.json",
-      "types.generated.ts"
+      "types.generated.ts",
+      "validators.generated.ts"
     ]);
     expect(fs.existsSync(path.join(tmpDir, "malicious.ts"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, "model.ts"))).toBe(false);

@@ -133,6 +133,7 @@ function assertTraditionalRegistryGeneration() {
   for (const file of [
     "schema.generated.json",
     "types.generated.ts",
+    "validators.generated.ts",
     "routes.generated.ts",
     "mutations.generated.ts"
   ]) {
