@@ -27,11 +27,13 @@ import { isValidationPlanDocument } from "./types";
 export const DEFAULT_VALIDATION_MAX_DEPTH = 64;
 export const DEFAULT_VALIDATION_MAX_ISSUES = 100;
 export const DEFAULT_VALIDATION_MAX_OPERATIONS = 100_000;
+export const DEFAULT_VALIDATION_MAX_PROPERTIES = 10_000;
 
 interface NormalizedLimits {
   readonly maxDepth: number;
   readonly maxIssues: number;
   readonly maxOperations: number;
+  readonly maxProperties: number;
 }
 
 export interface CompiledValidationPlan {
@@ -157,6 +159,7 @@ function validateLimits(options: ValidationOptions = {}): NormalizedLimits {
   const maxDepth = options.maxDepth ?? options.limits?.maxDepth ?? DEFAULT_VALIDATION_MAX_DEPTH;
   const maxIssues = options.maxIssues ?? options.limits?.maxIssues ?? DEFAULT_VALIDATION_MAX_ISSUES;
   const maxOperations = options.maxOperations ?? options.limits?.maxOperations ?? DEFAULT_VALIDATION_MAX_OPERATIONS;
+  const maxProperties = options.maxProperties ?? options.limits?.maxProperties ?? DEFAULT_VALIDATION_MAX_PROPERTIES;
   if (typeof maxDepth !== "number" || !Number.isSafeInteger(maxDepth) || maxDepth < 0) {
     throw new TypeError("[fluxfast] maxDepth must be a non-negative integer");
   }
@@ -170,7 +173,14 @@ function validateLimits(options: ValidationOptions = {}): NormalizedLimits {
   ) {
     throw new TypeError("[fluxfast] maxOperations must be a positive integer");
   }
-  return { maxDepth, maxIssues, maxOperations };
+  if (
+    typeof maxProperties !== "number" ||
+    !Number.isSafeInteger(maxProperties) ||
+    maxProperties < 1
+  ) {
+    throw new TypeError("[fluxfast] maxProperties must be a positive integer");
+  }
+  return { maxDepth, maxIssues, maxOperations, maxProperties };
 }
 
 function registerDefinitions(
@@ -684,64 +694,139 @@ function readArrayValue(
   }
 }
 
-function readKeys(value: Record<string, unknown>): string[] | undefined {
+interface ReadKeysResult {
+  readonly keys?: string[];
+  readonly error?: "read" | "maxProperties" | "maxOperations";
+}
+
+function readKeys(
+  value: Record<string, unknown>,
+  state: EvaluationState,
+  path: readonly (string | number)[]
+): ReadKeysResult {
+  if (!consumeOperation(state, path)) return { error: "maxOperations" };
   try {
-    return Object.keys(value).sort();
+    const keys = Object.keys(value);
+    if (keys.length > state.compiled.limits.maxProperties) {
+      state.collector.add(
+        path,
+        "maxProperties",
+        `Object contains more than ${state.compiled.limits.maxProperties} properties.`
+      );
+      return { error: "maxProperties" };
+    }
+    return { keys: keys.sort() };
   } catch {
-    return undefined;
+    return { error: "read" };
   }
 }
 
-function deepEqual(left: unknown, right: unknown, seen = new Map<object, object>()): boolean {
-  if (Object.is(left, right)) return true;
-  if (!isObjectLike(left) || !isObjectLike(right)) return false;
-  const leftArray = safeIsArray(left);
-  const rightArray = safeIsArray(right);
-  if (leftArray !== rightArray) return false;
-  const previous = seen.get(left);
-  if (previous) return previous === right;
-  seen.set(left, right);
+interface EqualPair {
+  readonly left: unknown;
+  readonly right: unknown;
+  readonly path: readonly (string | number)[];
+}
 
-  if (leftArray && rightArray) {
-    let leftLength: number;
-    let rightLength: number;
-    try {
-      leftLength = (left as unknown[]).length;
-      rightLength = (right as unknown[]).length;
-    } catch {
-      return false;
+function deepEqual(
+  left: unknown,
+  right: unknown,
+  state: EvaluationState,
+  path: readonly (string | number)[]
+): boolean {
+  const seen = new Map<object, object>();
+  const pending: EqualPair[] = [{ left, right, path }];
+  while (pending.length > 0) {
+    const pair = pending.pop()!;
+    if (!consumeOperation(state, pair.path)) return false;
+    if (Object.is(pair.left, pair.right)) continue;
+    if (!isObjectLike(pair.left) || !isObjectLike(pair.right)) return false;
+
+    const leftArray = safeIsArray(pair.left);
+    const rightArray = safeIsArray(pair.right);
+    if (leftArray !== rightArray) return false;
+    const previous = seen.get(pair.left);
+    if (previous !== undefined) {
+      if (previous !== pair.right) return false;
+      continue;
     }
-    if (leftLength !== rightLength) return false;
-    for (let index = 0; index < leftLength; index += 1) {
-      let leftValue: unknown;
-      let rightValue: unknown;
+    seen.set(pair.left, pair.right);
+
+    if (leftArray && rightArray) {
+      let leftLength: number;
+      let rightLength: number;
+      if (!consumeOperation(state, pair.path)) return false;
       try {
-        leftValue = (left as unknown[])[index];
-        rightValue = (right as unknown[])[index];
+        leftLength = (pair.left as unknown[]).length;
+        rightLength = (pair.right as unknown[]).length;
       } catch {
         return false;
       }
-      if (!deepEqual(leftValue, rightValue, seen)) return false;
+      if (
+        !Number.isSafeInteger(leftLength) ||
+        !Number.isSafeInteger(rightLength) ||
+        leftLength < 0 ||
+        rightLength < 0
+      ) {
+        return false;
+      }
+      if (
+        leftLength > state.compiled.limits.maxProperties ||
+        rightLength > state.compiled.limits.maxProperties
+      ) {
+        state.collector.add(
+          pair.path,
+          "maxProperties",
+          `Collection contains more than ${state.compiled.limits.maxProperties} items.`
+        );
+        return false;
+      }
+      if (leftLength !== rightLength) return false;
+      for (let index = leftLength - 1; index >= 0; index -= 1) {
+        const itemPath = [...pair.path, index];
+        if (!consumeOperation(state, itemPath)) return false;
+        let leftValue: unknown;
+        let rightValue: unknown;
+        try {
+          leftValue = (pair.left as unknown[])[index];
+          rightValue = (pair.right as unknown[])[index];
+        } catch {
+          return false;
+        }
+        pending.push({ left: leftValue, right: rightValue, path: itemPath });
+      }
+      continue;
     }
-    return true;
-  }
-  if (!isPlainObject(left) || !isPlainObject(right)) return false;
-  const leftKeys = readKeys(left);
-  const rightKeys = readKeys(right);
-  if (!leftKeys || !rightKeys || leftKeys.length !== rightKeys.length) return false;
-  for (let index = 0; index < leftKeys.length; index += 1) {
-    const leftKey = leftKeys[index];
-    if (leftKey !== rightKeys[index]) return false;
-    const leftValue = readOwnValue(left, leftKey);
-    const rightValue = readOwnValue(right, leftKey);
+
+    if (!isPlainObject(pair.left) || !isPlainObject(pair.right)) return false;
+    const leftKeys = readKeys(pair.left, state, pair.path);
+    const rightKeys = readKeys(pair.right, state, pair.path);
     if (
-      !leftValue.found ||
-      !rightValue.found ||
-      leftValue.threw ||
-      rightValue.threw ||
-      !deepEqual(leftValue.value, rightValue.value, seen)
+      !leftKeys.keys ||
+      !rightKeys.keys ||
+      leftKeys.keys.length !== rightKeys.keys.length
     ) {
       return false;
+    }
+    for (let index = leftKeys.keys.length - 1; index >= 0; index -= 1) {
+      const leftKey = leftKeys.keys[index];
+      if (leftKey !== rightKeys.keys[index]) return false;
+      const itemPath = [...pair.path, leftKey];
+      if (!consumeOperation(state, itemPath)) return false;
+      const leftValue = readOwnValue(pair.left, leftKey);
+      const rightValue = readOwnValue(pair.right, leftKey);
+      if (
+        !leftValue.found ||
+        !rightValue.found ||
+        leftValue.threw ||
+        rightValue.threw
+      ) {
+        return false;
+      }
+      pending.push({
+        left: leftValue.value,
+        right: rightValue.value,
+        path: itemPath
+      });
     }
   }
   return true;
@@ -802,7 +887,20 @@ function isMultipleOf(value: number, multipleOf: number): boolean {
   const denominator = difference >= 0
     ? right.coefficient
     : right.coefficient * 10n ** BigInt(-difference);
-  return denominator !== 0n && numerator % denominator === 0n;
+  if (denominator === 0n) return false;
+  if (numerator % denominator === 0n) return true;
+
+  // Pydantic's float validator allows the tiny rounding error introduced by
+  // ordinary decimal arithmetic (for example, 0.1 + 0.2). Keep that
+  // compatibility without allowing a half-quotient error at large values.
+  const quotient = value / multipleOf;
+  const nearest = Math.round(quotient);
+  const differenceFromInteger = Math.abs(quotient - nearest);
+  const floatingTolerance = Math.min(
+    1e-7,
+    Number.EPSILON * Math.max(1, Math.abs(quotient)) * 8
+  );
+  return differenceFromInteger <= floatingTolerance;
 }
 
 function evaluateNumber(
@@ -958,13 +1056,16 @@ function evaluateObject(
       }
     }
 
-    const keys = readKeys(value);
-    if (!keys) {
+    const keysResult = readKeys(value, state, path);
+    if (!keysResult.keys) {
+      if (keysResult.error === "maxProperties" || keysResult.error === "maxOperations") {
+        return false;
+      }
       state.collector.add(path, "read", "Object properties could not be enumerated.");
       return false;
     }
     const declared = new Set(propertyNames);
-    for (const key of keys) {
+    for (const key of keysResult.keys) {
       if (!consumeOperation(state, [...path, key])) {
         valid = false;
         break;
@@ -1249,11 +1350,14 @@ function evaluate(
     case "integer":
       return evaluateNumber(plan, value, path, state);
     case "literal":
-      if (deepEqual(plan.value, value)) return true;
+      if (deepEqual(plan.value, value, state, path)) return true;
       state.collector.add(path, "const", "Value does not equal the required literal.");
       return false;
     case "enum":
-      if (plan.values.some(candidate => deepEqual(candidate, value))) return true;
+      for (const candidate of plan.values) {
+        if (!consumeOperation(state, path)) return false;
+        if (deepEqual(candidate, value, state, path)) return true;
+      }
       state.collector.add(path, "enum", "Value is not one of the allowed values.");
       return false;
     case "array":

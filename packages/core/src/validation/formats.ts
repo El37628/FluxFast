@@ -36,8 +36,39 @@ export function validationPatternError(pattern: string): string | undefined {
   if (/\(\?(?:[=!]|<[=!]|[a-zA-Z-]+(?:\)|:|=|!))/.test(pattern)) {
     return "lookaround or inline regex flags are not supported by the native validator";
   }
+  if (/\(\?P<|\(\?<[^=!]/.test(pattern)) {
+    return "named capture groups are not supported by the native validator";
+  }
   if (/\)(?:[*+?]|\{\d+(?:,\d*)?\})(?:[?+])?/.test(pattern)) {
     return "quantified groups are rejected to keep validation traversal bounded";
+  }
+  let quantifiers = 0;
+  let inCharacterClass = false;
+  let escaped = false;
+  for (const character of pattern) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === "[") {
+      inCharacterClass = true;
+      continue;
+    }
+    if (character === "]") {
+      inCharacterClass = false;
+      continue;
+    }
+    if (inCharacterClass) continue;
+    if (character === "*" || character === "+" || character === "?") {
+      quantifiers += 1;
+    }
+  }
+  if (quantifiers > 1) {
+    return "patterns with multiple quantifiers are rejected to keep validation linear";
   }
   return undefined;
 }
@@ -71,6 +102,8 @@ function isValidDateParts(
     Number.isInteger(year) &&
     Number.isInteger(month) &&
     Number.isInteger(day) &&
+    year >= 1 &&
+    year <= 9999 &&
     month >= 1 &&
     month <= 12 &&
     day >= 1 &&
@@ -78,9 +111,9 @@ function isValidDateParts(
   );
 }
 
-const DATE_PATTERN = /^(\d{4,})-(\d{2})-(\d{2})$/;
-const TIME_PATTERN = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
-const DATE_TIME_PATTERN = /^(\d{4,})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const TIME_PATTERN = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?([Zz]|[+-]\d{2}:\d{2})?$/;
+const DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?([Zz]|[+-]\d{2}:\d{2})?$/;
 
 function isValidTime(value: string, requireZone: boolean): boolean {
   const match = TIME_PATTERN.exec(value);
@@ -90,7 +123,7 @@ function isValidTime(value: string, requireZone: boolean): boolean {
     Number(hours) <= 23 && Number(minutes) <= 59 && Number(seconds) <= 59;
   if (!validClock) return false;
   if (requireZone && !zone) return false;
-  if (!zone || zone === "Z") return true;
+  if (!zone || zone.toUpperCase() === "Z") return true;
   const offsetHours = Number(zone.slice(1, 3));
   const offsetMinutes = Number(zone.slice(4, 6));
   return offsetHours <= 23 && offsetMinutes <= 59;

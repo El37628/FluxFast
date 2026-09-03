@@ -300,7 +300,9 @@ describe("FluxFast validation runtime", () => {
 
     const tenth = createValidator({ kind: "number", multipleOf: 0.1 });
     expect(tenth.is(0.3)).toBe(true);
-    expect(tenth.is(0.30000000000000004)).toBe(false);
+    expect(tenth.is(0.30000000000000004)).toBe(true);
+    expect(tenth.is(1.0000000000000002)).toBe(true);
+    expect(tenth.is(0.31)).toBe(false);
   });
 
   it("rejects unsafe or non-portable patterns before runtime evaluation", () => {
@@ -310,7 +312,55 @@ describe("FluxFast validation runtime", () => {
     expect(() => createValidator({ kind: "string", pattern: "^\\w+$" })).toThrow(
       /escape whose semantics are not portable/
     );
+    expect(() => createValidator({ kind: "string", pattern: "(?P<word>a+)" })).toThrow(
+      /named capture groups/
+    );
+    expect(() => createValidator({ kind: "string", pattern: "^a*a*a*a*b$" })).toThrow(
+      /multiple quantifiers/
+    );
     expect(createValidator({ kind: "string", pattern: "^é+$" }).is("éé")).toBe(true);
+  });
+
+  it("accepts Pydantic date and time spellings while rejecting impossible years", () => {
+    const date = createValidator({ kind: "string", format: "date" });
+    const dateTime = createValidator({ kind: "string", format: "date-time" });
+    const time = createValidator({ kind: "string", format: "time" });
+
+    expect(date.is("0001-01-01")).toBe(true);
+    expect(date.is("0000-01-01")).toBe(false);
+    expect(date.is("10000-01-01")).toBe(false);
+    expect(dateTime.is("2024-01-01T12:30:00z")).toBe(true);
+    expect(time.is("12:30:00z")).toBe(true);
+  });
+
+  it("bounds literal and enum comparisons and object enumeration", () => {
+    const literal = createValidator(
+      {
+        kind: "literal",
+        value: Object.fromEntries(
+          Array.from({ length: 20 }, (_, index) => [`key${index}`, index])
+        )
+      },
+      { maxProperties: 4 }
+    );
+    const literalResult = literal.validate(
+      Object.fromEntries(
+        Array.from({ length: 20 }, (_, index) => [`key${index}`, index])
+      )
+    );
+    expect(literalResult).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ code: "maxProperties" })])
+    });
+
+    const object = createValidator(
+      { kind: "object", additionalProperties: false },
+      { maxProperties: 2 }
+    );
+    expect(object.validate({ a: 1, b: 2, c: 3 })).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "maxProperties" })]
+    });
   });
 
   it("rejects malformed or unsupported plans instead of silently dropping rules", () => {
