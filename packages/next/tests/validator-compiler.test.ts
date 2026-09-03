@@ -324,7 +324,7 @@ describe("FluxFast validator compiler", () => {
           backtracking: {
             schema: {
               type: "string",
-              pattern: "^a*a*a*a*a*b$"
+              pattern: "^a{1,3}b{1,3}$"
             }
           },
           safe: {

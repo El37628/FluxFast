@@ -46,7 +46,8 @@ function validationPatternError(pattern: string): string | undefined {
   let quantifiers = 0;
   let inCharacterClass = false;
   let escaped = false;
-  for (const character of pattern) {
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
     if (escaped) {
       escaped = false;
       continue;
@@ -64,8 +65,17 @@ function validationPatternError(pattern: string): string | undefined {
       continue;
     }
     if (inCharacterClass) continue;
+    if (character === "?" && pattern[index - 1] === "(") continue;
     if (character === "*" || character === "+" || character === "?") {
       quantifiers += 1;
+      continue;
+    }
+    if (character === "{") {
+      const quantifier = /^\{\d+(?:,\d*)?\}/.exec(pattern.slice(index));
+      if (quantifier) {
+        quantifiers += 1;
+        index += quantifier[0].length - 1;
+      }
     }
   }
   if (quantifiers > 1) {
