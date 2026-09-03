@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_serializer
 
 from fluxfast import FluxFast, FluxRouter, Page, resource, scope
 from fluxfast.schema_export import build_app_schema_manifest, build_schema_manifest
+from fluxfast.schema_manifest import SCHEMA_MANIFEST_V2
 
 
 class Booking(BaseModel):
@@ -294,6 +295,25 @@ def test_export_uses_only_the_given_application_registry() -> None:
 
     assert list(first_manifest.resources) == ["bookings"]
     assert list(second_manifest.resources) == ["summary"]
+
+
+def test_export_includes_explicit_types_in_schema_v2_and_fingerprints_them() -> None:
+    first = FluxFast(FastAPI())
+    first.define_type("User", Summary)
+    first_manifest = build_schema_manifest(first.schema_registry, producer="0.8.0")
+
+    second = FluxFast(FastAPI())
+    second.define_type("User", Booking)
+    second_manifest = build_schema_manifest(
+        second.schema_registry,
+        producer="0.8.0",
+    )
+
+    assert first_manifest.schema_version == SCHEMA_MANIFEST_V2
+    assert first_manifest.types is not None
+    assert first_manifest.types["User"].mode == "serialization"
+    assert first_manifest.types["User"].json_schema["title"] == "Summary"
+    assert first_manifest.fingerprint != second_manifest.fingerprint
 
 
 def test_app_export_includes_typed_page_path_query_and_dependency_parameters() -> None:

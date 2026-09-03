@@ -9,12 +9,14 @@ from pydantic import ValidationError
 
 from fluxfast.protocol import PROTOCOL_VERSION
 from fluxfast.schema_manifest import (
+    SCHEMA_MANIFEST_V2,
     SCHEMA_MANIFEST_VERSION,
     MutationRouteSchema,
     PageRouteSchema,
     ResourceSchemaEntry,
     RouteParameterSchema,
     SchemaManifest,
+    TypeSchemaEntry,
 )
 
 FINGERPRINT = "a" * 64
@@ -126,6 +128,53 @@ def test_manifest_serializes_to_the_versioned_offline_shape() -> None:
             }
         ],
     }
+
+
+def test_schema_v2_serializes_explicit_application_types() -> None:
+    manifest = SchemaManifest(
+        schema=SCHEMA_MANIFEST_V2,
+        producer="0.8.0",
+        fingerprint=FINGERPRINT,
+        types={
+            "User": TypeSchemaEntry(
+                mode="serialization",
+                schema={
+                    "type": "object",
+                    "properties": {"id": {"type": "integer"}},
+                    "required": ["id"],
+                },
+            )
+        },
+    )
+
+    assert manifest.model_dump(mode="json", by_alias=True, exclude_none=True) == {
+        "schema": "fluxfast-schema/2",
+        "producer": "0.8.0",
+        "fingerprint": FINGERPRINT,
+        "types": {
+            "User": {
+                "mode": "serialization",
+                "schema": {
+                    "type": "object",
+                    "properties": {"id": {"type": "integer"}},
+                    "required": ["id"],
+                },
+            }
+        },
+        "resources": {},
+        "pages": [],
+        "mutations": [],
+    }
+
+
+def test_schema_v1_rejects_explicit_application_types() -> None:
+    with pytest.raises(ValidationError, match="cannot contain explicit type"):
+        SchemaManifest(
+            schema=SCHEMA_MANIFEST_VERSION,
+            producer="0.7.0",
+            fingerprint=FINGERPRINT,
+            types={},
+        )
 
 
 def test_manifest_version_is_independent_from_browser_protocol() -> None:

@@ -1,6 +1,9 @@
 /** Runtime validation for the offline FluxFast developer schema manifest. */
 
-export const FLUXFAST_SCHEMA_MANIFEST_VERSION = "fluxfast-schema/1" as const;
+export const FLUXFAST_SCHEMA_MANIFEST_V1 = "fluxfast-schema/1" as const;
+export const FLUXFAST_SCHEMA_MANIFEST_V2 = "fluxfast-schema/2" as const;
+// Preserve the v1 export for consumers that imported it before schema/2.
+export const FLUXFAST_SCHEMA_MANIFEST_VERSION = FLUXFAST_SCHEMA_MANIFEST_V1;
 
 export type JsonValue =
   | null
@@ -13,6 +16,13 @@ export type JsonValue =
 export type JsonSchema = Record<string, JsonValue>;
 
 export interface FluxFastResourceSchemaEntry {
+  schema: JsonSchema;
+}
+
+export type FluxFastContractMode = "serialization" | "validation";
+
+export interface FluxFastTypeSchemaEntry {
+  mode: FluxFastContractMode;
   schema: JsonSchema;
 }
 
@@ -40,9 +50,10 @@ export interface FluxFastMutationRouteSchema {
 }
 
 export interface FluxFastSchemaManifest {
-  schema: typeof FLUXFAST_SCHEMA_MANIFEST_VERSION;
+  schema: typeof FLUXFAST_SCHEMA_MANIFEST_V1 | typeof FLUXFAST_SCHEMA_MANIFEST_V2;
   producer: string;
   fingerprint: string;
+  types?: Record<string, FluxFastTypeSchemaEntry>;
   resources: Record<string, FluxFastResourceSchemaEntry>;
   pages: FluxFastPageRouteSchema[];
   mutations: FluxFastMutationRouteSchema[];
@@ -136,6 +147,10 @@ function assertMetadataName(value: unknown, path: string): asserts value is stri
   if ([...value].some(character => character.codePointAt(0)! < 32)) {
     fail(path, "must not contain control characters");
   }
+}
+
+function assertContractName(value: unknown, path: string): asserts value is string {
+  assertMetadataName(value, path);
 }
 
 function assertRoutePath(value: unknown, path: string): asserts value is string {
@@ -450,6 +465,27 @@ function validateResources(
   }
 }
 
+function validateTypes(
+  value: unknown,
+  path: string
+): asserts value is Record<string, FluxFastTypeSchemaEntry> {
+  assertRecord(value, path);
+  for (const key of Object.keys(value)) {
+    const typePath = childPath(path, key);
+    assertContractName(key, typePath);
+    const entry = value[key];
+    assertRecord(entry, typePath);
+    assertExactKeys(entry, typePath, ["mode", "schema"]);
+    if (entry.mode !== "serialization" && entry.mode !== "validation") {
+      fail(
+        `${typePath}.mode`,
+        'must be either "serialization" or "validation"'
+      );
+    }
+    assertJsonSchema(entry.schema, `${typePath}.schema`);
+  }
+}
+
 function validatePages(
   value: unknown,
   path: string
@@ -515,15 +551,29 @@ export function validateFluxFastSchemaManifest(
     "resources",
     "pages",
     "mutations"
-  ]);
+  ], ["types"]);
 
-  if (value.schema !== FLUXFAST_SCHEMA_MANIFEST_VERSION) {
+  if (
+    value.schema !== FLUXFAST_SCHEMA_MANIFEST_V1 &&
+    value.schema !== FLUXFAST_SCHEMA_MANIFEST_V2
+  ) {
     fail(
       "$.schema",
       `unsupported version ${JSON.stringify(value.schema)}; expected ${JSON.stringify(
-        FLUXFAST_SCHEMA_MANIFEST_VERSION
-      )}`
+        FLUXFAST_SCHEMA_MANIFEST_V1
+      )} or ${JSON.stringify(FLUXFAST_SCHEMA_MANIFEST_V2)}`
     );
+  }
+
+  if (value.schema === FLUXFAST_SCHEMA_MANIFEST_V1) {
+    if (value.types !== undefined) {
+      fail("$.types", "fluxfast-schema/1 cannot contain explicit type contracts");
+    }
+  } else {
+    if (value.types === undefined) {
+      fail("$.types", "is required for fluxfast-schema/2");
+    }
+    validateTypes(value.types, "$.types");
   }
 
   assertString(value.producer, "$.producer");

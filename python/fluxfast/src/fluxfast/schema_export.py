@@ -12,13 +12,15 @@ from pydantic_core import PydanticUndefined
 
 from .route_metadata import get_fluxfast_route_metadata
 from .schema_manifest import (
-    SCHEMA_MANIFEST_VERSION,
+    SCHEMA_MANIFEST_V1,
+    SCHEMA_MANIFEST_V2,
     MutationMethod,
     MutationRouteSchema,
     PageRouteSchema,
     ResourceSchemaEntry,
     RouteParameterSchema,
     SchemaManifest,
+    TypeSchemaEntry,
 )
 from .schema_registry import SchemaRegistry
 from .serialization import canonical_json
@@ -35,6 +37,8 @@ def _sort_json_objects(value: JsonValue) -> JsonValue:
 
 
 def _manifest_fingerprint(
+    schema_version: str,
+    types: dict[str, TypeSchemaEntry] | None,
     resources: dict[str, ResourceSchemaEntry],
     pages: list[PageRouteSchema],
     mutations: list[MutationRouteSchema],
@@ -42,7 +46,7 @@ def _manifest_fingerprint(
     """Hash contract metadata independently from the producing package version."""
 
     payload = {
-        "schema": SCHEMA_MANIFEST_VERSION,
+        "schema": schema_version,
         "resources": {
             key: entry.model_dump(mode="json", by_alias=True)
             for key, entry in resources.items()
@@ -53,6 +57,11 @@ def _manifest_fingerprint(
             for mutation in mutations
         ],
     }
+    if types is not None:
+        payload["types"] = {
+            key: entry.model_dump(mode="json", by_alias=True)
+            for key, entry in types.items()
+        }
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
 
 
@@ -72,6 +81,16 @@ def build_schema_manifest(
             schema=_sort_json_objects(raw_schema),
         )
 
+    type_contracts: dict[str, TypeSchemaEntry] = {}
+    for name, contract in sorted(registry.type_contracts.items()):
+        type_contracts[name] = TypeSchemaEntry(
+            mode=contract.mode,
+            schema=_sort_json_objects(contract._schema()),
+        )
+
+    schema_version = SCHEMA_MANIFEST_V2 if type_contracts else SCHEMA_MANIFEST_V1
+    manifest_types = type_contracts or None
+
     sorted_pages = sorted(pages, key=lambda page: (page.name, page.path))
     sorted_mutations = sorted(
         mutations,
@@ -79,9 +98,16 @@ def build_schema_manifest(
     )
 
     return SchemaManifest(
-        schema=SCHEMA_MANIFEST_VERSION,
+        schema=schema_version,
         producer=producer,
-        fingerprint=_manifest_fingerprint(resources, sorted_pages, sorted_mutations),
+        types=manifest_types,
+        fingerprint=_manifest_fingerprint(
+            schema_version,
+            manifest_types,
+            resources,
+            sorted_pages,
+            sorted_mutations,
+        ),
         resources=resources,
         pages=sorted_pages,
         mutations=sorted_mutations,
