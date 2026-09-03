@@ -6,6 +6,7 @@ import path from "node:path";
 import { createValidator } from "@fluxfast/core";
 import {
   compileFluxFastValidators,
+  compileFluxFastValidatorsWithDiagnostics,
   compileJsonSchemaToValidationPlan
 } from "../src/validator-compiler";
 
@@ -246,6 +247,68 @@ describe("FluxFast validator compiler", () => {
         })
       )
     ).toThrow(/unsupported validation keyword "uniqueItems"/);
+  });
+
+  it("reports unsupported contracts without blocking other generated output", () => {
+    const result = compileFluxFastValidatorsWithDiagnostics(
+      manifest(
+        {
+          rooms: {
+            schema: {
+              type: "array",
+              items: { type: "string" },
+              uniqueItems: true
+            }
+          },
+          users: {
+            schema: {
+              type: "array",
+              items: { type: "integer" }
+            }
+          }
+        },
+        [],
+        {
+          User: {
+            mode: "validation",
+            schema: { type: "string", minLength: 2 }
+          }
+        }
+      )
+    );
+
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        contract: "RoomsResource",
+        keyword: "uniqueItems",
+        path: "$.resources.rooms.schema.uniqueItems"
+      })
+    ]);
+    expect(result.content).toContain("UsersResourceValidator");
+    expect(result.content).toContain("UserValidator");
+    expect(result.content).not.toContain("RoomsResourceValidator");
+    expect(result.content).toContain("validatorDiagnostics");
+    compileTypeScript(
+      result.content,
+      "export type User = string;\n" +
+        "export type UsersResource = number[];\n"
+    );
+  });
+
+  it("rejects typeless constraints instead of compiling them as any", () => {
+    for (const schema of [
+      { pattern: "^a+$" },
+      { minimum: 5 },
+      {
+        $defs: { Value: { type: "string" } },
+        $ref: "#/$defs/Value",
+        minLength: 3
+      }
+    ]) {
+      expect(() => compileJsonSchemaToValidationPlan(schema)).toThrow(
+        /requires an explicit JSON Schema type; refusing to drop its semantics/
+      );
+    }
   });
 
   it("supports schema/1 and remains byte-for-byte deterministic", () => {

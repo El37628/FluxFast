@@ -20,16 +20,36 @@ type PlanDocument = ValidationPlanDocument;
 /** A deterministic code-generation error tied to one manifest location. */
 export class ValidatorCompilationError extends SchemaCompilationError {
   readonly keyword?: string;
+  readonly unsupported: boolean;
 
-  constructor(path: string, reason: string, keyword?: string) {
+  constructor(
+    path: string,
+    reason: string,
+    keyword?: string,
+    unsupported = false
+  ) {
     super(path, reason);
     this.name = "ValidatorCompilationError";
     this.keyword = keyword;
+    this.unsupported = unsupported;
   }
 }
 
-function fail(path: string, reason: string, keyword?: string): never {
-  throw new ValidatorCompilationError(path, reason, keyword);
+function fail(
+  path: string,
+  reason: string,
+  keyword?: string,
+  unsupported = false
+): never {
+  throw new ValidatorCompilationError(path, reason, keyword, unsupported);
+}
+
+function unsupported(
+  path: string,
+  reason: string,
+  keyword?: string
+): never {
+  return fail(path, reason, keyword, true);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -186,7 +206,7 @@ function assertSupportedKeywords(
 
   for (const key of Object.keys(schema).sort()) {
     if (!SUPPORTED_KEYWORDS.has(key)) {
-      fail(
+      unsupported(
         childPath(path, key),
         "unsupported validation keyword " + JSON.stringify(key),
         key
@@ -194,7 +214,7 @@ function assertSupportedKeywords(
     }
     if (key === "format" && typeof schema[key] === "string" &&
         !SUPPORTED_FORMATS.has(schema[key] as string)) {
-      fail(
+      unsupported(
         childPath(path, key),
         "unsupported validation format " + JSON.stringify(schema[key]),
         key
@@ -285,6 +305,23 @@ interface RootContract {
 interface CompiledContract {
   readonly name: string;
   readonly document: PlanDocument;
+}
+
+export interface ValidatorCompilationDiagnostic {
+  readonly contract: string;
+  readonly path: string;
+  readonly keyword?: string;
+  readonly message: string;
+}
+
+export interface ValidatorCompilationResult {
+  readonly content: string;
+  readonly diagnostics: readonly ValidatorCompilationDiagnostic[];
+}
+
+export interface ValidatorCompilationOptions {
+  /** Report unsupported contracts while keeping TypeScript generation usable. */
+  readonly unsupported?: "error" | "report";
 }
 
 function collectDefinitions(
@@ -484,6 +521,41 @@ class JsonSchemaPlanCompiler {
       : Array.isArray(schema.type)
         ? schema.type
         : [schema.type];
+    if (types.length === 0) {
+      /*
+       * JSON Schema permits type-specific keywords without a `type`, but the
+       * compact FluxFast plan has no conditional keyword node. Treating one
+       * of these schemas as `any` or as an unconditional object/array would
+       * silently change the server contract. Surface it instead of emitting
+       * a validator with weaker semantics. This also covers `$ref` siblings.
+       */
+      const typedKeyword = [
+        "additionalProperties",
+        "exclusiveMaximum",
+        "exclusiveMinimum",
+        "format",
+        "items",
+        "maxItems",
+        "maxLength",
+        "maximum",
+        "minItems",
+        "minLength",
+        "minimum",
+        "multipleOf",
+        "pattern",
+        "prefixItems",
+        "properties",
+        "required"
+      ].find(keyword => schema[keyword] !== undefined);
+      if (typedKeyword !== undefined) {
+        unsupported(
+          path + "." + typedKeyword,
+          "validation keyword " + JSON.stringify(typedKeyword) +
+            " requires an explicit JSON Schema type; refusing to drop its semantics",
+          typedKeyword
+        );
+      }
+    }
     if (types.length > 0) {
       const typePlans = types.map((type, index) => {
         if (typeof type !== "string") {
@@ -569,7 +641,7 @@ class JsonSchemaPlanCompiler {
         const format = stringValue(schema.format, path + ".format");
         if (format !== undefined) {
           if (!SUPPORTED_FORMATS.has(format)) {
-            fail(
+            unsupported(
               path + ".format",
               "unsupported validation format " + JSON.stringify(format),
               "format"
@@ -763,7 +835,13 @@ function collectRootContracts(manifest: FluxFastSchemaManifest): RootContract[] 
   return result;
 }
 
-function compileContracts(manifest: FluxFastSchemaManifest): CompiledContract[] {
+function compileContracts(
+  manifest: FluxFastSchemaManifest,
+  reportUnsupported: boolean
+): {
+  contracts: CompiledContract[];
+  diagnostics: ValidatorCompilationDiagnostic[];
+} {
   const contracts = new Map<string, RootContract>();
   for (const contract of collectRootContracts(manifest)) {
     const existing = contracts.get(contract.name);
@@ -782,12 +860,41 @@ function compileContracts(manifest: FluxFastSchemaManifest): CompiledContract[] 
     if (!existing) contracts.set(contract.name, contract);
   }
 
-  return [...contracts.values()]
-    .sort((left, right) => compareText(left.name, right.name))
-    .map(contract => ({
-      name: contract.name,
-      document: compileJsonSchemaToValidationPlan(contract.schema, contract.path)
-    }));
+  const compiled: CompiledContract[] = [];
+  const diagnostics: ValidatorCompilationDiagnostic[] = [];
+  for (const contract of [...contracts.values()].sort((left, right) =>
+    compareText(left.name, right.name)
+  )) {
+    try {
+      compiled.push({
+        name: contract.name,
+        document: compileJsonSchemaToValidationPlan(contract.schema, contract.path)
+      });
+    } catch (error) {
+      if (
+        reportUnsupported &&
+        error instanceof ValidatorCompilationError &&
+        error.unsupported
+      ) {
+        diagnostics.push({
+          contract: contract.name,
+          path: error.path,
+          ...(error.keyword === undefined ? {} : { keyword: error.keyword }),
+          message: error.message
+        });
+        continue;
+      }
+      throw error;
+    }
+  }
+  diagnostics.sort(
+    (left, right) =>
+      compareText(left.contract, right.contract) ||
+      compareText(left.path, right.path) ||
+      compareText(left.keyword ?? "", right.keyword ?? "") ||
+      compareText(left.message, right.message)
+  );
+  return { contracts: compiled, diagnostics };
 }
 
 function hasUnsafeKey(key: string): boolean {
@@ -848,10 +955,34 @@ function renderPlanValue(value: unknown, indent = 0): string {
   );
 }
 
-/** Compile manifest JSON Schemas into tree-shakeable generated validators. */
-export function compileFluxFastValidators(value: unknown): string {
-  const manifest = validateFluxFastSchemaManifest(value);
-  const contracts = compileContracts(manifest);
+function renderDiagnostics(
+  diagnostics: readonly ValidatorCompilationDiagnostic[]
+): string {
+  if (diagnostics.length === 0) {
+    return "export const validatorDiagnostics = [] as const;";
+  }
+  const entries = diagnostics.map(diagnostic => {
+    const record: Record<string, string> = {
+      contract: diagnostic.contract,
+      path: diagnostic.path,
+      message: diagnostic.message
+    };
+    if (diagnostic.keyword !== undefined) record.keyword = diagnostic.keyword;
+    return "  " + renderPlanValue(record, 2);
+  });
+  return (
+    "export const validatorDiagnostics = [\n" +
+    entries.join(",\n") +
+    "\n] as const;"
+  );
+}
+
+function renderValidatorSource(
+  manifest: FluxFastSchemaManifest,
+  contracts: readonly CompiledContract[],
+  diagnostics: readonly ValidatorCompilationDiagnostic[],
+  includeDiagnostics: boolean
+): string {
   const header = [
     "// AUTO-GENERATED BY FLUXFAST.",
     "// DO NOT EDIT MANUALLY.",
@@ -860,7 +991,12 @@ export function compileFluxFastValidators(value: unknown): string {
     "// Fingerprint: " + manifest.fingerprint
   ];
   if (contracts.length === 0) {
-    return header.join("\n") + "\n\nexport const validators = {} as const;\n";
+    return (
+      header.join("\n") +
+      "\n\n" +
+      (includeDiagnostics ? renderDiagnostics(diagnostics) + "\n\n" : "") +
+      "export const validators = {} as const;\n"
+    );
   }
 
   const imports = [
@@ -892,9 +1028,45 @@ export function compileFluxFastValidators(value: unknown): string {
     "\n\n" +
     imports +
     "\n\n" +
+    (includeDiagnostics ? renderDiagnostics(diagnostics) + "\n\n" : "") +
     declarations.join("\n\n") +
     "\n\nexport const validators = {\n" +
     registryEntries.join("\n") +
     "\n} as const;\n"
   );
+}
+
+/**
+ * Compile manifest schemas while retaining usable TypeScript output when one
+ * contract contains an unsupported validation keyword. The omitted contract
+ * is listed in `validatorDiagnostics` and is never represented by a weaker
+ * validator.
+ */
+export function compileFluxFastValidatorsWithDiagnostics(
+  value: unknown
+): ValidatorCompilationResult {
+  const manifest = validateFluxFastSchemaManifest(value);
+  const result = compileContracts(manifest, true);
+  return {
+    content: renderValidatorSource(
+      manifest,
+      result.contracts,
+      result.diagnostics,
+      true
+    ),
+    diagnostics: Object.freeze([...result.diagnostics])
+  };
+}
+
+/** Compile manifest JSON Schemas into tree-shakeable generated validators. */
+export function compileFluxFastValidators(
+  value: unknown,
+  options: ValidatorCompilationOptions = {}
+): string {
+  if (options.unsupported === "report") {
+    return compileFluxFastValidatorsWithDiagnostics(value).content;
+  }
+  const manifest = validateFluxFastSchemaManifest(value);
+  const result = compileContracts(manifest, false);
+  return renderValidatorSource(manifest, result.contracts, [], false);
 }
