@@ -1,7 +1,7 @@
 "use client";
 
 import React, { AnchorHTMLAttributes, MouseEvent } from "react";
-import { useRouter } from "./hooks";
+import { useRouter } from "./hooks.js";
 
 export interface LinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   href: string;

@@ -3,24 +3,24 @@ import path from "node:path";
 import {
   checkFluxFastProject,
   generateFluxFastProject,
-} from "../generate";
-import { applyInitPlan } from "./apply";
+} from "../generate.js";
+import { applyInitPlan } from "./apply.js";
 import {
   validateFluxFastPackagePairs,
   validateFluxProject,
   type DiagnosticSection,
   type FluxDiagnostic,
   type FluxValidationReport,
-} from "./diagnostics";
+} from "./diagnostics.js";
 import {
   changedOperations,
   createInitPlan,
   relativeProjectPath,
   type InitOperation,
   type InitPlan,
-} from "./init";
-import { detectFluxProject } from "./project";
-import type { ValidatorCompilationDiagnostic } from "../validator-compiler";
+} from "./init.js";
+import { detectFluxProject } from "./project.js";
+import type { ValidatorCompilationDiagnostic } from "../validator-compiler.js";
 
 export interface CliIo {
   cwd: string;

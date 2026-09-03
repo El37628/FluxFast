@@ -1,19 +1,19 @@
 /** Framework-neutral fetch-based SSE transport for Live Resources. */
 
-import { HEADER_CAPABILITIES, serializeCapabilities } from "../capabilities";
-import { ProtocolError, TransportError } from "../errors";
+import { HEADER_CAPABILITIES, serializeCapabilities } from "../capabilities.js";
+import { ProtocolError, TransportError } from "../errors.js";
 import {
   assertLiveEvent,
   LIVE_EVENT_NAME,
   LiveEvent,
   MAX_LIVE_EVENT_KEYS,
   MAX_LIVE_RESOURCE_KEY_LENGTH,
-} from "./protocol";
-import { assertClientId, HEADER_CLIENT_ID } from "./client-id";
+} from "./protocol.js";
+import { assertClientId, HEADER_CLIENT_ID } from "./client-id.js";
 
 export const HEADER_LIVE = "X-FluxFast-Live";
 export const HEADER_LIVE_KEYS = "X-FluxFast-Live-Keys";
-export { HEADER_CLIENT_ID } from "./client-id";
+export { HEADER_CLIENT_ID } from "./client-id.js";
 export const MAX_LIVE_KEYS_HEADER_BYTES = 16 * 1024;
 export const MAX_LIVE_EVENT_BYTES = 1024 * 1024;
 

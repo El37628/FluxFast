@@ -14,7 +14,7 @@ import {
   type FluxValidator,
   type ValidationIssue
 } from "@fluxfast/core";
-import { useRouter } from "./hooks";
+import { useRouter } from "./hooks.js";
 
 const EMPTY_ISSUES = Object.freeze([]) as readonly ValidationIssue[];
 const EMPTY_ERROR_MAP = Object.freeze(

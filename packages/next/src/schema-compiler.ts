@@ -4,7 +4,7 @@ import {
   type JsonSchema,
   type JsonValue,
   validateFluxFastSchemaManifest
-} from "./schema-manifest";
+} from "./schema-manifest.js";
 
 type SchemaNode = JsonSchema | boolean;
 

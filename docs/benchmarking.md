@@ -47,7 +47,7 @@ Run only the offline schema and TypeScript toolchain benchmark with:
 pnpm benchmark:codegen
 ```
 
-Run the generated-validator runtime and production bundle scenarios with:
+Run the core validation-plan runtime and production bundle scenarios with:
 
 ```bash
 pnpm benchmark:validation
@@ -230,25 +230,28 @@ for end-to-end validation. Run the benchmark on the target development machine
 before making local performance decisions. The table reports medians from five
 samples; the benchmark output also retains first-export and p95 values.
 
-## Validator Runtime Scenario
+## Validation-Plan Runtime Scenario
 
-The runtime benchmark constructs the framework-neutral validators once, then
+The runtime benchmark constructs framework-neutral validators directly from
+representative core validation plans, then
 measures valid and invalid values for a 24-level nested object, a 10,000-object
-array, and a 16-node recursive contract. Each measured sample performs 25
-validations after one untimed correctness warm-up. The large-array plans use an
-explicit 500,000-operation budget; all other limits remain at their production
-defaults.
+array, and a 16-node recursive contract. The recursive plan uses the same local
+JSON Pointer reference form emitted by the schema compiler. This isolates the
+evaluator hot path; the separate code-generation benchmark measures compilation.
+Each measured sample performs 25 validations after one untimed correctness
+warm-up. The large-array plans use an explicit 500,000-operation budget; all
+other limits remain at their production defaults.
 
-On the same 2026-09-03 host, five samples produced:
+On the same host on 2026-09-04, five samples produced:
 
 | Workload | Median per validation | p95 per validation |
 | --- | ---: | ---: |
-| Nested object, valid | 0.053 ms | 0.224 ms |
-| Nested object, invalid leaf | 0.055 ms | 0.079 ms |
-| 10,000 objects, valid | 12.336 ms | 15.231 ms |
-| 10,000 objects, invalid tail | 11.909 ms | 13.098 ms |
-| Recursive value, valid | 0.037 ms | 0.079 ms |
-| Recursive value, invalid tail | 0.028 ms | 0.037 ms |
+| Nested object, valid | 0.068 ms | 0.235 ms |
+| Nested object, invalid leaf | 0.055 ms | 0.080 ms |
+| 10,000 objects, valid | 13.020 ms | 14.221 ms |
+| 10,000 objects, invalid tail | 13.191 ms | 13.899 ms |
+| Recursive value, valid | 0.046 ms | 0.123 ms |
+| Recursive value, invalid tail | 0.042 ms | 0.050 ms |
 
 Correctness is the gate: valid inputs must be accepted, while invalid leaf and
 tail values must report their exact nested paths. Timings have no threshold.
@@ -258,27 +261,32 @@ traverses every item.
 ## Production Bundle Scenario
 
 The bundle benchmark generates 100 distinct contracts and makes three clean
-Next.js production builds: a client page that imports no validator, one that
-uses one validator, and a realistic page that uses ten. Unique field markers
-prove exactly which static validation plans survive tree-shaking; byte totals
-alone cannot prove unused code was removed.
+Next.js production builds. Every page retains the same ordinary imports from
+`@fluxfast/core` and `@fluxfast/next`; only generated-validator usage differs:
+none, one, or a realistic set of ten. Unique field markers prove exactly which
+static validation plans survive tree-shaking. Separate validation-runtime
+string markers prove that ordinary FluxFast usage does not retain the runtime
+when no validator is imported; byte totals alone cannot prove either property.
 
-On the same 2026-09-03 host with Next.js 16.3.3:
+On the same host on 2026-09-04 with Next.js 16.3.3:
 
-| Consumer | `/` first-load JS | All client chunks | Delta from no import | Validator chunks | Retained plans |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| No validator import | 442.9 KiB | 552.8 KiB | 0 B | 0 B | 0 |
-| One validator | 522.1 KiB | 632.0 KiB | +79.2 KiB | 79.5 KiB | 1 |
-| Ten validators | 523.6 KiB | 633.5 KiB | +80.7 KiB | 81.0 KiB | 10 |
+| Consumer | `/` first-load JS | All client chunks | Delta from no import | Validator chunks | Retained plans | Runtime markers |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| No validator import | 448.6 KiB | 558.6 KiB | 0 B | 0 B | 0 | 0 |
+| One validator | 473.2 KiB | 583.2 KiB | +24.6 KiB | 30.6 KiB | 1 | 2 |
+| Ten validators | 474.6 KiB | 584.5 KiB | +25.9 KiB | 32.0 KiB | 10 | 2 |
 
 Before the purity fix, inspecting a production page chunk showed every
 generated `createValidator(...)` initializer retained when only one validator
-was imported. Generated calls now carry a bundler-recognized purity annotation,
-and the marker gate proves unused validators and their plans disappear. The
-roughly 79 KiB first-import cost contains the framework-neutral validation
-runtime; additional plans add incremental bytes. Aggregate `.next` totals also
-contain framework chunks, so they are comparison data rather than package-size
-guarantees.
+was imported. A subsequent audit also found that the CommonJS-only package
+entry retained the validation runtime for ordinary Core and Next imports.
+FluxFast now publishes a tree-shakeable ESM import condition while preserving
+the CommonJS `require()` condition. Generated calls carry a bundler-recognized
+purity annotation, and the two marker gates prove both that unused plans
+disappear and that the runtime is opt-in. The observed first-validator cost is
+about 24.6 KiB of first-load JavaScript; additional plans add incremental bytes.
+Aggregate `.next` totals also contain framework chunks, so they are comparison
+data rather than package-size guarantees.
 
 ## v0.7 Runtime Regression Comparison
 

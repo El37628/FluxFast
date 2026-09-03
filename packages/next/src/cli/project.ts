@@ -8,7 +8,7 @@ import type {
   FluxProjectInfo,
   NextConfigFormat,
   ProjectLanguage,
-} from "./types";
+} from "./types.js";
 
 type JsonRecord = Record<string, unknown>;
 

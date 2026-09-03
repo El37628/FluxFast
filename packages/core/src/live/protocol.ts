@@ -1,6 +1,6 @@
-import type { ProtocolVersion, ResourcePatch } from "../protocol";
-import { PROTOCOL_VERSION } from "../protocol";
-import { ProtocolError, VersionMismatchError } from "../errors";
+import type { ProtocolVersion, ResourcePatch } from "../protocol.js";
+import { PROTOCOL_VERSION } from "../protocol.js";
+import { ProtocolError, VersionMismatchError } from "../errors.js";
 
 export const LIVE_EVENT_NAME = "fluxfast" as const;
 

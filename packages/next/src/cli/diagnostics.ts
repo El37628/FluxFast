@@ -3,17 +3,17 @@ import path from "node:path";
 import {
   checkFluxFastProject,
   createPagesRegistrySnapshot,
-} from "../generate";
+} from "../generate.js";
 import {
   findFluxFastContractsWithUnknownTypes,
   findFluxFastResourceKeysWithUnknownTypes,
   pascalIdentifier
-} from "../schema-compiler";
+} from "../schema-compiler.js";
 import {
   type FluxFastSchemaManifest,
   parseFluxFastSchemaManifest,
   SchemaManifestValidationError,
-} from "../schema-manifest";
+} from "../schema-manifest.js";
 import {
   desiredCatchAllPath,
   desiredHealthRoutePath,
@@ -21,13 +21,13 @@ import {
   isFluxCatchAll,
   isFluxHealthRoute,
   isFluxTransportRoute,
-} from "./files";
-import { transformNextConfig } from "./next-config";
+} from "./files.js";
+import { transformNextConfig } from "./next-config.js";
 import type {
   CompatibilityStatus,
   DetectedPackage,
   FluxProjectInfo,
-} from "./types";
+} from "./types.js";
 
 export type DiagnosticSection =
   | "Environment"

@@ -29,6 +29,16 @@ def median(values: list[Measurement], field: str) -> float:
     return statistics.median(getattr(value, field) for value in values)
 
 
+def assert_stable_payload_bytes(
+    measurements: list[Measurement],
+    label: str,
+) -> None:
+    payload_sizes = {measurement.payload_bytes for measurement in measurements}
+    assert len(payload_sizes) == 1, (
+        f"{label} payload bytes changed across fresh samples: {sorted(payload_sizes)}"
+    )
+
+
 def run_benchmark(samples: int = 5) -> None:
     if samples <= 0:
         raise ValueError("samples must be positive")
@@ -74,6 +84,10 @@ def run_benchmark(samples: int = 5) -> None:
         initial_measurements.append(initial)
         baseline_measurements.append(baseline_measurement)
         delta_measurements.append(delta_measurement)
+
+    assert_stable_payload_bytes(initial_measurements, "initial dashboard")
+    assert_stable_payload_bytes(baseline_measurements, "complete props")
+    assert_stable_payload_bytes(delta_measurements, "resource delta")
 
     initial_bytes = median(initial_measurements, "payload_bytes")
     baseline_bytes = median(baseline_measurements, "payload_bytes")

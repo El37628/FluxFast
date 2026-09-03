@@ -1,8 +1,8 @@
 /** Node-only Next.js configuration for same-origin FluxFast applications. */
 
 import type { NextConfig } from "next";
-import { resolveFluxBackendUrl } from "./config";
-import { GenerateOptions, generatePagesRegistry } from "./generate";
+import { resolveFluxBackendUrl } from "./config.js";
+import { GenerateOptions, generatePagesRegistry } from "./generate.js";
 
 export interface FluxFastNextOptions extends GenerateOptions {
   backendUrl?: string;

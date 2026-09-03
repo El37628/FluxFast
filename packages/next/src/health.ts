@@ -1,6 +1,6 @@
 /** Server-only handler for public, same-origin FluxFast health checks. */
 
-import { resolveFluxBackendUrl } from "./config";
+import { resolveFluxBackendUrl } from "./config.js";
 
 const HEALTH_PREFIX = "/_fluxfast/";
 const HEALTH_PROBES = new Set(["healthz", "readyz"]);

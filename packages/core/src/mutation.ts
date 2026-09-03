@@ -2,7 +2,7 @@
  * Mutation patch processing algorithms.
  */
 
-import { ResourcePatch } from "./protocol";
+import { ResourcePatch } from "./protocol.js";
 
 function matchItem(item: unknown, patch: ResourcePatch): boolean {
   if (typeof item !== "object" || item === null) {

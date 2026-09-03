@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { validateInitPrerequisites } from "./diagnostics";
+import { validateInitPrerequisites } from "./diagnostics.js";
 import {
   desiredCatchAllPath,
   desiredHealthRoutePath,
@@ -14,10 +14,10 @@ import {
   renderHealthRoute,
   renderStarterPage,
   renderTransportRoute,
-} from "./files";
-import { inspectPage, prepareMigratedPage } from "./migration";
-import { planNextConfigIntegration } from "./next-config";
-import type { FluxProjectInfo } from "./types";
+} from "./files.js";
+import { inspectPage, prepareMigratedPage } from "./migration.js";
+import { planNextConfigIntegration } from "./next-config.js";
+import type { FluxProjectInfo } from "./types.js";
 
 export type InitOperation =
   | { type: "mkdir"; path: string }

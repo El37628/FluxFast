@@ -1,10 +1,10 @@
-import { ValidationError } from "../errors";
-import { createValidationIssue } from "./issues";
+import { ValidationError } from "../errors.js";
+import { createValidationIssue } from "./issues.js";
 import {
   compileValidationPlan,
   evaluateValidationPlan,
   type CompiledValidationPlan
-} from "./plan";
+} from "./plan.js";
 import type {
   FluxValidator,
   ValidationIssue,
@@ -12,7 +12,7 @@ import type {
   ValidationPlanDocument,
   ValidationOptions,
   ValidationResult
-} from "./types";
+} from "./types.js";
 
 /**
  * A synchronous application-specific check that runs after the generated

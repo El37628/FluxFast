@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import type { LiveStatusSnapshot } from "@fluxfast/core";
-import { useRouter } from "./hooks";
+import { useRouter } from "./hooks.js";
 
 export type {
   LiveConnectionStatus,

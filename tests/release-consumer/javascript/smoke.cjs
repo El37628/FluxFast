@@ -14,6 +14,31 @@ async function main() {
   assert.equal(nextEntry.startsWith(installedRoot), true);
   assert.equal(typeof core.createFluxRuntime, "function");
   assert.equal(typeof nextAdapter.defineFluxConfig, "function");
+  const [
+    coreEsm,
+    nextEsm,
+    nextClientEsm,
+    nextGenerateEsm,
+    nextConfigEsm,
+  ] = await Promise.all([
+    import("@fluxfast/core"),
+    import("@fluxfast/next"),
+    import("@fluxfast/next/client"),
+    import("@fluxfast/next/generate"),
+    import("@fluxfast/next/next-config"),
+  ]);
+  assert.equal(typeof coreEsm.createValidator, "function");
+  assert.equal(typeof nextEsm.useForm, "function");
+  assert.equal(typeof nextClientEsm.useForm, "function");
+  assert.equal(typeof nextGenerateEsm.generateFluxFastProject, "function");
+  assert.equal(typeof nextConfigEsm.withFluxFast, "function");
+  for (const packageName of ["core", "next"]) {
+    const packageJson = JSON.parse(fs.readFileSync(
+      path.join(installedRoot, "@fluxfast", packageName, "package.json"),
+      "utf8"
+    ));
+    assert.match(packageJson.exports["."].import, /^\.\/dist\/esm\//);
+  }
   assert.equal(fs.existsSync(path.join(installedRoot, ".bin", "fluxfast")), true);
   for (const packageName of ["core", "next"]) {
     const license = fs.readFileSync(

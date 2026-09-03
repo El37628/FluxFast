@@ -1,4 +1,4 @@
-/** Measure generated-validator runtime without machine-dependent pass/fail thresholds. */
+/** Measure core validation-plan runtime without machine-dependent pass/fail thresholds. */
 
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
@@ -129,14 +129,14 @@ function buildWorkloads() {
   const invalidArray = validArray.slice();
   invalidArray[arrayLength - 1] = { id: -1, label: "" };
   const recursivePlan = {
-    root: { kind: "ref", name: "Node" },
+    root: { kind: "ref", ref: "#/$defs/Node" },
     definitions: {
       Node: {
         kind: "object",
         properties: {
           next: {
             kind: "ref",
-            name: "Node",
+            ref: "#/$defs/Node",
           },
           value: { kind: "integer" },
         },
@@ -203,7 +203,7 @@ function buildWorkloads() {
 
 function runBenchmark(samples, iterations) {
   const workloads = buildWorkloads();
-  console.log("FluxFast controlled validator-runtime benchmark");
+  console.log("FluxFast controlled core validation-plan runtime benchmark");
   console.log(`environment: Node ${process.versions.node}`);
   console.log(
     `workload: ${samples} measured samples of ${iterations} validations after one untimed correctness warm-up; no timing thresholds`,
@@ -218,7 +218,7 @@ function runBenchmark(samples, iterations) {
     "tradeoff: validation is synchronous and bounded; valid large collections traverse every element, while invalid-tail cases also retain exact nested issue paths",
   );
   console.log(
-    "correctness: PASS — valid nested, array, and recursive values were accepted; invalid leaf and tail values were rejected at their exact paths",
+    "correctness: PASS — valid nested, array, and JSON-pointer-recursive values were accepted; invalid leaf and tail values were rejected at their exact paths",
   );
 }
 

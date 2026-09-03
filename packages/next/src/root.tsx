@@ -2,10 +2,10 @@
 
 import React, { Component, ReactNode, Suspense } from "react";
 import { PageEnvelope } from "@fluxfast/core";
-import { FluxProvider, useFluxContext } from "./provider";
-import { usePage } from "./hooks";
-import { ComponentRegistry, resolveComponent } from "./resolver";
-import { FluxCacheConfig } from "./config";
+import { FluxProvider, useFluxContext } from "./provider.js";
+import { usePage } from "./hooks.js";
+import { ComponentRegistry, resolveComponent } from "./resolver.js";
+import { FluxCacheConfig } from "./config.js";
 
 interface ErrorBoundaryProps {
   children: ReactNode;

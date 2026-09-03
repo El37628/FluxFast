@@ -21,6 +21,10 @@ const { generateFluxFastProject } = require(
 
 const contractCount = 100;
 const multipleCount = 10;
+const validationRuntimeMarkers = [
+  "Validation operation limit exceeded.",
+  "Cyclic value encountered during validation.",
+];
 
 function writeFile(root, relativePath, content) {
   const target = path.join(root, relativePath);
@@ -82,15 +86,21 @@ function createManifest() {
 }
 
 function renderPage(importedIndexes) {
+  const runtimeImports = [
+    'import { PROTOCOL_VERSION } from "@fluxfast/core";',
+    'import { useResource } from "@fluxfast/next";',
+  ].join("\n");
+  const consumerProbe =
+    "const fluxfastConsumer = `${PROTOCOL_VERSION}:${String(useResource).length}`;";
   if (importedIndexes.length === 0) {
-    return `"use client";\n\nexport default function Page() {\n  return <main data-validator-count="0">No validators imported</main>;\n}\n`;
+    return `"use client";\n\n${runtimeImports}\n\n${consumerProbe}\n\nexport default function Page() {\n  return <main data-fluxfast-consumer={fluxfastConsumer} data-validator-count="0">No validators imported</main>;\n}\n`;
   }
   const names = importedIndexes.map(index => `${contractName(index)}Validator`);
   const imports = `import { ${names.join(", ")} } from "../.fluxfast/validators.generated";`;
   const entries = importedIndexes.map((index, position) =>
     `${names[position]}.is({ ${marker(index)}: "ok" })`
   );
-  return `"use client";\n\n${imports}\n\nconst checks = [\n  ${entries.join(",\n  ")}\n];\n\nexport default function Page() {\n  return <main data-validator-count={checks.filter(Boolean).length}>Validators imported</main>;\n}\n`;
+  return `"use client";\n\n${runtimeImports}\n${imports}\n\n${consumerProbe}\nconst checks = [\n  ${entries.join(",\n  ")}\n];\n\nexport default function Page() {\n  return <main data-fluxfast-consumer={fluxfastConsumer} data-validator-count={checks.filter(Boolean).length}>Validators imported</main>;\n}\n`;
 }
 
 function prepareProject(root, importedIndexes) {
@@ -202,6 +212,22 @@ function buildVariant(temporaryRoot, name, importedIndexes) {
     (_, index) => index,
   ).filter(index => content.includes(marker(index)));
   assert.deepEqual(retained, importedIndexes);
+  const retainedRuntimeMarkers = validationRuntimeMarkers.filter(runtimeMarker =>
+    content.includes(runtimeMarker)
+  );
+  if (importedIndexes.length === 0) {
+    assert.deepEqual(
+      retainedRuntimeMarkers,
+      [],
+      "The ordinary FluxFast consumer retained the validation runtime without importing a validator",
+    );
+  } else {
+    assert.deepEqual(
+      retainedRuntimeMarkers,
+      validationRuntimeMarkers,
+      "An imported validator did not retain the expected validation runtime",
+    );
+  }
 
   const routeStats = JSON.parse(fs.readFileSync(
     path.join(projectRoot, ".next", "diagnostics", "route-bundle-stats.json"),
@@ -214,6 +240,7 @@ function buildVariant(temporaryRoot, name, importedIndexes) {
     firstLoadBytes: pageStats.firstLoadUncompressedJsBytes,
     name,
     retained,
+    retainedRuntimeMarkers,
     totalChunkBytes: chunks.reduce((total, chunk) => total + chunk.bytes, 0),
     validatorChunkBytes: chunks
       .filter(chunk => importedIndexes.some(index => chunk.content.includes(marker(index))))
@@ -252,14 +279,14 @@ function runBenchmark() {
     );
     for (const result of results) {
       console.log(
-        `${result.name}: / first-load ${formatBytes(result.firstLoadBytes)}; all client chunks ${formatBytes(result.totalChunkBytes)} (${formatBytes(result.totalChunkBytes - baseline.totalChunkBytes)} vs no-import); validator chunks ${formatBytes(result.validatorChunkBytes)}; build ${result.buildMs.toFixed(3)} ms; retained markers ${result.retained.length}`,
+        `${result.name}: / first-load ${formatBytes(result.firstLoadBytes)}; all client chunks ${formatBytes(result.totalChunkBytes)} (${formatBytes(result.totalChunkBytes - baseline.totalChunkBytes)} vs no-import); validator chunks ${formatBytes(result.validatorChunkBytes)}; build ${result.buildMs.toFixed(3)} ms; retained plans ${result.retained.length}; retained runtime markers ${result.retainedRuntimeMarkers.length}`,
       );
     }
     console.log(
-      "tradeoff: importing validators adds the framework-neutral runtime and selected static plans; aggregate .next chunk totals include framework chunks and are comparison data, not a package-size guarantee",
+      "tradeoff: dual ESM/CommonJS package output preserves require() compatibility while allowing production bundlers to omit the framework-neutral validation runtime until a validator is imported; aggregate .next chunk totals include framework chunks and are comparison data, not a package-size guarantee",
     );
     console.log(
-      "correctness: PASS — the no-import build retained zero validator plans, the single-import build retained exactly one, and the realistic build retained exactly ten",
+      "correctness: PASS — every build retained the same ordinary @fluxfast/core and @fluxfast/next consumer; the no-import build retained neither validator plans nor validation-runtime markers, while the single-import and realistic builds retained exactly one and ten plans plus the runtime",
     );
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });

@@ -2,12 +2,12 @@ import {
   type FluxFastPageRouteSchema,
   type FluxFastRouteParameterSchema,
   validateFluxFastSchemaManifest
-} from "./schema-manifest";
+} from "./schema-manifest.js";
 import {
   camelIdentifier,
   compileInlineJsonSchemaType,
   SchemaCompilationError
-} from "./schema-compiler";
+} from "./schema-compiler.js";
 
 interface RoutePlaceholder {
   name: string;

@@ -1,14 +1,14 @@
 /** Framework-neutral lifecycle manager for one logical Live Resource connection. */
 
-import type { LiveEvent } from "./protocol";
-import { assertClientId, createClientId } from "./client-id";
-import { PROTOCOL_VERSION } from "../protocol";
+import type { LiveEvent } from "./protocol.js";
+import { assertClientId, createClientId } from "./client-id.js";
+import { PROTOCOL_VERSION } from "../protocol.js";
 import {
   createFetchSseLiveTransport,
   type LiveConnection,
   type LiveTransport,
   serializeLiveKeys,
-} from "./transport";
+} from "./transport.js";
 
 export type LiveConnectionStatus =
   | "idle"

@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { compileFluxFastMutations } from "./mutation-compiler";
-import { compileFluxFastPageRoutes } from "./route-compiler";
-import { compileFluxFastResourceTypes } from "./schema-compiler";
-import { parseFluxFastSchemaManifest } from "./schema-manifest";
-import { compileFluxFastValidatorsWithDiagnostics } from "./validator-compiler";
-import type { ValidatorCompilationDiagnostic } from "./validator-compiler";
+import { compileFluxFastMutations } from "./mutation-compiler.js";
+import { compileFluxFastPageRoutes } from "./route-compiler.js";
+import { compileFluxFastResourceTypes } from "./schema-compiler.js";
+import { parseFluxFastSchemaManifest } from "./schema-manifest.js";
+import { compileFluxFastValidatorsWithDiagnostics } from "./validator-compiler.js";
+import type { ValidatorCompilationDiagnostic } from "./validator-compiler.js";
 
 export interface GenerateOptions {
   pagesDir?: string;

@@ -1,7 +1,7 @@
 /** Shared browser/router identity used by live streams and mutations. */
 
-import { ProtocolError } from "../errors";
-import { MAX_LIVE_CLIENT_ID_LENGTH } from "./protocol";
+import { ProtocolError } from "../errors.js";
+import { MAX_LIVE_CLIENT_ID_LENGTH } from "./protocol.js";
 
 export const HEADER_CLIENT_ID = "X-FluxFast-Client-ID";
 
