@@ -65,6 +65,22 @@ def _manifest_fingerprint(
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
 
 
+def _producer_supports_schema_v2(producer: str) -> bool:
+    """Return whether a producer version belongs to the schema/2 era.
+
+    The exporter still accepts an explicit producer version so older callers
+    can reproduce schema/1 manifests. Once the Python package identifies as
+    0.8 (or newer), every manifest uses schema/2, including resource-only
+    applications whose ``types`` collection is empty.
+    """
+
+    parts = producer.split(".", 2)
+    if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        return False
+    major, minor = int(parts[0]), int(parts[1])
+    return major > 0 or (major == 0 and minor >= 8)
+
+
 def build_schema_manifest(
     registry: SchemaRegistry,
     *,
@@ -88,8 +104,9 @@ def build_schema_manifest(
             schema=_sort_json_objects(contract._schema()),
         )
 
-    schema_version = SCHEMA_MANIFEST_V2 if type_contracts else SCHEMA_MANIFEST_V1
-    manifest_types = type_contracts or None
+    schema_v2 = bool(type_contracts) or _producer_supports_schema_v2(producer)
+    schema_version = SCHEMA_MANIFEST_V2 if schema_v2 else SCHEMA_MANIFEST_V1
+    manifest_types = type_contracts if schema_v2 else None
 
     sorted_pages = sorted(pages, key=lambda page: (page.name, page.path))
     sorted_mutations = sorted(
