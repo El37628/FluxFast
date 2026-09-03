@@ -10,7 +10,7 @@ from .capabilities import (
     CAPABILITY_LIVE_RESOURCES,
     client_supports,
 )
-from .contract import ResourceContract
+from .contract import ContractMode, ResourceContract, TypeContract
 from .errors import (
     FluxFastError,
     FluxFastLiveScopeError,
@@ -104,6 +104,7 @@ __all__ = [
     "PROTOCOL_VERSION",
     "CacheScope",
     "CachedResource",
+    "ContractMode",
     "ErrorDetail",
     "ErrorEnvelope",
     "FluxFast",
@@ -149,6 +150,7 @@ __all__ = [
     "ResourceWireRecord",
     "ScopeError",
     "ScopeType",
+    "TypeContract",
     "ValidationError",
     "append_item",
     "client_supports",
