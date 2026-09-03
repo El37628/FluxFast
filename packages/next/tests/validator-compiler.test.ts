@@ -354,6 +354,17 @@ describe("FluxFast validator compiler", () => {
     expect(result.content).not.toContain("BacktrackingResourceValidator");
   });
 
+  it("rejects schemas that exceed compiler traversal bounds", () => {
+    let nested: Record<string, unknown> = { type: "string" };
+    for (let depth = 0; depth < 65; depth += 1) {
+      nested = { type: "array", items: nested };
+    }
+
+    expect(() => compileJsonSchemaToValidationPlan(nested)).toThrow(
+      /schema nesting exceeds the maximum/
+    );
+  });
+
   it("supports schema/1 and remains byte-for-byte deterministic", () => {
     const input = manifest(
       {

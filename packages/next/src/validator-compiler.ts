@@ -250,6 +250,10 @@ const SUBSCHEMA_KEYS = new Set([
   "prefixItems"
 ]);
 
+const MAX_SCHEMA_NODES = 10_000;
+const MAX_SCHEMA_DEPTH = 64;
+const MAX_ROOT_CONTRACTS = 10_000;
+
 const SUPPORTED_FORMATS = new Set([
   "date",
   "date-time",
@@ -260,6 +264,116 @@ const SUPPORTED_FORMATS = new Set([
   "uri",
   "uuid"
 ]);
+
+interface SchemaWorkItem {
+  readonly schema: SchemaNode;
+  readonly path: string;
+  readonly depth: number;
+}
+
+/**
+ * Bound schema traversal before the recursive compiler passes run. The
+ * manifest is developer-authored, but generated code must fail with a stable
+ * diagnostic rather than overflowing the call stack on an adversarial schema.
+ */
+function assertSchemaBounds(schema: SchemaNode, path: string): void {
+  const pending: SchemaWorkItem[] = [{ schema, path, depth: 0 }];
+  const visited = new WeakSet<object>();
+  let nodes = 0;
+
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (current.depth > MAX_SCHEMA_DEPTH) {
+      fail(
+        current.path,
+        `schema nesting exceeds the maximum of ${MAX_SCHEMA_DEPTH}`
+      );
+    }
+    if (typeof current.schema === "boolean") continue;
+    const record = schemaRecord(current.schema, current.path);
+    if (visited.has(record)) continue;
+    visited.add(record);
+    nodes += 1;
+    if (nodes > MAX_SCHEMA_NODES) {
+      fail(
+        current.path,
+        `schema contains more than ${MAX_SCHEMA_NODES} nodes`
+      );
+    }
+
+    let keys: string[];
+    try {
+      keys = Object.keys(record);
+    } catch {
+      fail(current.path, "schema properties could not be enumerated");
+    }
+    if (keys.length > MAX_SCHEMA_NODES) {
+      fail(
+        current.path,
+        `schema contains more than ${MAX_SCHEMA_NODES} keywords`
+      );
+    }
+    for (const key of keys) {
+      if (!SUBSCHEMA_KEYS.has(key)) continue;
+      const child = record[key];
+      const childPath = current.path + "." + key;
+      if (key === "$defs" || key === "definitions" || key === "properties") {
+        const map = schemaRecord(child, childPath);
+        let names: string[];
+        try {
+          names = Object.keys(map);
+        } catch {
+          fail(childPath, "schema map could not be enumerated");
+        }
+        if (names.length > MAX_SCHEMA_NODES) {
+          fail(
+            childPath,
+            `schema map contains more than ${MAX_SCHEMA_NODES} entries`
+          );
+        }
+        for (const name of names) {
+          const item = map[name];
+          pending.push({
+            schema: typeof item === "boolean" ? item : schemaRecord(item, childPath + "." + name),
+            path: childPath + "." + name,
+            depth: current.depth + 1
+          });
+        }
+        continue;
+      }
+      if (
+        key === "allOf" ||
+        key === "anyOf" ||
+        key === "oneOf" ||
+        key === "prefixItems"
+      ) {
+        if (!Array.isArray(child)) fail(childPath, "expected an array of JSON Schemas");
+        if (child.length > MAX_SCHEMA_NODES) {
+          fail(
+            childPath,
+            `schema branch list contains more than ${MAX_SCHEMA_NODES} entries`
+          );
+        }
+        for (let index = 0; index < child.length; index += 1) {
+          const item = child[index];
+          pending.push({
+            schema: typeof item === "boolean" ? item : schemaRecord(item, childPath + "[" + index + "]"),
+            path: childPath + "[" + index + "]",
+            depth: current.depth + 1
+          });
+        }
+        continue;
+      }
+      if (typeof child !== "boolean") {
+        pending.push({
+          schema: schemaRecord(child, childPath),
+          path: childPath,
+          depth: current.depth + 1
+        });
+      }
+    }
+  }
+}
 
 function assertSupportedKeywords(
   schema: SchemaNode,
@@ -488,6 +602,7 @@ class JsonSchemaPlanCompiler {
     private readonly root: JsonSchema,
     private readonly rootPath: string
   ) {
+    assertSchemaBounds(root, rootPath);
     assertSupportedKeywords(root, rootPath);
     collectDefinitions(root, rootPath, this.definitions);
   }
@@ -913,7 +1028,15 @@ function compileContracts(
   diagnostics: ValidatorCompilationDiagnostic[];
 } {
   const contracts = new Map<string, RootContract>();
-  for (const contract of collectRootContracts(manifest)) {
+  const rootContracts = collectRootContracts(manifest);
+  if (rootContracts.length > MAX_ROOT_CONTRACTS) {
+    fail(
+      "$",
+      `manifest contains more than ${MAX_ROOT_CONTRACTS} validator contracts`
+    );
+  }
+  for (const contract of rootContracts) {
+    assertSchemaBounds(contract.schema, contract.path);
     const existing = contracts.get(contract.name);
     if (
       existing &&
