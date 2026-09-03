@@ -151,7 +151,8 @@ def manifest_text(manifest: SchemaManifest) -> str:
 def producer_uses_schema_v2(producer: str) -> bool:
     """Mirror the release-era switch without adding a packaging dependency."""
 
-    major, minor, *_ = (int(part) for part in producer.split(".", 2))
+    major_text, minor_text, *_ = producer.split(".", 2)
+    major, minor = int(major_text), int(minor_text)
     return major > 0 or minor >= 8
 
 

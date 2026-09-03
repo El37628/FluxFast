@@ -289,7 +289,7 @@ branch. It used ten fresh applications for navigation, five deferred samples,
 ten live-update samples, and five Redis payload samples with 32 warm HTTP
 requests per worker count.
 
-| Existing hot path | v0.7.0 | Current branch | Change |
+| Existing hot path | v0.7.0 | v0.8 implementation | Change |
 | --- | ---: | ---: | ---: |
 | Initial dashboard | 5.72 ms | 6.22 ms | +8.7% |
 | Complete-props response | 2.37 ms | 2.34 ms | -1.3% |
