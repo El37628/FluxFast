@@ -29,6 +29,12 @@ class BenchmarkResource(BaseModel):
     metrics: dict[str, float]
 
 
+class BenchmarkContract(BaseModel):
+    """Compact contract that keeps the 1000-contract case within manifest bounds."""
+
+    value: int
+
+
 class NestedLeaf(BaseModel):
     """Leaf value used to construct the large nested contract."""
 
@@ -51,6 +57,7 @@ class Workload:
     resources: int
     routes: int
     mutations: int
+    types: int
     annotation: type[BaseModel]
 
 
@@ -71,12 +78,16 @@ def nested_contract(depth: int = 24) -> type[BaseModel]:
 def workloads() -> tuple[Workload, ...]:
     nested = nested_contract()
     return (
-        Workload("resources-10", 10, 0, 0, BenchmarkResource),
-        Workload("resources-100", 100, 0, 0, BenchmarkResource),
-        Workload("resources-500", 500, 0, 0, BenchmarkResource),
-        Workload("large-nested", 10, 0, 0, nested),
-        Workload("many-routes", 10, 500, 0, BenchmarkResource),
-        Workload("many-mutations", 10, 0, 500, BenchmarkResource),
+        Workload("contracts-10", 0, 0, 0, 10, BenchmarkContract),
+        Workload("contracts-100", 0, 0, 0, 100, BenchmarkContract),
+        Workload("contracts-500", 0, 0, 0, 500, BenchmarkContract),
+        Workload("contracts-1000", 0, 0, 0, 1000, BenchmarkContract),
+        Workload("resources-10", 10, 0, 0, 0, BenchmarkResource),
+        Workload("resources-100", 100, 0, 0, 0, BenchmarkResource),
+        Workload("resources-500", 500, 0, 0, 0, BenchmarkResource),
+        Workload("large-nested", 10, 0, 0, 0, nested),
+        Workload("many-routes", 10, 500, 0, 0, BenchmarkResource),
+        Workload("many-mutations", 10, 0, 500, 0, BenchmarkResource),
     )
 
 
@@ -104,6 +115,13 @@ def build_workload_app(workload: Workload) -> FastAPI:
     app = FastAPI()
     flux = FluxFast(app)
 
+    for index in range(workload.types):
+        flux.define_type(
+            f"Contract{index:04d}",
+            workload.annotation,
+            mode="validation",
+        )
+
     for index in range(workload.resources):
         flux.define_resource(
             f"resource-{index:04d}",
@@ -130,6 +148,13 @@ def manifest_text(manifest: SchemaManifest) -> str:
     return f"{canonical_json(payload)}\n"
 
 
+def producer_uses_schema_v2(producer: str) -> bool:
+    """Mirror the release-era switch without adding a packaging dependency."""
+
+    major, minor, *_ = (int(part) for part in producer.split(".", 2))
+    return major > 0 or minor >= 8
+
+
 def benchmark_workload(
     workload: Workload,
     *,
@@ -147,7 +172,13 @@ def benchmark_workload(
         exclude_none=True,
     )
 
-    assert baseline.schema_version == "fluxfast-schema/1"
+    expected_schema = (
+        "fluxfast-schema/2"
+        if workload.types or producer_uses_schema_v2(fluxfast_version)
+        else "fluxfast-schema/1"
+    )
+    assert baseline.schema_version == expected_schema
+    assert len(baseline.types or {}) == workload.types
     assert len(baseline.resources) == workload.resources
     assert len(baseline.pages) == workload.routes
     assert len(baseline.mutations) == workload.mutations
@@ -171,6 +202,7 @@ def benchmark_workload(
         "resources": workload.resources,
         "routes": workload.routes,
         "mutations": workload.mutations,
+        "types": workload.types,
         "manifest_file": manifest_file,
         "manifest_bytes": len(serialized.encode("utf8")),
         "fingerprint": baseline.fingerprint,

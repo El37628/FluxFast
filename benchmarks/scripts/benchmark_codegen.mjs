@@ -29,6 +29,9 @@ const {
   compileFluxFastResourceTypes,
 } = require("../../packages/next/dist/schema-compiler.js");
 const {
+  compileFluxFastValidators,
+} = require("../../packages/next/dist/validator-compiler.js");
+const {
   parseFluxFastSchemaManifest,
 } = require("../../packages/next/dist/schema-manifest.js");
 const {
@@ -223,12 +226,54 @@ function formatBytes(value) {
     : `${(value / 1024).toFixed(1)} KiB`;
 }
 
-function compileTypeScript(manifest) {
-  return [
-    compileFluxFastResourceTypes(manifest),
-    compileFluxFastPageRoutes(manifest),
-    compileFluxFastMutations(manifest),
-  ].join("\n");
+function compileGeneratedSources(manifest) {
+  return {
+    "mutations.generated.ts": compileFluxFastMutations(manifest),
+    "routes.generated.ts": compileFluxFastPageRoutes(manifest),
+    "types.generated.ts": compileFluxFastResourceTypes(manifest),
+    "validators.generated.ts": compileFluxFastValidators(manifest),
+  };
+}
+
+function prepareTypeScriptCompilation(root, sources) {
+  const directory = path.join(root, "typescript");
+  fs.mkdirSync(directory, { recursive: true });
+  for (const [name, source] of Object.entries(sources)) {
+    writeFile(directory, name, source);
+  }
+  const rootNames = Object.keys(sources).map(name => path.join(directory, name));
+  const configFile = path.join(directory, "tsconfig.json");
+  fs.writeFileSync(
+    configFile,
+    `${JSON.stringify({
+      compilerOptions: {
+        lib: ["ES2022", "DOM", "DOM.Iterable"],
+        module: "ESNext",
+        moduleResolution: "bundler",
+        noEmit: true,
+        paths: {
+          "@fluxfast/core": [
+            path.join(repositoryRoot, "packages", "core", "src", "index.ts"),
+          ],
+        },
+        skipLibCheck: true,
+        strict: true,
+        target: "ES2022",
+        types: [],
+      },
+      files: rootNames,
+    }, null, 2)}\n`,
+    "utf8",
+  );
+  return configFile;
+}
+
+function compileGeneratedTypeScript(configFile) {
+  return spawnSync(
+    path.join(repositoryRoot, "node_modules", "typescript", "bin", "tsc"),
+    ["--project", configFile],
+    { encoding: "utf8" },
+  );
 }
 
 function benchmarkNodeWorkload(workload, root) {
@@ -237,6 +282,7 @@ function benchmarkNodeWorkload(workload, root) {
   const parsed = parseFluxFastSchemaManifest(manifestText);
   assert.equal(parsed.fingerprint, workload.fingerprint);
   assert.equal(Object.keys(parsed.resources).length, workload.resources);
+  assert.equal(Object.keys(parsed.types ?? {}).length, workload.types);
   assert.equal(parsed.pages.length, workload.routes);
   assert.equal(parsed.mutations.length, workload.mutations);
 
@@ -249,6 +295,7 @@ function benchmarkNodeWorkload(workload, root) {
     result => {
       assert.equal(result.fingerprint, workload.fingerprint);
       assert.equal(Object.keys(result.resources).length, workload.resources);
+      assert.equal(Object.keys(result.types ?? {}).length, workload.types);
       assert.equal(result.pages.length, workload.routes);
       assert.equal(result.mutations.length, workload.mutations);
     },
@@ -256,10 +303,36 @@ function benchmarkNodeWorkload(workload, root) {
 
   const typeGenerationMs = measureSamples(
     workload.samples,
-    () => compileTypeScript(parsed),
+    () => compileFluxFastResourceTypes(parsed),
     (result, baseline) => {
       assert.equal(result, baseline);
       assert.match(result, new RegExp(`Fingerprint: ${workload.fingerprint}`));
+    },
+  );
+
+  const validatorGenerationMs = measureSamples(
+    workload.samples,
+    () => compileFluxFastValidators(parsed),
+    (result, baseline) => {
+      assert.equal(result, baseline);
+      assert.match(result, new RegExp(`Fingerprint: ${workload.fingerprint}`));
+    },
+  );
+
+  const generatedSources = compileGeneratedSources(parsed);
+  const typeScriptConfig = prepareTypeScriptCompilation(
+    path.join(root, `typescript-${workload.name}`),
+    generatedSources,
+  );
+  const typeScriptCompileMs = measureSamples(
+    workload.samples,
+    () => compileGeneratedTypeScript(typeScriptConfig),
+    result => {
+      assert.equal(
+        result.status,
+        0,
+        `${result.stdout}${result.stderr}`,
+      );
     },
   );
 
@@ -289,6 +362,8 @@ function benchmarkNodeWorkload(workload, root) {
     ...workload,
     parseMs,
     typeGenerationMs,
+    validatorGenerationMs,
+    typeScriptCompileMs,
     doctorMs,
     generateCheckMs,
   };
@@ -299,6 +374,7 @@ function printResult(result) {
     `${result.resources} resources`,
     `${result.routes} routes`,
     `${result.mutations} mutations`,
+    `${result.types} explicit contracts`,
   ].join(", ");
   console.log(
     `${result.name}: ${shape}; ${formatBytes(result.manifest_bytes)} manifest`,
@@ -308,7 +384,13 @@ function printResult(result) {
   );
   console.log(`  Node manifest parsing: ${latencySummary(result.parseMs)}`);
   console.log(
-    `  TypeScript generation: ${latencySummary(result.typeGenerationMs)}`,
+    `  Type compilation: ${latencySummary(result.typeGenerationMs)}`,
+  );
+  console.log(
+    `  Validator compilation: ${latencySummary(result.validatorGenerationMs)}`,
+  );
+  console.log(
+    `  TypeScript compile: ${latencySummary(result.typeScriptCompileMs)}`,
   );
   console.log(`  fluxfast doctor: ${latencySummary(result.doctorMs)}`);
   console.log(
@@ -326,7 +408,7 @@ function runBenchmark(samples) {
       fs.readFileSync(path.join(temporaryRoot, "summary.json"), "utf8"),
     );
     assert.equal(summary.samples, samples);
-    assert.equal(summary.workloads.length, 6);
+    assert.equal(summary.workloads.length, 10);
     const workloads = summary.workloads.map(workload => ({
       ...workload,
       samples,
@@ -340,14 +422,14 @@ function runBenchmark(samples) {
       `environment: Python ${summary.python}; Node ${process.versions.node}; ${summary.platform}`,
     );
     console.log(
-      `workload: ${samples} measured samples after one untimed warm-up per Node operation; no timing thresholds`,
+      `workload: 10/100/500/1000 explicit contracts plus legacy resource/route/mutation/nesting cases; ${samples} measured samples after one untimed warm-up per Node operation; no timing thresholds`,
     );
     for (const result of results) printResult(result);
     console.log(
-      "tradeoff: direct parse/generation isolates codegen CPU; doctor and generate --check also include project detection, file reads, and deterministic artifact comparison",
+      "tradeoff: direct parse/type/validator compilation isolates codegen CPU; TypeScript compilation measures all generated contract artifacts; doctor and generate --check also include project detection, file reads, and deterministic artifact comparison",
     );
     console.log(
-      "correctness: PASS — manifests stayed deterministic; handlers never executed; counts and fingerprints matched; generated output stayed byte-stable; doctor and generate --check accepted every consumer",
+      "correctness: PASS — manifests stayed deterministic; handlers never executed; counts and fingerprints matched; generated output stayed byte-stable and type-safe; doctor and generate --check accepted every consumer",
     );
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });

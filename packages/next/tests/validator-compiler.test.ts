@@ -157,7 +157,7 @@ describe("FluxFast validator compiler", () => {
     expect(output).toContain("export const UserValidator");
     expect(output).toContain("export const RoomsResourceValidator");
     expect(output).toContain("export const CreateUserBodyValidator");
-    expect(output).toContain("createValidator<User>");
+    expect(output).toContain("/* @__PURE__ */ createValidator<User>");
     expect(output).toContain('"format": "email"');
     expect(output).toContain("export const validators");
     compileTypeScript(output);

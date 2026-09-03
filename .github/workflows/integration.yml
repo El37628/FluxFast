@@ -127,6 +127,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify schema-codegen benchmark workloads
         run: pnpm benchmark:codegen -- --samples 1
+      - name: Verify validator runtime benchmark workloads
+        run: pnpm benchmark:validation -- --samples 1 --iterations 1
+      - name: Verify production validator tree-shaking
+        run: pnpm benchmark:bundle
       - name: Verify full-stack type generation helper
         env:
           PYTHONPATH: python/fluxfast/src:.

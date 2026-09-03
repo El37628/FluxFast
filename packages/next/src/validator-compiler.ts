@@ -1385,7 +1385,7 @@ function renderValidatorSource(
       contract.name +
       "Validator: FluxValidator<" +
       contract.name +
-      "> = createValidator<" +
+      "> = /* @__PURE__ */ createValidator<" +
       contract.name +
       ">(\n" +
       plan +
