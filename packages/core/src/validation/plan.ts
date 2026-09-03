@@ -131,20 +131,29 @@ function requireArray(value: unknown, path: string): readonly unknown[] {
   return value as readonly unknown[];
 }
 
-const MAX_VALIDATION_PLAN_VALUE_NODES = 10_000;
-const MAX_VALIDATION_PLAN_VALUE_DEPTH = 64;
+const MAX_VALIDATION_PLAN_VALUES = 100_000;
+const MAX_VALIDATION_PLAN_DEPTH = 64;
+const MAX_VALIDATION_PLAN_CHILDREN = 10_000;
+const MAX_VALIDATION_PLAN_STRING_LENGTH = 65_536;
 
-interface JsonValueFrame {
+interface PlanBoundsFrame {
   readonly value: unknown;
   readonly path: string;
   readonly depth: number;
   readonly exit?: boolean;
 }
 
-function assertJsonValue(value: unknown, path: string): void {
-  const pending: JsonValueFrame[] = [{ value, path, depth: 0 }];
+function assertPlanBounds(
+  root: ValidationPlan,
+  documentDefinitions: unknown
+): void {
+  const pending: PlanBoundsFrame[] = [{ value: root, path: "$", depth: 0 }];
+  if (documentDefinitions !== undefined) {
+    pending.push({ value: documentDefinitions, path: "$.definitions", depth: 0 });
+  }
   const active = new WeakSet<object>();
-  let nodes = 0;
+  const visited = new WeakSet<object>();
+  let values = 0;
 
   while (pending.length > 0) {
     const frame = pending.pop()!;
@@ -152,51 +161,86 @@ function assertJsonValue(value: unknown, path: string): void {
       active.delete(frame.value as object);
       continue;
     }
+    values += 1;
+    if (values > MAX_VALIDATION_PLAN_VALUES) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan contains more than ${MAX_VALIDATION_PLAN_VALUES} JSON values`
+      );
+    }
     const item = frame.value;
     if (
       item === null ||
       typeof item === "string" ||
       typeof item === "boolean"
     ) {
+      if (
+        typeof item === "string" &&
+        item.length > MAX_VALIDATION_PLAN_STRING_LENGTH
+      ) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: string exceeds the maximum length of ${MAX_VALIDATION_PLAN_STRING_LENGTH}`
+        );
+      }
       continue;
     }
     if (typeof item === "number") {
-      requireFiniteNumber(item, frame.path);
+      if (!Number.isFinite(item)) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: plan values must be finite numbers`
+        );
+      }
       continue;
     }
     if (typeof item !== "object") {
       throw new TypeError(
-        `[fluxfast] Invalid validation plan at ${frame.path}: literal values must be JSON-compatible`
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan values must be JSON-compatible`
       );
     }
-    if (frame.depth > MAX_VALIDATION_PLAN_VALUE_DEPTH) {
+    if (frame.depth > MAX_VALIDATION_PLAN_DEPTH) {
       throw new TypeError(
-        `[fluxfast] Invalid validation plan at ${frame.path}: literal values exceed the maximum nesting depth of ${MAX_VALIDATION_PLAN_VALUE_DEPTH}`
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan values exceed the maximum nesting depth of ${MAX_VALIDATION_PLAN_DEPTH}`
       );
     }
     if (active.has(item)) {
       throw new TypeError(
-        `[fluxfast] Invalid validation plan at ${frame.path}: literal values cannot be circular`
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan values cannot be circular`
       );
     }
+    if (visited.has(item)) continue;
+    visited.add(item);
     active.add(item);
-    nodes += 1;
-    if (nodes > MAX_VALIDATION_PLAN_VALUE_NODES) {
-      throw new TypeError(
-        `[fluxfast] Invalid validation plan at ${frame.path}: literal values contain more than ${MAX_VALIDATION_PLAN_VALUE_NODES} containers`
-      );
-    }
     pending.push({ value: item, path: frame.path, depth: frame.depth, exit: true });
 
     if (safeIsArray(item)) {
-      if (item.length > MAX_VALIDATION_PLAN_VALUE_NODES) {
+      let length: number;
+      try {
+        length = item.length;
+      } catch {
         throw new TypeError(
-          `[fluxfast] Invalid validation plan at ${frame.path}: literal arrays contain more than ${MAX_VALIDATION_PLAN_VALUE_NODES} entries`
+          `[fluxfast] Invalid validation plan at ${frame.path}: plan array length could not be read`
         );
       }
-      for (let index = item.length - 1; index >= 0; index -= 1) {
+      if (!Number.isSafeInteger(length) || length < 0) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: plan array length must be a non-negative integer`
+        );
+      }
+      if (length > MAX_VALIDATION_PLAN_CHILDREN) {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${frame.path}: plan arrays contain more than ${MAX_VALIDATION_PLAN_CHILDREN} entries`
+        );
+      }
+      for (let index = length - 1; index >= 0; index -= 1) {
+        let child: unknown;
+        try {
+          child = item[index];
+        } catch {
+          throw new TypeError(
+            `[fluxfast] Invalid validation plan at ${frame.path}[${index}]: value could not be read`
+          );
+        }
         pending.push({
-          value: item[index],
+          value: child,
           path: `${frame.path}[${index}]`,
           depth: frame.depth + 1
         });
@@ -210,18 +254,26 @@ function assertJsonValue(value: unknown, path: string): void {
       keys = Object.keys(record);
     } catch {
       throw new TypeError(
-        `[fluxfast] Invalid validation plan at ${frame.path}: literal object properties could not be enumerated`
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan object properties could not be enumerated`
       );
     }
-    if (keys.length > MAX_VALIDATION_PLAN_VALUE_NODES) {
+    if (keys.length > MAX_VALIDATION_PLAN_CHILDREN) {
       throw new TypeError(
-        `[fluxfast] Invalid validation plan at ${frame.path}: literal objects contain more than ${MAX_VALIDATION_PLAN_VALUE_NODES} properties`
+        `[fluxfast] Invalid validation plan at ${frame.path}: plan objects contain more than ${MAX_VALIDATION_PLAN_CHILDREN} properties`
       );
     }
     for (let index = keys.length - 1; index >= 0; index -= 1) {
       const key = keys[index];
+      let child: unknown;
+      try {
+        child = record[key];
+      } catch {
+        throw new TypeError(
+          `[fluxfast] Invalid validation plan at ${pathKey(frame.path, key)}: value could not be read`
+        );
+      }
       pending.push({
-        value: record[key],
+        value: child,
         path: pathKey(frame.path, key),
         depth: frame.depth + 1
       });
@@ -345,12 +397,7 @@ function validateCommonFields(plan: Record<string, unknown>, path: string): void
   if (plan.description !== undefined && typeof plan.description !== "string") {
     throw new TypeError(`[fluxfast] Invalid validation plan at ${path}.description`);
   }
-  if (plan.examples !== undefined) {
-    const examples = requireArray(plan.examples, `${path}.examples`);
-    examples.forEach((example, index) =>
-      assertJsonValue(example, `${path}.examples[${index}]`)
-    );
-  }
+  if (plan.examples !== undefined) requireArray(plan.examples, `${path}.examples`);
 }
 
 function validateNumberFields(plan: Record<string, unknown>, path: string): void {
@@ -444,14 +491,12 @@ function validateNode(
       if (!("value" in plan)) {
         throw new TypeError(`[fluxfast] Invalid validation plan at ${path}.value`);
       }
-      assertJsonValue(plan.value, `${path}.value`);
       break;
     case "enum": {
       const values = requireArray(plan.values, `${path}.values`);
       if (values.length === 0) {
         throw new TypeError(`[fluxfast] ${path}.values must not be empty`);
       }
-      values.forEach((item, index) => assertJsonValue(item, `${path}.values[${index}]`));
       break;
     }
     case "array": {
@@ -568,32 +613,63 @@ function collectAndValidate(
   documentDefinitions: unknown,
   patterns: WeakMap<object, RegExp>
 ): Map<string, ValidationPlan> {
+  assertPlanBounds(root, documentDefinitions);
   const definitions = new Map<string, ValidationPlan>();
   if (documentDefinitions !== undefined) {
     registerDefinitions(definitions, documentDefinitions, "$.definitions");
   }
   const visited = new WeakSet<object>();
   const visiting = new WeakSet<object>();
-  const visit = (value: ValidationPlan, path: string): void => {
-    if (typeof value === "boolean") return;
-    const object = requireRecord(value, path);
-    if (visiting.has(object)) {
-      throw new TypeError(`[fluxfast] Circular validation plan at ${path}`);
-    }
-    if (visited.has(object)) return;
-    visiting.add(object);
-    if (object.definitions !== undefined) {
-      registerDefinitions(definitions, object.definitions, `${path}.definitions`);
-    }
-    validateNode(value, path, visit, patterns);
-    visiting.delete(object);
-    visited.add(object);
+  interface WorkItem {
+    readonly value: ValidationPlan;
+    readonly path: string;
+    readonly exit?: boolean;
+  }
+  const pending: WorkItem[] = [{ value: root, path: "$" }];
+  const enqueue = (value: ValidationPlan, path: string): void => {
+    pending.push({ value, path });
   };
-  visit(root, "$");
-  for (const [name, definition] of [...definitions.entries()].sort(([left], [right]) =>
-    left < right ? -1 : left > right ? 1 : 0
-  )) {
-    visit(definition, `$.definitions[${JSON.stringify(name)}]`);
+
+  const drain = (): void => {
+    while (pending.length > 0) {
+      const item = pending.pop()!;
+      if (item.exit) {
+        if (typeof item.value !== "boolean") {
+          const object = requireRecord(item.value, item.path);
+          visiting.delete(object);
+          visited.add(object);
+        }
+        continue;
+      }
+      if (typeof item.value === "boolean") continue;
+      const object = requireRecord(item.value, item.path);
+      if (visiting.has(object)) {
+        throw new TypeError(`[fluxfast] Circular validation plan at ${item.path}`);
+      }
+      if (visited.has(object)) continue;
+      visiting.add(object);
+      pending.push({ value: item.value, path: item.path, exit: true });
+      if (object.definitions !== undefined) {
+        registerDefinitions(definitions, object.definitions, `${item.path}.definitions`);
+      }
+      validateNode(item.value, item.path, enqueue, patterns);
+    }
+  };
+
+  drain();
+  const scheduledDefinitions = new Set<string>();
+  while (true) {
+    let scheduled = false;
+    for (const [name, definition] of [...definitions.entries()].sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0
+    )) {
+      if (scheduledDefinitions.has(name)) continue;
+      scheduledDefinitions.add(name);
+      enqueue(definition, `$.definitions[${JSON.stringify(name)}]`);
+      scheduled = true;
+    }
+    if (!scheduled) break;
+    drain();
   }
   return definitions;
 }

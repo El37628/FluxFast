@@ -251,6 +251,17 @@ describe("FluxFast validation runtime", () => {
     );
   });
 
+  it("rejects deeply nested validation plans before recursive traversal", () => {
+    let plan: ValidationPlan = { kind: "any" };
+    for (let depth = 0; depth < 20_000; depth += 1) {
+      plan = { kind: "array", items: plan };
+    }
+
+    expect(() => createValidator(plan)).toThrow(
+      /plan values exceed the maximum nesting depth/
+    );
+  });
+
   it("does not throw for hostile object, array, revoked, or enumeration proxies", () => {
     const objectValidator = createValidator({
       kind: "object",
@@ -397,13 +408,23 @@ describe("FluxFast validation runtime", () => {
     }
 
     expect(() => createValidator({ kind: "literal", value: nested })).toThrow(
-      /literal values exceed the maximum nesting depth/
+      /plan values exceed the maximum nesting depth/
     );
     expect(() => createValidator({ kind: "enum", values: [nested] })).toThrow(
-      /literal values exceed the maximum nesting depth/
+      /plan values exceed the maximum nesting depth/
     );
     expect(() => createValidator({ kind: "any", examples: [nested] })).toThrow(
-      /literal values exceed the maximum nesting depth/
+      /plan values exceed the maximum nesting depth/
+    );
+  });
+
+  it("enforces one aggregate budget across plan JSON values", () => {
+    const examples = Array.from({ length: 1_000 }, () =>
+      Array.from({ length: 100 }, (_, index) => index)
+    );
+
+    expect(() => createValidator({ kind: "any", examples })).toThrow(
+      /plan contains more than 100000 JSON values/
     );
   });
 
