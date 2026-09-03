@@ -519,6 +519,82 @@ declare module "@fluxfast/core" {
     ).toThrow(/only local \$defs references are supported/);
   });
 
+  it("resolves escaped and prototype-sensitive local references", () => {
+    const output = compileFluxFastResourceTypes(
+      manifest({
+        values: {
+          schema: {
+            $defs: Object.fromEntries([
+              ["__proto__", { title: "ProtoValue", type: "string" }],
+              ["constructor", { title: "ConstructorValue", type: "integer" }],
+              ["prototype", { title: "PrototypeValue", type: "boolean" }],
+              ["a/b", { title: "SlashValue", type: "string" }],
+              ["a~b", { title: "TildeValue", type: "number" }]
+            ]),
+            type: "object",
+            properties: {
+              proto: { $ref: "#/$defs/__proto__" },
+              constructorValue: { $ref: "#/$defs/constructor" },
+              prototypeValue: { $ref: "#/$defs/prototype" },
+              slash: { $ref: "#/$defs/a~1b" },
+              slashPercent: { $ref: "#/$defs/a%7E1b" },
+              tilde: { $ref: "#/$defs/a~0b" }
+            }
+          }
+        }
+      })
+    );
+
+    expect(output).toContain("proto?: ProtoValue;");
+    expect(output).toContain("constructorValue?: ConstructorValue;");
+    expect(output).toContain("prototypeValue?: PrototypeValue;");
+    expect(output).toContain("slash?: SlashValue;");
+    expect(output).toContain("slashPercent?: SlashValue;");
+    expect(output).toContain("tilde?: TildeValue;");
+    expectValidTypeScript(output);
+  });
+
+  it.each([
+    ["#/$defs/%ZZ", /invalid URI escaping/],
+    ["#/$defs/a%2Fb", /must point directly to a local definition/],
+    ["#/$defs/a~2b", /invalid JSON Pointer escaping/],
+    ["#/$defs/", /must point directly to a local definition/],
+    ["#/$defs/a/b", /must point directly to a local definition/],
+    ["https://example.com/schema", /only local \$defs references are supported/],
+    ["#/$defs/Missing", /references unknown definition/]
+  ])("rejects adversarial reference %s", (reference, message) => {
+    expect(() => compileFluxFastResourceTypes(
+      manifest({ broken: { schema: { $ref: reference } } })
+    )).toThrow(message);
+  });
+
+  it("accepts compatible duplicate definitions and rejects incompatible ones", () => {
+    const compatible = compileFluxFastResourceTypes(
+      manifest({
+        value: {
+          schema: {
+            $defs: { Shared: { type: "string" } },
+            definitions: { Shared: { type: "string" } },
+            $ref: "#/$defs/Shared"
+          }
+        }
+      })
+    );
+    expect(compatible.match(/export type Shared = string;/g)).toHaveLength(1);
+
+    expect(() => compileFluxFastResourceTypes(
+      manifest({
+        value: {
+          schema: {
+            $defs: { Shared: { type: "string" } },
+            definitions: { Shared: { type: "number" } },
+            $ref: "#/$defs/Shared"
+          }
+        }
+      })
+    )).toThrow(/(?:declared more than once|incompatible definition)/);
+  });
+
   it("generates safe camel-cased keys and rejects normalized collisions", () => {
     const output = compileFluxFastResourceTypes(
       manifest({

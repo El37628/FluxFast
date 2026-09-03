@@ -17,14 +17,24 @@ T = TypeVar("T")
 ContractMode = Literal["serialization", "validation"]
 
 
+def _javascript_string_length(value: str) -> int:
+    """Return the number of UTF-16 code units JavaScript observes."""
+
+    return len(value.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
 def _validate_contract_name(name: object) -> str:
     """Return a valid explicit contract name or raise a public input error."""
 
-    if not isinstance(name, str) or not name.strip() or len(name) > 128:
+    if (
+        not isinstance(name, str)
+        or not name.strip()
+        or _javascript_string_length(name) > 128
+    ):
         raise ValueError(
             "contract name must be a non-empty string of at most 128 characters"
         )
-    if any(ord(char) < 32 for char in name):
+    if any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in name):
         raise ValueError("contract name must not contain control characters")
     return name
 
@@ -121,11 +131,17 @@ def _canonicalize_unordered_collections(source: Any, wire_value: Any) -> Any:
 def _validate_resource_key(key: object) -> str:
     """Return a valid logical resource key or raise a public input error."""
 
-    if not isinstance(key, str) or not key.strip() or len(key) > 128:
+    if (
+        not isinstance(key, str)
+        or not key.strip()
+        or _javascript_string_length(key) > 128
+    ):
         raise ValueError(
             "resource key must be a non-empty string of at most 128 characters"
         )
-    if "," in key or any(ord(char) < 32 for char in key):
+    if "," in key or any(
+        ord(char) < 32 or 127 <= ord(char) <= 159 for char in key
+    ):
         raise ValueError("resource key must not contain commas or control characters")
     return key
 

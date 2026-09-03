@@ -67,10 +67,32 @@ const IGNORED_PAGE = /\.(test|spec|stories)\.(tsx|jsx)$/;
 const SAFE_PAGE_FILE =
   /^[A-Za-z0-9_.@()\[\]-]+(?:\/[A-Za-z0-9_.@()\[\]-]+)*\.(?:tsx|jsx)$/;
 
+function isWithin(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return (
+    relative === "" ||
+    (!relative.startsWith(`..${path.sep}`) &&
+      relative !== ".." &&
+      !path.isAbsolute(relative))
+  );
+}
+
+function commonDirectory(left: string, right: string): string {
+  const resolvedRight = path.resolve(right);
+  let current = path.resolve(left);
+  while (!isWithin(current, resolvedRight)) {
+    const parent = path.dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+  return current;
+}
+
 function assertGeneratedOutputPath(
   generatedDir: string,
   outputPath: string,
-  label: string
+  label: string,
+  trustedRoot = path.dirname(generatedDir)
 ): void {
   const relative = path.relative(generatedDir, outputPath);
   if (
@@ -84,7 +106,41 @@ function assertGeneratedOutputPath(
     );
   }
 
-  let current = generatedDir;
+  const resolvedGeneratedDir = path.resolve(generatedDir);
+  let resolvedTrustedRoot = path.resolve(trustedRoot);
+  if (resolvedTrustedRoot === resolvedGeneratedDir) {
+    resolvedTrustedRoot = path.dirname(resolvedTrustedRoot);
+  }
+  if (!isWithin(resolvedTrustedRoot, resolvedGeneratedDir)) {
+    throw new TypeError(
+      `[fluxfast] Generated ${label} directory must stay inside its project boundary`
+    );
+  }
+  let current = resolvedTrustedRoot;
+  for (const segment of path
+    .relative(resolvedTrustedRoot, resolvedGeneratedDir)
+    .split(path.sep)
+    .filter(Boolean)) {
+    current = path.join(current, segment);
+    try {
+      if (fs.lstatSync(current).isSymbolicLink()) {
+        throw new TypeError(
+          `[fluxfast] Generated ${label} must not traverse the symbolic link ${JSON.stringify(current)}`
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        break;
+      }
+      throw error;
+    }
+  }
+
+  current = resolvedGeneratedDir;
   for (const segment of relative.split(path.sep)) {
     current = path.join(current, segment);
     try {
@@ -189,7 +245,10 @@ export function generatePagesRegistry(options: GenerateOptions = {}): void {
   assertGeneratedOutputPath(
     path.dirname(snapshot.outputFile),
     snapshot.outputFile,
-    "component registry"
+    "component registry",
+    path.dirname(
+      commonDirectory(snapshot.pagesDir, path.dirname(snapshot.outputFile))
+    )
   );
   fs.mkdirSync(snapshot.pagesDir, { recursive: true });
   fs.mkdirSync(path.dirname(snapshot.outputFile), { recursive: true });
@@ -210,10 +269,14 @@ function createFluxFastProjectSnapshot(
   const generatedDir = path.resolve(
     options.generatedDir ?? path.dirname(registry.outputFile)
   );
+  const projectBoundary = path.dirname(
+    commonDirectory(registry.pagesDir, generatedDir)
+  );
   assertGeneratedOutputPath(
     generatedDir,
     registry.outputFile,
-    "component registry"
+    "component registry",
+    projectBoundary
   );
   const candidateSchemaFile = path.resolve(
     options.schemaFile ?? path.join(generatedDir, "schema.generated.json")
@@ -222,7 +285,8 @@ function createFluxFastProjectSnapshot(
     assertGeneratedOutputPath(
       generatedDir,
       candidateSchemaFile,
-      "schema manifest"
+      "schema manifest",
+      projectBoundary
     );
   }
   const schemaContent = options.schemaContent ?? (
@@ -265,7 +329,12 @@ function createFluxFastProjectSnapshot(
       }
     ];
     for (const artifact of schemaArtifacts) {
-      assertGeneratedOutputPath(generatedDir, artifact.path, artifact.label);
+      assertGeneratedOutputPath(
+        generatedDir,
+        artifact.path,
+        artifact.label,
+        projectBoundary
+      );
       artifacts.push({ path: artifact.path, content: artifact.content });
     }
   }

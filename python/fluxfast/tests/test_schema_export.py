@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Generic, Literal, Optional, TypeVar, Union
+from types import SimpleNamespace
+from typing import Any, Generic, Literal, Optional, TypeVar, Union
 from uuid import UUID
 
 import pytest
 from fastapi import Body, Depends, FastAPI, Query
 from pydantic import BaseModel, Field, field_serializer
+from pydantic_core import core_schema
 
 from fluxfast import FluxFast, FluxRouter, Page, resource, scope
 from fluxfast.schema_export import build_app_schema_manifest, build_schema_manifest
@@ -98,6 +100,49 @@ class AdvancedContractPayload(BaseModel):
     page: PageResult[Address]
     tree: TreeNode
     custom: CustomWireValue
+
+
+def _nested_schema(depth: int) -> dict[str, object]:
+    value: object = {"type": "string"}
+    for _ in range(depth):
+        value = {"items": value, "type": "array"}
+    return value  # type: ignore[return-value]
+
+
+class DeepJsonSchemaValue:
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls,
+        _source_type: Any,
+        _handler: Any,
+    ) -> Any:
+        return core_schema.str_schema()
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls,
+        _core_schema: Any,
+        _handler: Any,
+    ) -> dict[str, object]:
+        return _nested_schema(65)
+
+
+class LargeJsonSchemaValue:
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls,
+        _source_type: Any,
+        _handler: Any,
+    ) -> Any:
+        return core_schema.str_schema()
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls,
+        _core_schema: Any,
+        _handler: Any,
+    ) -> dict[str, object]:
+        return {"examples": list(range(9_999)), "type": "string"}
 
 
 def test_export_uses_pydantic_serialization_mode_wire_schema() -> None:
@@ -236,6 +281,50 @@ def test_contract_change_changes_manifest_fingerprint() -> None:
     assert first_manifest.fingerprint != second_manifest.fingerprint
 
 
+def test_export_rejects_pathological_schema_before_recursive_sorting() -> None:
+    nested: object = "leaf"
+    for _ in range(65):
+        nested = {"value": nested}
+
+    class FakeContract:
+        mode = "validation"
+
+        def _schema(self) -> object:
+            return {"default": nested}
+
+    registry = SimpleNamespace(
+        resource_contracts={},
+        type_contracts={"Deep": FakeContract()},
+    )
+    with pytest.raises(ValueError, match="nesting depth"):
+        build_schema_manifest(registry, producer="0.8.0")
+
+
+def test_export_enforces_one_aggregate_schema_budget() -> None:
+    class FakeContract:
+        mode = "validation"
+
+        def __init__(self, offset: int) -> None:
+            self.offset = offset
+
+        def _schema(self) -> object:
+            return {
+                "examples": [
+                    self.offset + index for index in range(9_999)
+                ]
+            }
+
+    registry = SimpleNamespace(
+        resource_contracts={},
+        type_contracts={
+            f"Type{index}": FakeContract(index * 10_000)
+            for index in range(11)
+        },
+    )
+    with pytest.raises(ValueError, match="more than 100000 JSON values"):
+        build_schema_manifest(registry, producer="0.8.0")
+
+
 def test_export_does_not_execute_pages_loaders_dependencies_or_runtime_scopes() -> None:
     app = FastAPI()
     flux = FluxFast(app)
@@ -372,6 +461,18 @@ def test_app_export_includes_typed_page_path_query_and_dependency_parameters() -
     ]
 
 
+def test_app_export_bounds_page_parameter_schema_before_sorting() -> None:
+    app = FastAPI()
+    flux = FluxFast(app)
+
+    @flux.page("/deep-page", name="deep_page")
+    async def deep_page(value: DeepJsonSchemaValue = Query()) -> Page:
+        return Page(component="deep/index", meta={"value": value})
+
+    with pytest.raises(ValueError, match="nesting depth"):
+        build_app_schema_manifest(app, producer="0.8.0")
+
+
 def test_app_export_resolves_included_router_prefixes_and_sorts_pages() -> None:
     app = FastAPI()
     FluxFast(app)
@@ -462,6 +563,48 @@ def test_app_export_includes_typed_json_mutation_metadata_without_execution() ->
     assert mutation.body_schema["required"] == ["status"]
     assert "inputNote" in mutation.body_schema["properties"]
     assert "note" not in mutation.body_schema["properties"]
+
+
+def test_app_export_bounds_mutation_parameter_schema_before_sorting() -> None:
+    app = FastAPI()
+    flux = FluxFast(app)
+
+    @flux.mutation("/deep-mutation", name="deep_mutation")
+    async def deep_mutation(
+        value: DeepJsonSchemaValue = Query(),
+    ) -> dict[str, bool]:
+        return {"ok": bool(value)}
+
+    with pytest.raises(ValueError, match="nesting depth"):
+        build_app_schema_manifest(app, producer="0.8.0")
+
+
+def test_app_export_bounds_mutation_body_schema_before_sorting() -> None:
+    app = FastAPI()
+    flux = FluxFast(app)
+
+    @flux.mutation("/deep-body", name="deep_body")
+    async def deep_body(
+        value: DeepJsonSchemaValue = Body(),
+    ) -> dict[str, bool]:
+        return {"ok": bool(value)}
+
+    with pytest.raises(ValueError, match="nesting depth"):
+        build_app_schema_manifest(app, producer="0.8.0")
+
+
+def test_app_export_uses_one_budget_for_all_route_schemas() -> None:
+    app = FastAPI()
+    flux = FluxFast(app)
+
+    for index in range(11):
+        async def page(value: LargeJsonSchemaValue = Query()) -> Page:
+            return Page(component="large/index", meta={"value": value})
+
+        flux.page(f"/large-{index}", name=f"large_{index}")(page)
+
+    with pytest.raises(ValueError, match="more than 100000 JSON values"):
+        build_app_schema_manifest(app, producer="0.8.0")
 
 
 def test_app_export_splits_multi_method_mutations_and_resolves_router_prefixes() -> None:

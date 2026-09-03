@@ -87,6 +87,18 @@ function compileTypeScript(source: string, types = typeSource()): void {
   }
 }
 
+interface ValidationPatternCases {
+  accepted: Array<{ pattern: string; valid: string; invalid: string }>;
+  rejected: string[];
+}
+
+const validationPatternCases = JSON.parse(
+  fs.readFileSync(
+    path.resolve(__dirname, "../../../tests/fixtures/validation-pattern-cases.json"),
+    "utf8"
+  )
+) as ValidationPatternCases;
+
 describe("FluxFast validator compiler", () => {
   it("emits typed validators for explicit, resource, and mutation contracts", () => {
     const output = compileFluxFastValidators(
@@ -367,6 +379,29 @@ describe("FluxFast validator compiler", () => {
     );
   });
 
+  it("keeps compiler and runtime behavior aligned with the shared pattern table", () => {
+    for (const testCase of validationPatternCases.accepted) {
+      const validator = createValidator(
+        compileJsonSchemaToValidationPlan({
+          type: "string",
+          pattern: testCase.pattern
+        })
+      );
+      expect(validator.is(testCase.valid), testCase.pattern).toBe(true);
+      expect(validator.is(testCase.invalid), testCase.pattern).toBe(false);
+    }
+    for (const pattern of validationPatternCases.rejected) {
+      expect(
+        () => compileJsonSchemaToValidationPlan({ type: "string", pattern }),
+        pattern
+      ).toThrow();
+    }
+    expect(() => compileJsonSchemaToValidationPlan({
+      type: "string",
+      pattern: "a".repeat(8_193)
+    })).toThrow(/pattern is too long/);
+  });
+
   it("bounds deeply nested literal values before recursive rendering", () => {
     let literal: unknown = "leaf";
     for (let depth = 0; depth < 65; depth += 1) {
@@ -383,7 +418,7 @@ describe("FluxFast validator compiler", () => {
           deeplyNested: { schema: { const: literal } }
         })
       )
-    ).toThrow(/schema value nesting exceeds the maximum/);
+    ).toThrow(/(?:schema value nesting exceeds the maximum|must not exceed a nesting depth)/);
 
     expect(() =>
       compileFluxFastTypes(
@@ -394,7 +429,7 @@ describe("FluxFast validator compiler", () => {
           }
         })
       )
-      ).toThrow(/schema value nesting exceeds the maximum/);
+      ).toThrow(/(?:schema value nesting exceeds the maximum|must not exceed a nesting depth)/);
   });
 
   it("enforces aggregate schema-value and scalar-length limits", () => {
@@ -430,7 +465,7 @@ describe("FluxFast validator compiler", () => {
     );
 
     expect(() => compileFluxFastValidators(manifest(resources))).toThrow(
-      /schemas must not contain more than 100000 JSON values/
+      /must not contain more than 100000 JSON values/
     );
   });
 
@@ -490,5 +525,67 @@ describe("FluxFast validator compiler", () => {
       "  constructor: string;\n" +
       "}\n"
     );
+  });
+
+  it("executes escaped and prototype-sensitive references safely", () => {
+    const schema = JSON.parse(`{
+      "$defs": {
+        "__proto__": { "type": "string" },
+        "constructor": { "type": "integer" },
+        "prototype": { "type": "boolean" },
+        "a/b": { "type": "string", "pattern": "^safe$" },
+        "a~b": { "type": "number", "minimum": 1 }
+      },
+      "type": "object",
+      "properties": {
+        "__proto__": { "$ref": "#/$defs/__proto__" },
+        "constructor": { "$ref": "#/$defs/constructor" },
+        "prototype": { "$ref": "#/$defs/prototype" },
+        "slash": { "$ref": "#/$defs/a~1b" },
+        "slashPercent": { "$ref": "#/$defs/a%7E1b" },
+        "tilde": { "$ref": "#/$defs/a~0b" }
+      },
+      "required": ["__proto__", "constructor", "prototype", "slash", "slashPercent", "tilde"],
+      "additionalProperties": false
+    }`);
+    const validator = createValidator(
+      compileJsonSchemaToValidationPlan(schema)
+    );
+    const value = JSON.parse(
+      '{"__proto__":"safe","constructor":1,"prototype":true,"slash":"safe","slashPercent":"safe","tilde":2}'
+    );
+
+    expect(validator.is(value)).toBe(true);
+    expect(validator.is({ ...value, slash: "unsafe" })).toBe(false);
+    expect(Object.prototype).not.toHaveProperty("polluted");
+  });
+
+  it.each([
+    ["#/$defs/%ZZ", /invalid URI escaping/],
+    ["#/$defs/a%2Fb", /must point directly to a local definition/],
+    ["#/$defs/a~2b", /invalid JSON Pointer escaping/],
+    ["#/$defs/", /must point directly to a local definition/],
+    ["#/$defs/a/b", /must point directly to a local definition/],
+    ["https://example.com/schema", /only local \$defs references are supported/],
+    ["#/$defs/Missing", /unknown definition/]
+  ])("rejects unsafe validator reference %s", (reference, message) => {
+    expect(() => compileJsonSchemaToValidationPlan({ $ref: reference })).toThrow(
+      message
+    );
+  });
+
+  it("handles compatible and incompatible duplicate validator definitions", () => {
+    const compatible = compileJsonSchemaToValidationPlan({
+      $defs: { Shared: { type: "string" } },
+      definitions: { Shared: { type: "string" } },
+      $ref: "#/$defs/Shared"
+    });
+    expect(createValidator(compatible).is("safe")).toBe(true);
+
+    expect(() => compileJsonSchemaToValidationPlan({
+      $defs: { Shared: { type: "string" } },
+      definitions: { Shared: { type: "number" } },
+      $ref: "#/$defs/Shared"
+    })).toThrow(/incompatible definition/);
   });
 });

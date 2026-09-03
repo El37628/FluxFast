@@ -15,6 +15,7 @@ export type ValidationFormat = (typeof VALIDATION_FORMATS)[number];
 
 /** Maximum pattern source accepted by the native validator. */
 export const VALIDATION_PATTERN_MAX_LENGTH = 8192;
+const VALIDATION_PATTERN_MAX_REPETITION = 10_000;
 
 /**
  * Return a diagnostic for a pattern that cannot be safely translated to the
@@ -45,6 +46,7 @@ export function validationPatternError(pattern: string): string | undefined {
   let quantifiers = 0;
   let inCharacterClass = false;
   let escaped = false;
+  let hasAlternation = false;
   for (let index = 0; index < pattern.length; index += 1) {
     const character = pattern[index];
     if (escaped) {
@@ -64,14 +66,26 @@ export function validationPatternError(pattern: string): string | undefined {
       continue;
     }
     if (inCharacterClass) continue;
+    if (character === "|") {
+      hasAlternation = true;
+      continue;
+    }
     if (character === "?" && pattern[index - 1] === "(") continue;
     if (character === "*" || character === "+" || character === "?") {
       quantifiers += 1;
       continue;
     }
     if (character === "{") {
-      const quantifier = /^\{\d+(?:,\d*)?\}/.exec(pattern.slice(index));
+      const quantifier = /^\{(\d+)(?:,(\d*))?\}/.exec(pattern.slice(index));
       if (quantifier) {
+        const minimum = Number(quantifier[1]);
+        const maximum = quantifier[2] ? Number(quantifier[2]) : minimum;
+        if (
+          minimum > VALIDATION_PATTERN_MAX_REPETITION ||
+          maximum > VALIDATION_PATTERN_MAX_REPETITION
+        ) {
+          return `pattern repetition exceeds the maximum of ${VALIDATION_PATTERN_MAX_REPETITION}`;
+        }
         quantifiers += 1;
         index += quantifier[0].length - 1;
       }
@@ -79,6 +93,12 @@ export function validationPatternError(pattern: string): string | undefined {
   }
   if (quantifiers > 1) {
     return "patterns with multiple quantifiers are rejected to keep validation linear";
+  }
+  if (hasAlternation) {
+    return "patterns with alternation are rejected to keep validation linear";
+  }
+  if (quantifiers > 0 && !pattern.startsWith("^")) {
+    return "quantified patterns must be anchored at the start to keep validation linear";
   }
   return undefined;
 }

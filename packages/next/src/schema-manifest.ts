@@ -90,6 +90,12 @@ const MAX_SCHEMA_VALUE_CONTAINERS = 10_000;
 const MAX_SCHEMA_VALUE_CHILDREN = 10_000;
 const MAX_SCHEMA_VALUE_DEPTH = 64;
 const MAX_SCHEMA_VALUE_STRING_LENGTH = 65_536;
+const MAX_MANIFEST_SOURCE_LENGTH = 8 * 1024 * 1024;
+const MAX_MANIFEST_VALUE_COUNT = 100_000;
+const MAX_MANIFEST_CHILDREN = 10_000;
+const MAX_MANIFEST_DEPTH = 64;
+const MAX_MANIFEST_STRING_LENGTH = 65_536;
+const MAX_MANIFEST_TOTAL_STRING_LENGTH = 8 * 1024 * 1024;
 
 interface SchemaValueBudget {
   values: number;
@@ -102,7 +108,11 @@ function fail(path: string, reason: string): never {
 
 function valueDescription(value: unknown): string {
   if (value === null) return "null";
-  if (Array.isArray(value)) return "an array";
+  try {
+    if (Array.isArray(value)) return "an array";
+  } catch {
+    return "an unreadable value";
+  }
   return typeof value === "string" ? JSON.stringify(value) : typeof value;
 }
 
@@ -113,16 +123,257 @@ function assertRecord(
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     fail(path, `must be an object; received ${valueDescription(value)}`);
   }
-  const prototype = Object.getPrototypeOf(value);
+  let prototype: object | null;
+  try {
+    prototype = Object.getPrototypeOf(value);
+  } catch {
+    fail(path, "must be a readable plain JSON object");
+  }
   if (prototype !== Object.prototype && prototype !== null) {
     fail(path, "must be a plain JSON object");
   }
 }
 
 function childPath(path: string, key: string): string {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)
-    ? `${path}.${key}`
-    : `${path}[${JSON.stringify(key)}]`;
+  const displayKey = key.length > 128 ? `${key.slice(0, 125)}...` : key;
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(displayKey)
+    ? `${path}.${displayKey}`
+    : `${path}[${JSON.stringify(displayKey)}]`;
+}
+
+interface ManifestBoundsFrame {
+  readonly value: unknown;
+  readonly path: string;
+  readonly depth: number;
+  readonly parent?: unknown[] | UnknownRecord;
+  readonly key?: string | number;
+  readonly exit?: boolean;
+}
+
+interface ManifestBoundsBudget {
+  values: number;
+  stringLength: number;
+}
+
+function readDataDescriptor(
+  value: object,
+  key: string,
+  path: string
+): PropertyDescriptor {
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(value, key);
+  } catch {
+    fail(path, "could not be inspected");
+  }
+  if (descriptor === undefined) {
+    fail(path, "must be present as an own property");
+  }
+  if (!("value" in descriptor)) {
+    fail(path, "must not use an accessor property");
+  }
+  return descriptor;
+}
+
+function assignSnapshotValue(
+  frame: ManifestBoundsFrame,
+  value: unknown
+): void {
+  if (frame.parent === undefined || frame.key === undefined) return;
+  if (Array.isArray(frame.parent)) {
+    frame.parent[frame.key as number] = value;
+  } else {
+    frame.parent[frame.key] = value;
+  }
+}
+
+/** Build bounded, data-only JSON so semantic validation never rereads hostile input. */
+function createManifestSnapshot(root: unknown): unknown {
+  const pending: ManifestBoundsFrame[] = [
+    { value: root, path: "$", depth: 0 }
+  ];
+  const active = new WeakSet<object>();
+  const budget: ManifestBoundsBudget = { values: 0, stringLength: 0 };
+  let snapshot: unknown;
+
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (current.exit) {
+      active.delete(current.value as object);
+      continue;
+    }
+    budget.values += 1;
+    if (budget.values > MAX_MANIFEST_VALUE_COUNT) {
+      fail(
+        current.path,
+        `must not contain more than ${MAX_MANIFEST_VALUE_COUNT} JSON values`
+      );
+    }
+    if (current.depth > MAX_MANIFEST_DEPTH) {
+      fail(
+        current.path,
+        `must not exceed a nesting depth of ${MAX_MANIFEST_DEPTH}`
+      );
+    }
+
+    const item = current.value;
+    if (typeof item === "string") {
+      if (item.length > MAX_MANIFEST_STRING_LENGTH) {
+        fail(
+          current.path,
+          `must not contain strings longer than ${MAX_MANIFEST_STRING_LENGTH} characters`
+        );
+      }
+      budget.stringLength += item.length;
+      if (budget.stringLength > MAX_MANIFEST_TOTAL_STRING_LENGTH) {
+        fail(
+          current.path,
+          `must not contain more than ${MAX_MANIFEST_TOTAL_STRING_LENGTH} total string characters`
+        );
+      }
+      assignSnapshotValue(current, item);
+      if (current.parent === undefined) snapshot = item;
+      continue;
+    }
+    if (item === null || typeof item === "boolean") {
+      assignSnapshotValue(current, item);
+      if (current.parent === undefined) snapshot = item;
+      continue;
+    }
+    if (typeof item === "number") {
+      if (!Number.isFinite(item)) {
+        fail(current.path, "must not contain a non-finite number");
+      }
+      if (Number.isInteger(item) && !Number.isSafeInteger(item)) {
+        fail(
+          current.path,
+          "must not contain an integer outside the JavaScript safe integer range"
+        );
+      }
+      assignSnapshotValue(current, item);
+      if (current.parent === undefined) snapshot = item;
+      continue;
+    }
+    if (typeof item !== "object") {
+      fail(current.path, "must contain only JSON-compatible values");
+    }
+
+    if (active.has(item)) {
+      fail(current.path, "must not contain circular object references");
+    }
+    active.add(item);
+    pending.push({ ...current, exit: true });
+
+    let isArray: boolean;
+    try {
+      isArray = Array.isArray(item);
+    } catch {
+      fail(current.path, "could not be inspected as JSON");
+    }
+    if (isArray) {
+      const lengthDescriptor = readDataDescriptor(
+        item,
+        "length",
+        `${current.path}.length`
+      );
+      const length = lengthDescriptor.value;
+      if (!Number.isSafeInteger(length) || (length as number) < 0) {
+        fail(`${current.path}.length`, "must be a non-negative safe integer");
+      }
+      if ((length as number) > MAX_MANIFEST_CHILDREN) {
+        fail(
+          current.path,
+          `must not contain arrays with more than ${MAX_MANIFEST_CHILDREN} entries`
+        );
+      }
+      let ownKeys: PropertyKey[];
+      try {
+        ownKeys = Reflect.ownKeys(item);
+      } catch {
+        fail(current.path, "properties could not be enumerated");
+      }
+      if (ownKeys.some(key => typeof key === "symbol")) {
+        fail(current.path, "must not contain symbol properties");
+      }
+      const expectedKeys = new Set([
+        "length",
+        ...Array.from({ length: length as number }, (_, index) => String(index))
+      ]);
+      for (const key of ownKeys as string[]) {
+        if (!expectedKeys.has(key)) {
+          fail(childPath(current.path, key), "is not a JSON array index");
+        }
+      }
+      const output: unknown[] = new Array(length as number);
+      assignSnapshotValue(current, output);
+      if (current.parent === undefined) snapshot = output;
+      for (let index = (length as number) - 1; index >= 0; index -= 1) {
+        const itemPath = `${current.path}[${index}]`;
+        const descriptor = readDataDescriptor(item, String(index), itemPath);
+        if (descriptor.enumerable !== true) {
+          fail(itemPath, "must be an enumerable JSON array item");
+        }
+        pending.push({
+          value: descriptor.value,
+          path: itemPath,
+          depth: current.depth + 1,
+          parent: output,
+          key: index
+        });
+      }
+      continue;
+    }
+
+    assertRecord(item, current.path);
+    let ownKeys: PropertyKey[];
+    try {
+      ownKeys = Reflect.ownKeys(item);
+    } catch {
+      fail(current.path, "properties could not be enumerated");
+    }
+    if (ownKeys.some(key => typeof key === "symbol")) {
+      fail(current.path, "must not contain symbol properties");
+    }
+    const keys = ownKeys as string[];
+    if (keys.length > MAX_MANIFEST_CHILDREN) {
+      fail(
+        current.path,
+        `must not contain objects with more than ${MAX_MANIFEST_CHILDREN} properties`
+      );
+    }
+    const output: UnknownRecord = Object.create(null) as UnknownRecord;
+    assignSnapshotValue(current, output);
+    if (current.parent === undefined) snapshot = output;
+    for (let index = keys.length - 1; index >= 0; index -= 1) {
+      const key = keys[index];
+      const itemPath = childPath(current.path, key);
+      if (key.length > MAX_MANIFEST_STRING_LENGTH) {
+        fail(
+          itemPath,
+          `must not contain keys longer than ${MAX_MANIFEST_STRING_LENGTH} characters`
+        );
+      }
+      budget.stringLength += key.length;
+      if (budget.stringLength > MAX_MANIFEST_TOTAL_STRING_LENGTH) {
+        fail(
+          itemPath,
+          `must not contain more than ${MAX_MANIFEST_TOTAL_STRING_LENGTH} total string characters`
+        );
+      }
+      const descriptor = readDataDescriptor(item, key, itemPath);
+      if (descriptor.enumerable !== true) {
+        fail(itemPath, "must be an enumerable JSON property");
+      }
+      pending.push({
+        value: descriptor.value,
+        path: itemPath,
+        depth: current.depth + 1,
+        parent: output,
+        key
+      });
+    }
+  }
+  return snapshot;
 }
 
 function assertExactKeys(
@@ -150,12 +401,19 @@ function assertString(value: unknown, path: string): asserts value is string {
   }
 }
 
+function containsControlCharacter(value: string): boolean {
+  return [...value].some(character => {
+    const codePoint = character.codePointAt(0)!;
+    return codePoint < 32 || (codePoint >= 127 && codePoint <= 159);
+  });
+}
+
 function assertMetadataName(value: unknown, path: string): asserts value is string {
   assertString(value, path);
   if (!value.trim() || value.length > 128) {
     fail(path, "must be non-empty and at most 128 characters");
   }
-  if ([...value].some(character => character.codePointAt(0)! < 32)) {
+  if (containsControlCharacter(value)) {
     fail(path, "must not contain control characters");
   }
 }
@@ -169,7 +427,7 @@ function assertRoutePath(value: unknown, path: string): asserts value is string 
   if (!value.startsWith("/") || value.length > 2048) {
     fail(path, "must start with '/' and be at most 2048 characters");
   }
-  if ([...value].some(character => character.codePointAt(0)! < 32)) {
+  if (containsControlCharacter(value)) {
     fail(path, "must not contain control characters");
   }
 }
@@ -470,7 +728,7 @@ function assertResourceKey(value: string, path: string): void {
   }
   if (
     value.includes(",") ||
-    [...value].some(character => character.codePointAt(0)! < 32)
+    containsControlCharacter(value)
   ) {
     fail(path, "must not contain commas or control characters");
   }
@@ -614,12 +872,16 @@ function validateMutations(
   }
 }
 
-/** Validate an already parsed manifest and return it with a precise type. */
+/**
+ * Validate an already parsed manifest and return a bounded data-only snapshot.
+ * The snapshot intentionally does not preserve input object identity or prototypes.
+ */
 export function validateFluxFastSchemaManifest(
   value: unknown
 ): FluxFastSchemaManifest {
-  assertRecord(value, "$");
-  assertExactKeys(value, "$", [
+  const snapshot = createManifestSnapshot(value);
+  assertRecord(snapshot, "$");
+  assertExactKeys(snapshot, "$", [
     "schema",
     "producer",
     "fingerprint",
@@ -629,52 +891,58 @@ export function validateFluxFastSchemaManifest(
   ], ["types"]);
 
   if (
-    value.schema !== FLUXFAST_SCHEMA_MANIFEST_V1 &&
-    value.schema !== FLUXFAST_SCHEMA_MANIFEST_V2
+    snapshot.schema !== FLUXFAST_SCHEMA_MANIFEST_V1 &&
+    snapshot.schema !== FLUXFAST_SCHEMA_MANIFEST_V2
   ) {
     fail(
       "$.schema",
-      `unsupported version ${JSON.stringify(value.schema)}; expected ${JSON.stringify(
+      `unsupported version ${JSON.stringify(snapshot.schema)}; expected ${JSON.stringify(
         FLUXFAST_SCHEMA_MANIFEST_V1
       )} or ${JSON.stringify(FLUXFAST_SCHEMA_MANIFEST_V2)}`
     );
   }
 
-  if (value.schema === FLUXFAST_SCHEMA_MANIFEST_V1) {
-    if (value.types !== undefined) {
+  if (snapshot.schema === FLUXFAST_SCHEMA_MANIFEST_V1) {
+    if (snapshot.types !== undefined) {
       fail("$.types", "fluxfast-schema/1 cannot contain explicit type contracts");
     }
   } else {
-    if (value.types === undefined) {
+    if (snapshot.types === undefined) {
       fail("$.types", "is required for fluxfast-schema/2");
     }
   }
 
-  assertString(value.producer, "$.producer");
-  if (!SEMVER_PATTERN.test(value.producer)) {
+  assertString(snapshot.producer, "$.producer");
+  if (!SEMVER_PATTERN.test(snapshot.producer)) {
     fail("$.producer", "must use semantic version format");
   }
 
-  assertString(value.fingerprint, "$.fingerprint");
-  if (!FINGERPRINT_PATTERN.test(value.fingerprint)) {
+  assertString(snapshot.fingerprint, "$.fingerprint");
+  if (!FINGERPRINT_PATTERN.test(snapshot.fingerprint)) {
     fail("$.fingerprint", "must be a lowercase SHA-256 digest");
   }
 
   const schemaBudget: SchemaValueBudget = { values: 0, containers: 0 };
-  if (value.schema === FLUXFAST_SCHEMA_MANIFEST_V2) {
-    validateTypes(value.types, "$.types", schemaBudget);
+  if (snapshot.schema === FLUXFAST_SCHEMA_MANIFEST_V2) {
+    validateTypes(snapshot.types, "$.types", schemaBudget);
   }
-  validateResources(value.resources, "$.resources", schemaBudget);
-  validatePages(value.pages, "$.pages", schemaBudget);
-  validateMutations(value.mutations, "$.mutations", schemaBudget);
+  validateResources(snapshot.resources, "$.resources", schemaBudget);
+  validatePages(snapshot.pages, "$.pages", schemaBudget);
+  validateMutations(snapshot.mutations, "$.mutations", schemaBudget);
 
-  return value as unknown as FluxFastSchemaManifest;
+  return snapshot as unknown as FluxFastSchemaManifest;
 }
 
 /** Parse JSON and validate it as a supported FluxFast schema manifest. */
 export function parseFluxFastSchemaManifest(
   source: string
 ): FluxFastSchemaManifest {
+  if (source.length > MAX_MANIFEST_SOURCE_LENGTH) {
+    fail(
+      "$",
+      `source must not exceed ${MAX_MANIFEST_SOURCE_LENGTH} characters`
+    );
+  }
   let value: unknown;
   try {
     value = JSON.parse(source);

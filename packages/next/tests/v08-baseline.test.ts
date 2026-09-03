@@ -27,7 +27,7 @@ describe("v0.7 developer-contract baseline", () => {
       mutations: [],
     };
 
-    expect(validateFluxFastSchemaManifest(manifest)).toBe(manifest);
+    expect(validateFluxFastSchemaManifest(manifest)).toEqual(manifest);
     expect(compileFluxFastResourceTypes(manifest)).toContain(
       'rooms: "rooms",',
     );
