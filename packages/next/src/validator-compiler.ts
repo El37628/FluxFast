@@ -3,6 +3,9 @@ import type {
   ValidationPlanDocument
 } from "@fluxfast/core";
 import {
+  validationPatternError
+} from "@fluxfast/core";
+import {
   mutationBodyTypeName,
   pascalIdentifier,
   SchemaCompilationError
@@ -624,9 +627,12 @@ class JsonSchemaPlanCompiler {
         }
         const pattern = stringValue(schema.pattern, path + ".pattern");
         if (pattern !== undefined) {
-          if (pattern.length > 8192) fail(path + ".pattern", "is too long", "pattern");
+          const patternError = validationPatternError(pattern);
+          if (patternError !== undefined) {
+            unsupported(path + ".pattern", patternError, "pattern");
+          }
           try {
-            new RegExp(pattern);
+            new RegExp(pattern, "u");
           } catch (error) {
             fail(
               path + ".pattern",
