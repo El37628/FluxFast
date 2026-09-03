@@ -259,19 +259,41 @@ try {
   const browserErrors = [];
   const resourceBatches = [];
   const protocolOrigins = [];
+  const registrationRequests = [];
+  const registrationResponses = [];
   let documentRequests = 0;
   for (const page of [first, second]) {
     page.on("pageerror", error => browserErrors.push(error.message));
     page.on("console", message => {
-      if (message.type() === "error") browserErrors.push(message.text());
+      if (message.type() !== "error") return;
+      const locationUrl = message.location().url;
+      if (locationUrl) {
+        try {
+          if (new URL(locationUrl).pathname === "/registrations") return;
+        } catch {
+          // Preserve malformed locations as unexpected browser errors.
+        }
+      }
+      browserErrors.push(message.text());
     });
   }
   second.on("request", request => {
     if (request.resourceType() === "document") documentRequests += 1;
     const headers = request.headers();
     if (headers["x-fluxfast"] === "1") protocolOrigins.push(new URL(request.url()).origin);
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/registrations"
+    ) {
+      registrationRequests.push(request.url());
+    }
     if (headers["x-fluxfast-only"]) {
       resourceBatches.push(headers["x-fluxfast-only"].split(",").sort());
+    }
+  });
+  second.on("response", response => {
+    if (new URL(response.url()).pathname === "/registrations") {
+      registrationResponses.push(response.status());
     }
   });
 
@@ -280,6 +302,10 @@ try {
   assert.equal(
     await second.getByRole("heading", { name: "Clean live consumer" }).isVisible(),
     true
+  );
+  assert.equal(
+    await second.getByRole("article", { name: "Featured user" }).textContent(),
+    "Ada Lovelaceada@example.com"
   );
   const analytics = second.locator("[data-testid=analytics-value]");
   await analytics.waitFor({ timeout: 10_000 });
@@ -296,6 +322,38 @@ try {
   assert.equal(await second.locator("[data-testid=live-status]").textContent(), "connected");
   assert.equal(await second.locator("[data-testid=live-counter-value]").textContent(), "0");
   assert.equal(await second.locator("[data-testid=live-report-value]").textContent(), "0");
+
+  const registration = second.getByRole("form", { name: "Registration" });
+  await registration.getByRole("button", { name: "Register" }).click();
+  const localIssues = registration.getByRole("alert");
+  await localIssues.first().waitFor();
+  assert.equal(await localIssues.count(), 4);
+  assert.deepEqual(await localIssues.allTextContents(), [
+    "String must contain at least 2 characters.",
+    "String must contain at least 5 characters.",
+    "String must contain at least 2 characters.",
+    "String must contain at least 3 characters.",
+  ]);
+  assert.equal(registrationRequests.length, 0);
+
+  await registration.getByLabel("Registration name").fill("Ada Lovelace");
+  await registration.getByLabel("Registration email").fill("taken@example.com");
+  await registration.getByLabel("Registration city").fill("Kuala Lumpur");
+  await registration.getByLabel("Registration postcode").fill("50000");
+  await registration.getByRole("button", { name: "Register" }).click();
+  await registration.getByText("Email is already registered", { exact: false }).waitFor();
+  assert.equal(registrationRequests.length, 1);
+  assert.deepEqual(registrationResponses, [422]);
+
+  await registration.getByLabel("Registration email").fill("ada@example.com");
+  await registration.getByRole("button", { name: "Register" }).click();
+  await registration.getByRole("status").waitFor();
+  assert.equal(
+    await registration.getByRole("status").textContent(),
+    "Registration accepted"
+  );
+  assert.equal(registrationRequests.length, 2);
+  assert.deepEqual(registrationResponses, [422, 200]);
 
   resourceBatches.length = 0;
   await first.getByRole("button", { name: "Increment live resources" }).click();

@@ -97,6 +97,52 @@ test("navigates, validates, mutates, and redirects through one browser origin", 
   }
 });
 
+test("reuses a general type and validates a nested form before the server", async ({
+  page,
+}) => {
+  const registrationRequests: string[] = [];
+  page.on("request", request => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/registrations"
+    ) {
+      registrationRequests.push(request.url());
+    }
+  });
+
+  await page.goto("/rooms");
+  await expect(page.getByRole("article", { name: "Featured user" })).toContainText(
+    "Ada Lovelace",
+  );
+
+  const registration = page.getByRole("form", { name: "Registration" });
+  await registration.getByRole("button", { name: "Register" }).click();
+  await expect(registration.getByRole("alert")).toContainText([
+    "at least 2 characters",
+    "at least 5 characters",
+    "at least 2 characters",
+    "at least 3 characters",
+  ]);
+  expect(registrationRequests).toEqual([]);
+
+  await registration.getByLabel("Registration name").fill("Ada Lovelace");
+  await registration.getByLabel("Registration email").fill("taken@example.com");
+  await registration.getByLabel("Registration city").fill("Kuala Lumpur");
+  await registration.getByLabel("Registration postcode").fill("50000");
+  await registration.getByRole("button", { name: "Register" }).click();
+  await expect(registration.getByRole("alert")).toContainText(
+    "Email is already registered",
+  );
+  expect(registrationRequests).toHaveLength(1);
+
+  await registration.getByLabel("Registration email").fill("ada@example.com");
+  await registration.getByRole("button", { name: "Register" }).click();
+  await expect(registration.getByRole("status")).toHaveText(
+    "Registration accepted",
+  );
+  expect(registrationRequests).toHaveLength(2);
+});
+
 test("renders not-found after a mutation redirects to an unknown page", async ({
   page,
 }) => {
