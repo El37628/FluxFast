@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic_core import PydanticSerializationError
@@ -13,6 +13,20 @@ from .errors import ResourceContractError
 from .serialization import canonical_json
 
 T = TypeVar("T")
+
+ContractMode = Literal["serialization", "validation"]
+
+
+def _validate_contract_name(name: object) -> str:
+    """Return a valid explicit contract name or raise a public input error."""
+
+    if not isinstance(name, str) or not name.strip() or len(name) > 128:
+        raise ValueError(
+            "contract name must be a non-empty string of at most 128 characters"
+        )
+    if any(ord(char) < 32 for char in name):
+        raise ValueError("contract name must not contain control characters")
+    return name
 
 
 def _contract_validation_details(
@@ -156,3 +170,29 @@ class ResourceContract(Generic[T]):
         """Return the JSON Schema describing the value emitted on the wire."""
 
         return self._adapter.json_schema(mode="serialization", by_alias=True)
+
+
+@dataclass(frozen=True, slots=True)
+class TypeContract(Generic[T]):
+    """An application-scoped Python type exposed to developer tooling.
+
+    Unlike :class:`ResourceContract`, a type contract has no runtime resource
+    identity or loader.  Its mode controls which Pydantic JSON representation
+    is exported to TypeScript and client-side tooling.
+    """
+
+    name: str
+    annotation: Any
+    mode: ContractMode = "serialization"
+    _adapter: TypeAdapter[T] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "name", _validate_contract_name(self.name))
+        if self.mode not in ("serialization", "validation"):
+            raise ValueError('contract mode must be "serialization" or "validation"')
+        object.__setattr__(self, "_adapter", TypeAdapter(self.annotation))
+
+    def _schema(self) -> dict[str, Any]:
+        """Return the JSON Schema for this contract's declared mode."""
+
+        return self._adapter.json_schema(mode=self.mode, by_alias=True)

@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .cache import MemoryResourceCache, ResourceCacheBackend
-from .contract import ResourceContract
+from .contract import ContractMode, ResourceContract, TypeContract
 from .errors import FluxFastError, ProtocolError, ResourceError
 from .headers import HEADER_FLUXFAST, HEADER_PROTOCOL, is_fluxfast_request
 from .live import (
@@ -102,6 +102,17 @@ class FluxFast:
         """Define the authoritative typed contract for a logical resource key."""
 
         return self.schema_registry.define_resource(key, annotation)
+
+    def define_type(
+        self,
+        name: str,
+        annotation: Any,
+        *,
+        mode: ContractMode = "serialization",
+    ) -> TypeContract[Any]:
+        """Define an application contract independent of a resource."""
+
+        return self.schema_registry.define_type(name, annotation, mode=mode)
 
     async def close(self) -> None:
         """Close live transport and an optionally closeable cache exactly once."""

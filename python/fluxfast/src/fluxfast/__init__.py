@@ -10,7 +10,7 @@ from .capabilities import (
     CAPABILITY_LIVE_RESOURCES,
     client_supports,
 )
-from .contract import ResourceContract
+from .contract import ContractMode, ResourceContract, TypeContract
 from .errors import (
     FluxFastError,
     FluxFastLiveScopeError,
@@ -103,6 +103,7 @@ __all__ = [
     "PROTOCOL_MEDIA_TYPE",
     "PROTOCOL_VERSION",
     "CacheScope",
+    "ContractMode",
     "CachedResource",
     "ErrorDetail",
     "ErrorEnvelope",
@@ -141,6 +142,7 @@ __all__ = [
     "ResourceCacheSerializationError",
     "ResourceCacheUnavailableError",
     "ResourceContract",
+    "TypeContract",
     "ResourceContractError",
     "ResourceError",
     "ResourceErrorDetail",
