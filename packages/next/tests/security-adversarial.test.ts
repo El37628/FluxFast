@@ -124,7 +124,7 @@ describe("FluxFast adversarial manifest pipeline", () => {
     const configFile = path.join(directory, "tsconfig.json");
     const outputDirectory = path.join(directory, "dist");
     fs.symlinkSync(
-      path.resolve(__dirname, "../../../node_modules"),
+      path.resolve(__dirname, "../node_modules"),
       path.join(directory, "node_modules"),
       "dir"
     );
@@ -225,7 +225,7 @@ if (Object.prototype.fluxfastPolluted !== undefined) throw new Error("prototype 
           encoding: "utf8",
           env: {
             ...process.env,
-            NODE_PATH: path.resolve(__dirname, "../../../node_modules")
+            NODE_PATH: path.resolve(__dirname, "../node_modules")
           }
         }
       );
