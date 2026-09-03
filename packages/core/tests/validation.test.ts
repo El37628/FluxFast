@@ -3,6 +3,7 @@ import {
   ValidationError,
   createValidator,
   formatValidationPath,
+  refineValidator,
   type ValidationPlan
 } from "../src";
 
@@ -24,6 +25,112 @@ describe("FluxFast validation runtime", () => {
       issues: [{ path: [], code: "maximum" }]
     });
     expect(() => validator.assert(4)).toThrow(ValidationError);
+  });
+
+  it("composes a synchronous refinement after generated validation", () => {
+    const base = createValidator<{
+      password: string;
+      confirmPassword: string;
+    }>({
+      kind: "object",
+      properties: {
+        password: { kind: "string", minLength: 8 },
+        confirmPassword: { kind: "string", minLength: 8 }
+      },
+      required: ["password", "confirmPassword"]
+    });
+    let calls = 0;
+    const validator = refineValidator(base, value => {
+      calls += 1;
+      if (value.password !== value.confirmPassword) {
+        return {
+          path: ["confirmPassword"],
+          code: "password_mismatch",
+          message: "Passwords do not match"
+        };
+      }
+      return null;
+    });
+
+    expect(validator.is({ password: "correct horse", confirmPassword: "correct horse" })).toBe(true);
+    expect(validator.validate({ password: "correct horse", confirmPassword: "different" })).toEqual({
+      valid: false,
+      issues: [{
+        path: ["confirmPassword"],
+        code: "password_mismatch",
+        message: "Passwords do not match"
+      }]
+    });
+    expect(() => validator.assert({
+      password: "correct horse",
+      confirmPassword: "different"
+    })).toThrow(ValidationError);
+    expect(calls).toBe(3);
+
+    const invalidBase = validator.validate({ password: "short", confirmPassword: "different" });
+    expect(invalidBase).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "minLength" })]
+    });
+    expect(calls).toBe(3);
+  });
+
+  it("freezes refinement issues and supports chained refinements", () => {
+    const base = createValidator<{ value: number }>({
+      kind: "object",
+      properties: { value: { kind: "integer" } },
+      required: ["value"]
+    });
+    const positive = refineValidator(base, value =>
+      value.value > 0
+        ? null
+        : { path: ["value"], code: "positive", message: "Value must be positive" }
+    );
+    let laterCalls = 0;
+    const even = refineValidator(positive, value => {
+      laterCalls += 1;
+      return value.value % 2 === 0
+        ? null
+        : { path: ["value"], code: "even", message: "Value must be even" };
+    });
+
+    const result = even.validate({ value: 3 });
+    expect(result).toEqual({
+      valid: false,
+      issues: [{ path: ["value"], code: "even", message: "Value must be even" }]
+    });
+    if (!result.valid) {
+      expect(Object.isFrozen(result.issues)).toBe(true);
+      expect(Object.isFrozen(result.issues[0])).toBe(true);
+      expect(Object.isFrozen(result.issues[0].path)).toBe(true);
+    }
+    expect(even.is({ value: -2 })).toBe(false);
+    expect(laterCalls).toBe(1);
+    expect(even.assert({ value: 4 })).toEqual({ value: 4 });
+  });
+
+  it("propagates refinement exceptions as programmer errors", () => {
+    const validator = refineValidator(
+      createValidator({ kind: "string" }),
+      () => {
+        throw new Error("refinement failed");
+      }
+    );
+
+    expect(() => validator.validate("value")).toThrow("refinement failed");
+    expect(() => validator.is("value")).toThrow("refinement failed");
+    expect(() => validator.assert("value")).toThrow("refinement failed");
+  });
+
+  it("rejects malformed refinement issues with precise errors", () => {
+    const validator = refineValidator(
+      createValidator({ kind: "string" }),
+      () => ({ path: ["field", true], code: "bad", message: "bad" }) as never
+    );
+
+    expect(() => validator.validate("value")).toThrow(
+      "Refinement issue.path must be an array of strings or numbers"
+    );
   });
 
   it("handles required, nullable, optional, and additional object properties", () => {
