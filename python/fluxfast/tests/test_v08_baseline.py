@@ -21,11 +21,10 @@ def test_resource_only_manifests_keep_schema1_shape() -> None:
     manifest = build_schema_manifest(flux.schema_registry, producer="0.7.0")
 
     assert manifest.schema_version == SCHEMA_MANIFEST_VERSION
-    assert manifest.types is None
     assert list(manifest.resources) == ["rooms"]
-    assert set(
-        manifest.model_dump(mode="json", by_alias=True, exclude_none=True)
-    ) == {
+    serialized = manifest.model_dump(mode="json", by_alias=True, exclude_none=True)
+    assert "types" not in serialized
+    assert set(serialized) == {
         "schema",
         "producer",
         "fingerprint",
