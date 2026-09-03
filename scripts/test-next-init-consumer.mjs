@@ -285,7 +285,18 @@ function assertTypedConsumerArtifacts() {
   const schema = JSON.parse(
     fs.readFileSync(path.join(generatedRoot, "schema.generated.json"), "utf8")
   );
-  assert.equal(schema.schema, "fluxfast-schema/1");
+  const [producerMajor, producerMinor] = schema.producer
+    .split(".", 2)
+    .map(part => Number(part));
+  const expectedSchema = producerMajor > 0 || producerMinor >= 8
+    ? "fluxfast-schema/2"
+    : "fluxfast-schema/1";
+  assert.equal(schema.schema, expectedSchema);
+  if (expectedSchema === "fluxfast-schema/2") {
+    assert.deepEqual(schema.types, {});
+  } else {
+    assert.equal("types" in schema, false);
+  }
   assert.deepEqual(Object.keys(schema.resources).sort(), [
     "analytics",
     "live-counter",

@@ -272,6 +272,63 @@ describe("FluxFast CLI", () => {
     ).toBe(false);
   });
 
+  it("blocks generation when the root core is incompatible with the adapter", () => {
+    createTestProject(tmpDir, {
+      dependencies: {
+        "@fluxfast/core": "0.7.4",
+        "@fluxfast/next": "0.8.0",
+        next: "16.3.3",
+        react: "19.0.0",
+        "react-dom": "19.0.0",
+      },
+    });
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.7.4"}\n'
+    );
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/next/package.json",
+      '{"name":"@fluxfast/next","version":"0.8.0"}\n'
+    );
+
+    expect(runCli(["generate"], io)).toBe(1);
+    expect(stderr.join("\n")).toContain(
+      "Incompatible FluxFast package versions"
+    );
+    expect(stderr.join("\n")).toContain(
+      "Install @fluxfast/core from the same release line"
+    );
+    expect(
+      fs.existsSync(path.join(tmpDir, "src/.fluxfast/pages.generated.ts"))
+    ).toBe(false);
+  });
+
+  it("requires an installed root core when generation runs from an external CLI", () => {
+    createTestProject(tmpDir, {
+      dependencies: {
+        "@fluxfast/core": "0.8.0",
+        "@fluxfast/next": "0.8.0",
+        next: "16.3.3",
+        react: "19.0.0",
+        "react-dom": "19.0.0",
+      },
+    });
+    fs.rmSync(path.join(tmpDir, "node_modules/@fluxfast/core"), {
+      recursive: true,
+      force: true,
+    });
+
+    expect(runCli(["generate"], io)).toBe(1);
+    expect(stderr.join("\n")).toContain(
+      "@fluxfast/core is not resolvable from the project root"
+    );
+    expect(
+      fs.existsSync(path.join(tmpDir, "src/.fluxfast/pages.generated.ts"))
+    ).toBe(false);
+  });
+
   it("validates schema-file generate options", () => {
     createTestProject(tmpDir);
 

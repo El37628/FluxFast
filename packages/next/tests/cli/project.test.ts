@@ -171,7 +171,7 @@ describe("FluxFast project analyzer", () => {
     });
   });
 
-  it("finds @fluxfast/core installed transitively beneath @fluxfast/next", () => {
+  it("records a nested adapter core separately from the project root", () => {
     writePackageJson({
       dependencies: {
         "@fluxfast/next": "^0.1.0",
@@ -179,6 +179,7 @@ describe("FluxFast project analyzer", () => {
       },
     });
     write("app/layout.tsx", "export default function Layout() { return null; }\n");
+    writeInstalledPackage("@fluxfast/next", "0.1.0");
     write(
       "node_modules/@fluxfast/next/node_modules/@fluxfast/core/package.json",
       '{"name":"@fluxfast/core","version":"0.1.2"}\n'
@@ -186,10 +187,31 @@ describe("FluxFast project analyzer", () => {
 
     const project = detectFluxProject(tmpDir);
 
-    expect(project.packages.fluxfastCore).toMatchObject({
-      installedVersion: "0.1.2",
-      compatibility: "supported",
+    expect(project.packages.fluxfastCore.installedVersion).toBeUndefined();
+    expect(project.packages.fluxfastAdapterCoreVersion).toBe("0.1.2");
+  });
+
+  it("prefers an explicit root core over the copy nested beneath the adapter", () => {
+    writePackageJson({
+      dependencies: {
+        "@fluxfast/core": "0.7.4",
+        "@fluxfast/next": "0.8.0",
+        next: "16.3.3",
+      },
     });
+    write("app/layout.tsx", "export default function Layout() { return null; }\n");
+    writeInstalledPackage("@fluxfast/core", "0.7.4");
+    writeInstalledPackage("@fluxfast/next", "0.8.0");
+    write(
+      "node_modules/@fluxfast/next/node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.8.0"}\n'
+    );
+
+    const project = detectFluxProject(tmpDir);
+
+    expect(project.packages.fluxfastCore.installedVersion).toBe("0.7.4");
+    expect(project.packages.fluxfastNext.installedVersion).toBe("0.8.0");
+    expect(project.packages.fluxfastAdapterCoreVersion).toBe("0.8.0");
   });
 
   it("classifies exact, range, unsupported, and unknown versions conservatively", () => {

@@ -20,10 +20,11 @@ const bootstrapPython = process.env.FLUXFAST_E2E_PYTHON ?? "python";
 const repositoryVersion = JSON.parse(
   fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8")
 ).version;
+const pairingName = process.env.FLUXFAST_PAIRING ?? "python-current";
 const pairing = resolvePublishedMixedPairing({
-  pairing: process.env.FLUXFAST_PAIRING ?? "python-current",
+  pairing: pairingName,
   releaseVersion: process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion,
-  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.6.0"
+  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.7.0"
 });
 const expectedPythonVersion =
   process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "") ?? pairing.pythonVersion;
@@ -62,6 +63,19 @@ function runResult(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
     cwd,
     env: cleanEnvironment(extraEnvironment),
     stdio: "inherit"
+  });
+}
+
+function runCaptured(
+  command,
+  args,
+  cwd = repositoryRoot,
+  extraEnvironment = {}
+) {
+  return spawnSync(command, args, {
+    cwd,
+    env: cleanEnvironment(extraEnvironment),
+    encoding: "utf8"
   });
 }
 
@@ -143,6 +157,89 @@ function assertTraditionalRegistryGeneration() {
       `${file} must not be required for an untyped mixed-version consumer`
     );
   }
+}
+
+function generatedArtifactSnapshot() {
+  const generatedRoot = path.join(consumerRoot, "src", ".fluxfast");
+  return Object.fromEntries(
+    fs.readdirSync(generatedRoot)
+      .sort()
+      .map(file => [
+        file,
+        fs.readFileSync(path.join(generatedRoot, file), "base64")
+      ])
+  );
+}
+
+function typedGenerationArgs(appImport, { check = false } = {}) {
+  const args = [
+    "-m",
+    "fluxfast.cli",
+    "types",
+    appImport,
+    "--frontend",
+    consumerRoot
+  ];
+  if (check) args.push("--check");
+  return args;
+}
+
+function schemaGenerationEnvironment() {
+  return {
+    PYTHONPATH: "",
+    FLUXFAST_TEST_REDIS_URL: process.env.FLUXFAST_TEST_REDIS_URL ?? "",
+    FLUXFAST_TEST_CACHE_NAMESPACE: `fluxfast-mixed-schema-${process.pid}`,
+    FLUXFAST_TEST_LIVE_PREFIX: `fluxfast-mixed-schema-live-${process.pid}`,
+    FLUXFAST_TEST_DIAGNOSTIC_PREFIX: `fluxfast-mixed-schema-diagnostic-${process.pid}`,
+    FLUXFAST_TEST_WORKER_NAME: "schema"
+  };
+}
+
+function assertSchemaOneGeneration() {
+  const generatedRoot = path.join(consumerRoot, "src", ".fluxfast");
+  for (const file of [
+    "schema.generated.json",
+    "types.generated.ts",
+    "validators.generated.ts",
+    "routes.generated.ts",
+    "mutations.generated.ts",
+    "pages.generated.ts"
+  ]) {
+    assert.equal(
+      fs.existsSync(path.join(generatedRoot, file)),
+      true,
+      `${file} must be generated from the previous Python schema/1 producer`
+    );
+  }
+
+  const schema = JSON.parse(
+    fs.readFileSync(path.join(generatedRoot, "schema.generated.json"), "utf8")
+  );
+  assert.equal(schema.schema, "fluxfast-schema/1");
+  assert.equal("types" in schema, false);
+  assert.deepEqual(Object.keys(schema.resources).sort(), [
+    "distributed-counter",
+    "distributed-summary"
+  ]);
+
+  const types = fs.readFileSync(
+    path.join(generatedRoot, "types.generated.ts"),
+    "utf8"
+  );
+  assert.match(types, /distributedCounter: "distributed-counter"/);
+  assert.match(types, /export interface DistributedCounter/);
+  assert.match(
+    types,
+    /export type DistributedCounterResource = DistributedCounter/
+  );
+  assert.match(types, /export interface GeneratedFluxResourceMap/);
+  assert.match(types, /interface FluxResourceMap/);
+  const mutations = fs.readFileSync(
+    path.join(generatedRoot, "mutations.generated.ts"),
+    "utf8"
+  );
+  assert.match(mutations, /increment:/);
+  assert.match(mutations, /body: IncrementBody/);
 }
 
 async function installPublishedPython(python) {
@@ -227,9 +324,6 @@ try {
   }
   run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
   assertTraditionalRegistryGeneration();
-  run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
-  run(npmCommand, ["run", "typecheck"], consumerRoot);
-  run(npmCommand, ["run", "build"], consumerRoot);
 
   run(bootstrapPython, ["-m", "venv", environmentRoot]);
   const python =
@@ -251,9 +345,57 @@ try {
     consumerRoot
   );
 
+  if (pairingName === "javascript-current") {
+    run(
+      python,
+      typedGenerationArgs("distributed_backend:app"),
+      consumerRoot,
+      schemaGenerationEnvironment()
+    );
+    assertSchemaOneGeneration();
+    run(
+      python,
+      typedGenerationArgs("distributed_backend:app", { check: true }),
+      consumerRoot,
+      schemaGenerationEnvironment()
+    );
+  } else {
+    const before = generatedArtifactSnapshot();
+    const mismatch = runCaptured(
+      python,
+      typedGenerationArgs("schema2_backend:app"),
+      consumerRoot,
+      { PYTHONPATH: "" }
+    );
+    if (mismatch.error) throw mismatch.error;
+    assert.notEqual(
+      mismatch.status,
+      0,
+      "schema/2 generation must fail with JavaScript 0.7"
+    );
+    const output = `${mismatch.stdout ?? ""}${mismatch.stderr ?? ""}`;
+    assert.match(
+      output,
+      /FluxFast schema fluxfast-schema\/2 requires JavaScript tooling\s+with schema\/2 support\./
+    );
+    assert.match(
+      output,
+      /Upgrade @fluxfast\/next before regenerating contracts\./
+    );
+    assert.deepEqual(
+      generatedArtifactSnapshot(),
+      before,
+      "a schema/2 tooling mismatch must not modify generated files"
+    );
+  }
+
+  run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
+  run(npmCommand, ["run", "typecheck"], consumerRoot);
+  run(npmCommand, ["run", "build"], consumerRoot);
+
   if (pairing.mode === "distributed") {
     if (!process.env.FLUXFAST_TEST_REDIS_URL) {
-      throw new Error("FLUXFAST_TEST_REDIS_URL is required for the current-Python mixed pairing.");
+      throw new Error("FLUXFAST_TEST_REDIS_URL is required for distributed mixed pairings.");
     }
     run(
       process.execPath,

@@ -45,6 +45,17 @@ async function main() {
   );
   assert.equal(fs.existsSync(generatedRegistry), true);
   assert.match(fs.readFileSync(generatedRegistry, "utf8"), /"health\/index"/);
+  const preservedSchemaOneTypes = path.join(
+    process.cwd(),
+    "src",
+    ".fluxfast",
+    "types.generated.ts"
+  );
+  assert.equal(fs.existsSync(preservedSchemaOneTypes), true);
+  assert.match(
+    fs.readFileSync(preservedSchemaOneTypes, "utf8"),
+    /Schema: fluxfast-schema\/1/
+  );
 
   console.log("JavaScript release artifacts passed the consumer smoke test.");
 }

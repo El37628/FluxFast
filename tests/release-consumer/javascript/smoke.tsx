@@ -14,6 +14,12 @@ import {
 import { createFluxNextPage } from "@fluxfast/next/server";
 import { generatePagesRegistry } from "@fluxfast/next/generate";
 import { withFluxFast } from "@fluxfast/next/next-config";
+import {
+  resourceKeys,
+  type GeneratedFluxResourceMap,
+  type LegacyRoom,
+  type RoomsResource,
+} from "./src/.fluxfast/types.generated";
 
 const envelope: PageEnvelope = {
   protocol: PROTOCOL_VERSION,
@@ -47,10 +53,22 @@ const runtime = createFluxRuntime({
   initialPage: envelope.page,
   initialResources: envelope.resources,
 });
+const legacyRoom: LegacyRoom = { id: 1, name: "Schema one" };
+const legacyRooms: RoomsResource = [legacyRoom];
+const legacyResources: GeneratedFluxResourceMap = { rooms: legacyRooms };
+const legacyResourceKey: typeof resourceKeys.rooms = "rooms";
 
 export function HealthPage() {
   const health = useResource<{ ok: boolean }>("health");
   return <main>{health.ok ? "ready" : "unavailable"}</main>;
 }
 
-void [page, nextConfig, runtime, versions, generatePagesRegistry];
+void [
+  page,
+  nextConfig,
+  runtime,
+  versions,
+  generatePagesRegistry,
+  legacyResources,
+  legacyResourceKey,
+];

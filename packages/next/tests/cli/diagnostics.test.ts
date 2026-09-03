@@ -404,6 +404,7 @@ describe("FluxFast project diagnostics", () => {
         id: "types.manifest",
         status: "warning",
         message: expect.stringContaining("version is unsupported"),
+        fix: "Upgrade @fluxfast/next before regenerating contracts",
       })
     );
     expect(fs.readFileSync(project.registryPath, "utf8")).toContain(
@@ -558,6 +559,187 @@ describe("FluxFast project diagnostics", () => {
         expect.objectContaining({ id: "package.react", status: "fail" }),
         expect.objectContaining({ id: "package.react-dom", status: "fail" }),
       ])
+    );
+  });
+
+  it("rejects incompatible explicit core and adapter release lines", () => {
+    createTestProject(tmpDir, {
+      dependencies: {
+        "@fluxfast/core": "0.7.4",
+        "@fluxfast/next": "0.8.0",
+        next: "16.3.3",
+        react: "19.0.0",
+        "react-dom": "19.0.0",
+      },
+    });
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.7.4"}\n'
+    );
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/next/package.json",
+      '{"name":"@fluxfast/next","version":"0.8.0"}\n'
+    );
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/next/node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.8.0"}\n'
+    );
+
+    const report = validateFluxProject(detectFluxProject(tmpDir));
+
+    expect(report.valid).toBe(false);
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "package.fluxfast-pair",
+        status: "fail",
+        message: expect.stringContaining(
+          "@fluxfast/next 0.8.0 and root @fluxfast/core 0.7.4"
+        ),
+      })
+    );
+  });
+
+  it("requires a root core even when the adapter has a compatible nested copy", () => {
+    createTestProject(tmpDir, {
+      dependencies: {
+        "@fluxfast/next": "0.8.2",
+        next: "16.3.3",
+        react: "19.0.0",
+        "react-dom": "19.0.0",
+      },
+    });
+    fs.rmSync(path.join(tmpDir, "node_modules/@fluxfast/core"), {
+      recursive: true,
+      force: true,
+    });
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/next/package.json",
+      '{"name":"@fluxfast/next","version":"0.8.2"}\n'
+    );
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/next/node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.8.7"}\n'
+    );
+
+    const report = validateFluxProject(detectFluxProject(tmpDir));
+
+    expect(report.valid).toBe(false);
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "package.fluxfast-root-core",
+          status: "fail",
+        }),
+        expect.objectContaining({
+          id: "package.fluxfast-adapter-core",
+          status: "pass",
+        }),
+      ])
+    );
+  });
+
+  it("rejects an incompatible core nested beneath an otherwise matching adapter", () => {
+    createTestProject(tmpDir, {
+      dependencies: {
+        "@fluxfast/core": "0.8.4",
+        "@fluxfast/next": "0.8.2",
+        next: "16.3.3",
+        react: "19.0.0",
+        "react-dom": "19.0.0",
+      },
+    });
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.8.4"}\n'
+    );
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/next/package.json",
+      '{"name":"@fluxfast/next","version":"0.8.2"}\n'
+    );
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/next/node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.7.9"}\n'
+    );
+
+    const report = validateFluxProject(detectFluxProject(tmpDir));
+
+    expect(report.valid).toBe(false);
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "package.fluxfast-pair",
+          status: "pass",
+        }),
+        expect.objectContaining({
+          id: "package.fluxfast-adapter-core",
+          status: "fail",
+          message: expect.stringContaining("resolves @fluxfast/core 0.7.9"),
+        }),
+      ])
+    );
+  });
+
+  it("detects an incompatible adapter core through a pnpm virtual-store symlink", () => {
+    createTestProject(tmpDir, {
+      dependencies: {
+        "@fluxfast/core": "0.8.4",
+        "@fluxfast/next": "0.8.2",
+        next: "16.3.3",
+        react: "19.0.0",
+        "react-dom": "19.0.0",
+      },
+    });
+    writeTestFile(
+      tmpDir,
+      "node_modules/@fluxfast/core/package.json",
+      '{"name":"@fluxfast/core","version":"0.8.4","main":"index.js"}\n'
+    );
+    writeTestFile(tmpDir, "node_modules/@fluxfast/core/index.js", "module.exports = {};\n");
+
+    const virtualModules =
+      "node_modules/.pnpm/@fluxfast+next@0.8.2/node_modules";
+    const virtualNext = path.join(virtualModules, "@fluxfast/next");
+    writeTestFile(
+      tmpDir,
+      `${virtualNext}/package.json`,
+      '{"name":"@fluxfast/next","version":"0.8.2"}\n'
+    );
+    writeTestFile(
+      tmpDir,
+      `${virtualModules}/@fluxfast/core/package.json`,
+      '{"name":"@fluxfast/core","version":"0.7.9","main":"index.js"}\n'
+    );
+    writeTestFile(
+      tmpDir,
+      `${virtualModules}/@fluxfast/core/index.js`,
+      "module.exports = {};\n"
+    );
+    const adapterLink = path.join(tmpDir, "node_modules/@fluxfast/next");
+    fs.mkdirSync(path.dirname(adapterLink), { recursive: true });
+    fs.symlinkSync(
+      path.relative(path.dirname(adapterLink), path.join(tmpDir, virtualNext)),
+      adapterLink,
+      "dir"
+    );
+
+    const project = detectFluxProject(tmpDir);
+    const report = validateFluxProject(project);
+
+    expect(project.packages.fluxfastAdapterCoreVersion).toBe("0.7.9");
+    expect(report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        id: "package.fluxfast-adapter-core",
+        status: "fail",
+        message: expect.stringContaining("resolves @fluxfast/core 0.7.9"),
+      })
     );
   });
 

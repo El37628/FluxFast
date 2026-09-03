@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import type {
   CompatibilityStatus,
   DetectedPackage,
@@ -119,32 +120,73 @@ function readInstalledVersion(
   packageName: DetectedPackageName
 ): string | undefined {
   const packageSegments = [...packageName.split("/"), "package.json"];
-  const candidates = [path.join(root, "node_modules", ...packageSegments)];
-  if (packageName === "@fluxfast/core") {
-    candidates.push(
-      path.join(
-        root,
-        "node_modules",
-        "@fluxfast",
-        "next",
-        "node_modules",
-        ...packageSegments
-      )
-    );
+  const packagePath = path.join(root, "node_modules", ...packageSegments);
+  if (!isFile(packagePath)) return undefined;
+  try {
+    const packageJson: unknown = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+    if (isRecord(packageJson) && typeof packageJson.version === "string") {
+      return packageJson.version;
+    }
+  } catch {
+    // Report an unknown version without executing package code.
   }
+  return undefined;
+}
 
-  for (const packagePath of candidates) {
-    if (!isFile(packagePath)) continue;
+function readFluxFastAdapterCoreVersion(root: string): string | undefined {
+  const nextPackagePath = path.join(
+    root,
+    "node_modules",
+    "@fluxfast",
+    "next",
+    "package.json"
+  );
+  if (!isFile(nextPackagePath)) return undefined;
+  const nestedPackagePath = path.join(
+    path.dirname(nextPackagePath),
+    "node_modules",
+    "@fluxfast",
+    "core",
+    "package.json"
+  );
+  if (isFile(nestedPackagePath)) {
     try {
-      const packageJson: unknown = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+      const packageJson: unknown = JSON.parse(
+        fs.readFileSync(nestedPackagePath, "utf8")
+      );
       if (isRecord(packageJson) && typeof packageJson.version === "string") {
         return packageJson.version;
       }
     } catch {
-      // Try another static package location before reporting an unknown version.
+      return undefined;
     }
   }
-  return undefined;
+  try {
+    const realNextPackagePath = fs.realpathSync(nextPackagePath);
+    const requireFromNext = createRequire(realNextPackagePath);
+    const coreEntry = requireFromNext.resolve("@fluxfast/core");
+    let current = path.dirname(fs.realpathSync(coreEntry));
+    while (true) {
+      const packagePath = path.join(current, "package.json");
+      if (isFile(packagePath)) {
+        const packageJson: unknown = JSON.parse(
+          fs.readFileSync(packagePath, "utf8")
+        );
+        if (
+          isRecord(packageJson) &&
+          packageJson.name === "@fluxfast/core" &&
+          typeof packageJson.version === "string"
+        ) {
+          return packageJson.version;
+        }
+      }
+      const parent = path.dirname(current);
+      if (parent === current) return undefined;
+      current = parent;
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 interface ParsedVersion {
@@ -415,6 +457,7 @@ export function detectFluxProject(startPath = process.cwd()): FluxProjectInfo {
       reactDom: detectPackage(root, packageJson, "react-dom"),
       fluxfastCore: detectPackage(root, packageJson, "@fluxfast/core"),
       fluxfastNext: detectPackage(root, packageJson, "@fluxfast/next"),
+      fluxfastAdapterCoreVersion: readFluxFastAdapterCoreVersion(root),
     },
   };
 }
