@@ -1,0 +1,1095 @@
+import { createValidationIssue, displayValidationKey } from "./issues";
+import {
+  isSupportedValidationFormat,
+  validateValidationFormat
+} from "./formats";
+import type { ValidationFormat } from "./formats";
+import type {
+  ValidationArrayPlan,
+  ValidationIssue,
+  ValidationIntersectionPlan,
+  ValidationLimits,
+  ValidationNode,
+  ValidationObjectPlan,
+  ValidationPlan,
+  ValidationPlanDocument,
+  ValidationRefPlan,
+  ValidationResult,
+  ValidationStringPlan,
+  ValidationTuplePlan,
+  ValidationOneOfPlan,
+  ValidationUnionPlan,
+  ValidationOptions
+} from "./types";
+import { isValidationPlanDocument } from "./types";
+
+export const DEFAULT_VALIDATION_MAX_DEPTH = 64;
+export const DEFAULT_VALIDATION_MAX_ISSUES = 100;
+
+interface NormalizedLimits {
+  readonly maxDepth: number;
+  readonly maxIssues: number;
+}
+
+export interface CompiledValidationPlan {
+  readonly root: ValidationPlan;
+  readonly definitions: ReadonlyMap<string, ValidationPlan>;
+  readonly patterns: WeakMap<object, RegExp>;
+  readonly limits: NormalizedLimits;
+}
+
+function pathKey(path: string, key: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)
+    ? `${path}.${key}`
+    : `${path}[${JSON.stringify(key)}]`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
+}
+
+function requireRecord(value: unknown, path: string): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new TypeError(`[fluxfast] Invalid validation plan at ${path}`);
+  }
+  return value;
+}
+
+function requireBoolean(value: unknown, path: string): void {
+  if (typeof value !== "boolean") {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: expected a boolean`
+    );
+  }
+}
+
+function requireString(value: unknown, path: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: expected a non-empty string`
+    );
+  }
+  return value;
+}
+
+function requireNonNegativeInteger(value: unknown, path: string): void {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 0
+  ) {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: expected a non-negative integer`
+    );
+  }
+}
+
+function requireFiniteNumber(value: unknown, path: string): void {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: expected a finite number`
+    );
+  }
+}
+
+function requireArray(value: unknown, path: string): readonly unknown[] {
+  if (!Array.isArray(value)) {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: expected an array`
+    );
+  }
+  return value;
+}
+
+function assertJsonValue(value: unknown, path: string, seen = new WeakSet<object>()): void {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return;
+  }
+  if (typeof value === "number") {
+    requireFiniteNumber(value, path);
+    return;
+  }
+  if (typeof value !== "object") {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: literal values must be JSON-compatible`
+    );
+  }
+  if (seen.has(value)) {
+    throw new TypeError(
+      `[fluxfast] Invalid validation plan at ${path}: literal values cannot be circular`
+    );
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertJsonValue(item, `${path}[${index}]`, seen));
+  } else {
+    const record = requireRecord(value, path);
+    for (const key of Object.keys(record)) {
+      assertJsonValue(record[key], pathKey(path, key), seen);
+    }
+  }
+  seen.delete(value);
+}
+
+function validateLimits(options: ValidationOptions = {}): NormalizedLimits {
+  const maxDepth = options.maxDepth ?? options.limits?.maxDepth ?? DEFAULT_VALIDATION_MAX_DEPTH;
+  const maxIssues = options.maxIssues ?? options.limits?.maxIssues ?? DEFAULT_VALIDATION_MAX_ISSUES;
+  if (typeof maxDepth !== "number" || !Number.isSafeInteger(maxDepth) || maxDepth < 0) {
+    throw new TypeError("[fluxfast] maxDepth must be a non-negative integer");
+  }
+  if (typeof maxIssues !== "number" || !Number.isSafeInteger(maxIssues) || maxIssues < 1) {
+    throw new TypeError("[fluxfast] maxIssues must be a positive integer");
+  }
+  return { maxDepth, maxIssues };
+}
+
+function registerDefinitions(
+  target: Map<string, ValidationPlan>,
+  value: unknown,
+  path: string
+): void {
+  const definitions = requireRecord(value, path);
+  for (const name of Object.keys(definitions).sort()) {
+    const definition = definitions[name];
+    if (target.has(name) && target.get(name) !== definition) {
+      throw new TypeError(
+        `[fluxfast] Invalid validation plan at ${pathKey(path, name)}: duplicate definition`
+      );
+    }
+    target.set(name, definition as ValidationPlan);
+  }
+}
+
+function allowedKeys(kind: string): readonly string[] {
+  const common = [
+    "kind",
+    "nullable",
+    "optional",
+    "definitions",
+    "title",
+    "description",
+    "examples"
+  ];
+  switch (kind) {
+    case "any":
+    case "never":
+    case "null":
+    case "boolean":
+    case "ref":
+      return kind === "ref" ? [...common, "name", "ref"] : common;
+    case "string":
+      return [...common, "minLength", "maxLength", "pattern", "format"];
+    case "number":
+    case "integer":
+      return [
+        ...common,
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf"
+      ];
+    case "literal":
+      return [...common, "value"];
+    case "enum":
+      return [...common, "values"];
+    case "array":
+      return [...common, "items", "prefixItems", "minItems", "maxItems"];
+    case "tuple":
+      return [...common, "items", "rest"];
+    case "object":
+      return [...common, "properties", "required", "additionalProperties"];
+    case "union":
+      return [...common, "anyOf", "oneOf"];
+    case "oneOf":
+      return [...common, "anyOf"];
+    case "intersection":
+      return [...common, "allOf"];
+    default:
+      return common;
+  }
+}
+
+function assertKnownKeys(plan: Record<string, unknown>, path: string): void {
+  const allowed = new Set(allowedKeys(String(plan.kind)));
+  for (const key of Object.keys(plan)) {
+    if (!allowed.has(key)) {
+      throw new TypeError(
+        `[fluxfast] Unsupported validation plan field at ${pathKey(path, key)}`
+      );
+    }
+  }
+}
+
+function validateCommonFields(plan: Record<string, unknown>, path: string): void {
+  if (plan.nullable !== undefined) requireBoolean(plan.nullable, `${path}.nullable`);
+  if (plan.optional !== undefined) requireBoolean(plan.optional, `${path}.optional`);
+  if (plan.definitions !== undefined) requireRecord(plan.definitions, `${path}.definitions`);
+  if (plan.title !== undefined && typeof plan.title !== "string") {
+    throw new TypeError(`[fluxfast] Invalid validation plan at ${path}.title`);
+  }
+  if (plan.description !== undefined && typeof plan.description !== "string") {
+    throw new TypeError(`[fluxfast] Invalid validation plan at ${path}.description`);
+  }
+  if (plan.examples !== undefined) requireArray(plan.examples, `${path}.examples`);
+}
+
+function validateNumberFields(plan: Record<string, unknown>, path: string): void {
+  for (const key of [
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum"
+  ]) {
+    if (plan[key] !== undefined) requireFiniteNumber(plan[key], `${path}.${key}`);
+  }
+  if (plan.multipleOf !== undefined) {
+    requireFiniteNumber(plan.multipleOf, `${path}.multipleOf`);
+    if ((plan.multipleOf as number) <= 0) {
+      throw new TypeError(`[fluxfast] ${path}.multipleOf must be greater than zero`);
+    }
+  }
+}
+
+function validateNestedPlan(
+  value: unknown,
+  path: string,
+  visit: (value: ValidationPlan, path: string) => void
+): void {
+  if (typeof value === "boolean") return;
+  visit(value as ValidationPlan, path);
+}
+
+function validateNode(
+  value: ValidationPlan,
+  path: string,
+  visit: (value: ValidationPlan, path: string) => void,
+  patterns: WeakMap<object, RegExp>
+): void {
+  if (typeof value === "boolean") return;
+  const plan = requireRecord(value, path);
+  const kind = requireString(plan.kind, `${path}.kind`);
+  assertKnownKeys(plan, path);
+  validateCommonFields(plan, path);
+
+  switch (kind) {
+    case "any":
+    case "never":
+    case "null":
+    case "boolean":
+      break;
+    case "string": {
+      for (const key of ["minLength", "maxLength"]) {
+        if (plan[key] !== undefined) requireNonNegativeInteger(plan[key], `${path}.${key}`);
+      }
+      if (
+        plan.minLength !== undefined &&
+        plan.maxLength !== undefined &&
+        (plan.minLength as number) > (plan.maxLength as number)
+      ) {
+        throw new TypeError(`[fluxfast] ${path}.minLength cannot exceed maxLength`);
+      }
+      if (plan.pattern !== undefined) {
+        const pattern = requireString(plan.pattern, `${path}.pattern`);
+        if (pattern.length > 8192) {
+          throw new TypeError(`[fluxfast] ${path}.pattern is too long`);
+        }
+        try {
+          patterns.set(value as object, new RegExp(pattern));
+        } catch (error) {
+          throw new TypeError(
+            `[fluxfast] Invalid regular expression at ${path}.pattern: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      }
+      if (plan.format !== undefined) {
+        const format = requireString(plan.format, `${path}.format`);
+        if (!isSupportedValidationFormat(format)) {
+          throw new TypeError(
+            `[fluxfast] Unsupported validation format ${JSON.stringify(format)} at ${path}.format`
+          );
+        }
+      }
+      break;
+    }
+    case "number":
+    case "integer":
+      validateNumberFields(plan, path);
+      break;
+    case "literal":
+      if (!("value" in plan)) {
+        throw new TypeError(`[fluxfast] Invalid validation plan at ${path}.value`);
+      }
+      assertJsonValue(plan.value, `${path}.value`);
+      break;
+    case "enum": {
+      const values = requireArray(plan.values, `${path}.values`);
+      if (values.length === 0) {
+        throw new TypeError(`[fluxfast] ${path}.values must not be empty`);
+      }
+      values.forEach((item, index) => assertJsonValue(item, `${path}.values[${index}]`));
+      break;
+    }
+    case "array": {
+      if (plan.items !== undefined) validateNestedPlan(plan.items, `${path}.items`, visit);
+      if (plan.prefixItems !== undefined) {
+        const prefixItems = requireArray(plan.prefixItems, `${path}.prefixItems`);
+        prefixItems.forEach((item, index) =>
+          validateNestedPlan(item, `${path}.prefixItems[${index}]`, visit)
+        );
+      }
+      for (const key of ["minItems", "maxItems"]) {
+        if (plan[key] !== undefined) requireNonNegativeInteger(plan[key], `${path}.${key}`);
+      }
+      if (
+        plan.minItems !== undefined &&
+        plan.maxItems !== undefined &&
+        (plan.minItems as number) > (plan.maxItems as number)
+      ) {
+        throw new TypeError(`[fluxfast] ${path}.minItems cannot exceed maxItems`);
+      }
+      break;
+    }
+    case "tuple": {
+      const items = requireArray(plan.items, `${path}.items`);
+      items.forEach((item, index) =>
+        validateNestedPlan(item, `${path}.items[${index}]`, visit)
+      );
+      if (plan.rest !== undefined && plan.rest !== false) {
+        validateNestedPlan(plan.rest, `${path}.rest`, visit);
+      }
+      break;
+    }
+    case "object": {
+      if (plan.properties !== undefined) {
+        const properties = requireRecord(plan.properties, `${path}.properties`);
+        for (const key of Object.keys(properties).sort()) {
+          validateNestedPlan(properties[key], pathKey(`${path}.properties`, key), visit);
+        }
+      }
+      if (plan.required !== undefined) {
+        const required = requireArray(plan.required, `${path}.required`);
+        const seen = new Set<string>();
+        required.forEach((item, index) => {
+          const name = requireString(item, `${path}.required[${index}]`);
+          if (seen.has(name)) {
+            throw new TypeError(`[fluxfast] ${path}.required duplicates ${JSON.stringify(name)}`);
+          }
+          seen.add(name);
+        });
+      }
+      if (plan.additionalProperties !== undefined) {
+        validateNestedPlan(
+          plan.additionalProperties,
+          `${path}.additionalProperties`,
+          visit
+        );
+      }
+      break;
+    }
+    case "union":
+    case "oneOf": {
+      const branches = requireArray(plan.anyOf, `${path}.anyOf`);
+      if (branches.length === 0) {
+        throw new TypeError(`[fluxfast] ${path}.anyOf must not be empty`);
+      }
+      branches.forEach((item, index) =>
+        validateNestedPlan(item, `${path}.anyOf[${index}]`, visit)
+      );
+      if (kind === "union" && plan.oneOf !== undefined) {
+        requireBoolean(plan.oneOf, `${path}.oneOf`);
+      }
+      break;
+    }
+    case "intersection": {
+      const branches = requireArray(plan.allOf, `${path}.allOf`);
+      branches.forEach((item, index) =>
+        validateNestedPlan(item, `${path}.allOf[${index}]`, visit)
+      );
+      break;
+    }
+    case "ref": {
+      const hasName = plan.name !== undefined;
+      const hasRef = plan.ref !== undefined;
+      if (hasName === hasRef) {
+        throw new TypeError(`[fluxfast] ${path} must contain exactly one of name or ref`);
+      }
+      requireString(hasName ? plan.name : plan.ref, `${path}.${hasName ? "name" : "ref"}`);
+      break;
+    }
+    default:
+      throw new TypeError(
+        `[fluxfast] Unsupported validation plan kind ${JSON.stringify(kind)} at ${path}.kind`
+      );
+  }
+
+  if (plan.definitions !== undefined) {
+    const definitions = requireRecord(plan.definitions, `${path}.definitions`);
+    for (const name of Object.keys(definitions).sort()) {
+      requireString(name, pathKey(`${path}.definitions`, name));
+      validateNestedPlan(
+        definitions[name],
+        pathKey(`${path}.definitions`, name),
+        visit
+      );
+    }
+  }
+}
+
+function collectAndValidate(
+  root: ValidationPlan,
+  documentDefinitions: unknown,
+  patterns: WeakMap<object, RegExp>
+): Map<string, ValidationPlan> {
+  const definitions = new Map<string, ValidationPlan>();
+  if (documentDefinitions !== undefined) {
+    registerDefinitions(definitions, documentDefinitions, "$.definitions");
+  }
+  const visited = new WeakSet<object>();
+  const visiting = new WeakSet<object>();
+  const visit = (value: ValidationPlan, path: string): void => {
+    if (typeof value === "boolean") return;
+    const object = requireRecord(value, path);
+    if (visiting.has(object)) {
+      throw new TypeError(`[fluxfast] Circular validation plan at ${path}`);
+    }
+    if (visited.has(object)) return;
+    visiting.add(object);
+    if (object.definitions !== undefined) {
+      registerDefinitions(definitions, object.definitions, `${path}.definitions`);
+    }
+    validateNode(value, path, visit, patterns);
+    visiting.delete(object);
+    visited.add(object);
+  };
+  visit(root, "$");
+  for (const [name, definition] of [...definitions.entries()].sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0
+  )) {
+    visit(definition, `$.definitions[${JSON.stringify(name)}]`);
+  }
+  return definitions;
+}
+
+/** Validate and precompile a static plan before it is used at runtime. */
+export function compileValidationPlan(
+  input: ValidationPlan | ValidationPlanDocument,
+  options: ValidationOptions = {}
+): CompiledValidationPlan {
+  const root = isValidationPlanDocument(input) ? input.root : input;
+  const documentDefinitions = isValidationPlanDocument(input)
+    ? input.definitions
+    : undefined;
+  const patterns = new WeakMap<object, RegExp>();
+  const definitions = collectAndValidate(root, documentDefinitions, patterns);
+  return {
+    root,
+    definitions,
+    patterns,
+    limits: validateLimits(options)
+  };
+}
+
+class IssueCollector {
+  readonly issues: ValidationIssue[] = [];
+
+  constructor(private readonly maxIssues: number) {}
+
+  add(path: readonly (string | number)[], code: string, message: string): void {
+    if (this.issues.length >= this.maxIssues) return;
+    this.issues.push(createValidationIssue(path, code, message));
+  }
+}
+
+interface RefFrame {
+  readonly name: string;
+  readonly value: unknown;
+}
+
+interface EvaluationState {
+  readonly compiled: CompiledValidationPlan;
+  collector: IssueCollector;
+  readonly activeValues: WeakSet<object>;
+  readonly refs: RefFrame[];
+  readonly root: ValidationPlan;
+}
+
+function withCollector<T>(
+  state: EvaluationState,
+  collector: IssueCollector,
+  callback: () => T
+): T {
+  const previous = state.collector;
+  state.collector = collector;
+  try {
+    return callback();
+  } finally {
+    state.collector = previous;
+  }
+}
+
+function isObjectLike(value: unknown): value is object {
+  return value !== null && typeof value === "object";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!isObjectLike(value) || Array.isArray(value)) return false;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
+}
+
+function expectedType(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
+function addTypeIssue(
+  state: EvaluationState,
+  path: readonly (string | number)[],
+  expected: string,
+  value: unknown
+): void {
+  state.collector.add(
+    path,
+    "type",
+    `Expected ${expected}; received ${expectedType(value)}.`
+  );
+}
+
+function enterValue(
+  state: EvaluationState,
+  value: object,
+  path: readonly (string | number)[]
+): boolean {
+  if (state.activeValues.has(value)) {
+    state.collector.add(path, "cycle", "Cyclic value encountered during validation.");
+    return false;
+  }
+  state.activeValues.add(value);
+  return true;
+}
+
+function readOwnValue(
+  value: Record<string, unknown>,
+  key: string
+): { found: boolean; value?: unknown; threw?: boolean } {
+  if (!Object.prototype.hasOwnProperty.call(value, key)) return { found: false };
+  try {
+    return { found: true, value: value[key] };
+  } catch {
+    return { found: true, threw: true };
+  }
+}
+
+function readKeys(value: Record<string, unknown>): string[] | undefined {
+  try {
+    return Object.keys(value).sort();
+  } catch {
+    return undefined;
+  }
+}
+
+function deepEqual(left: unknown, right: unknown, seen = new Map<object, object>()): boolean {
+  if (Object.is(left, right)) return true;
+  if (!isObjectLike(left) || !isObjectLike(right)) return false;
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  const previous = seen.get(left);
+  if (previous) return previous === right;
+  seen.set(left, right);
+
+  if (Array.isArray(left) && Array.isArray(right)) {
+    if (left.length !== right.length) return false;
+    for (let index = 0; index < left.length; index += 1) {
+      if (!deepEqual(left[index], right[index], seen)) return false;
+    }
+    return true;
+  }
+  if (!isPlainObject(left) || !isPlainObject(right)) return false;
+  const leftKeys = readKeys(left);
+  const rightKeys = readKeys(right);
+  if (!leftKeys || !rightKeys || leftKeys.length !== rightKeys.length) return false;
+  for (let index = 0; index < leftKeys.length; index += 1) {
+    const leftKey = leftKeys[index];
+    if (leftKey !== rightKeys[index]) return false;
+    const leftValue = readOwnValue(left, leftKey);
+    const rightValue = readOwnValue(right, leftKey);
+    if (
+      !leftValue.found ||
+      !rightValue.found ||
+      leftValue.threw ||
+      rightValue.threw ||
+      !deepEqual(leftValue.value, rightValue.value, seen)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function normalizeReference(reference: string): string {
+  const prefix = ["#/$defs/", "#/definitions/"].find(item =>
+    reference.startsWith(item)
+  );
+  if (!prefix) return reference;
+  try {
+    return decodeURIComponent(reference.slice(prefix.length))
+      .replace(/~1/g, "/")
+      .replace(/~0/g, "~");
+  } catch {
+    return reference;
+  }
+}
+
+function sameReferenceValue(left: unknown, right: unknown): boolean {
+  return isObjectLike(left) || isObjectLike(right)
+    ? left === right
+    : Object.is(left, right);
+}
+
+function evaluateNumber(
+  plan: Extract<ValidationNode, { kind: "number" | "integer" }>,
+  value: unknown,
+  path: readonly (string | number)[],
+  state: EvaluationState
+): boolean {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    (plan.kind === "integer" && !Number.isInteger(value))
+  ) {
+    addTypeIssue(state, path, plan.kind, value);
+    return false;
+  }
+  let valid = true;
+  if (plan.minimum !== undefined && value < plan.minimum) {
+    state.collector.add(path, "minimum", `Value must be at least ${plan.minimum}.`);
+    valid = false;
+  }
+  if (plan.maximum !== undefined && value > plan.maximum) {
+    state.collector.add(path, "maximum", `Value must be at most ${plan.maximum}.`);
+    valid = false;
+  }
+  if (plan.exclusiveMinimum !== undefined && value <= plan.exclusiveMinimum) {
+    state.collector.add(
+      path,
+      "exclusiveMinimum",
+      `Value must be greater than ${plan.exclusiveMinimum}.`
+    );
+    valid = false;
+  }
+  if (plan.exclusiveMaximum !== undefined && value >= plan.exclusiveMaximum) {
+    state.collector.add(
+      path,
+      "exclusiveMaximum",
+      `Value must be less than ${plan.exclusiveMaximum}.`
+    );
+    valid = false;
+  }
+  if (plan.multipleOf !== undefined) {
+    const quotient = value / plan.multipleOf;
+    const tolerance = Number.EPSILON * Math.max(1, Math.abs(quotient)) * 8;
+    if (Math.abs(quotient - Math.round(quotient)) > tolerance) {
+      state.collector.add(
+        path,
+        "multipleOf",
+        `Value must be a multiple of ${plan.multipleOf}.`
+      );
+      valid = false;
+    }
+  }
+  return valid;
+}
+
+function evaluateString(
+  plan: ValidationStringPlan,
+  value: unknown,
+  path: readonly (string | number)[],
+  state: EvaluationState
+): boolean {
+  if (typeof value !== "string") {
+    addTypeIssue(state, path, "string", value);
+    return false;
+  }
+  const length = [...value].length;
+  let valid = true;
+  if (plan.minLength !== undefined && length < plan.minLength) {
+    state.collector.add(path, "minLength", `String must contain at least ${plan.minLength} characters.`);
+    valid = false;
+  }
+  if (plan.maxLength !== undefined && length > plan.maxLength) {
+    state.collector.add(path, "maxLength", `String must contain at most ${plan.maxLength} characters.`);
+    valid = false;
+  }
+  if (plan.pattern !== undefined) {
+    const pattern = state.compiled.patterns.get(plan as object);
+    if (!pattern) {
+      state.collector.add(path, "pattern", "Pattern could not be evaluated.");
+      valid = false;
+    } else {
+      pattern.lastIndex = 0;
+      if (!pattern.test(value)) {
+        state.collector.add(path, "pattern", "String does not match the required pattern.");
+        valid = false;
+      }
+    }
+  }
+  if (
+    plan.format !== undefined &&
+    !validateValidationFormat(value, plan.format as ValidationFormat)
+  ) {
+    state.collector.add(path, "format", `String does not match the ${plan.format} format.`);
+    valid = false;
+  }
+  return valid;
+}
+
+function evaluateObject(
+  plan: ValidationObjectPlan,
+  value: unknown,
+  path: readonly (string | number)[],
+  depth: number,
+  state: EvaluationState
+): boolean {
+  if (!isPlainObject(value)) {
+    addTypeIssue(state, path, "object", value);
+    return false;
+  }
+  if (!enterValue(state, value, path)) return false;
+  try {
+    const properties = plan.properties ?? {};
+    const propertyNames = Object.keys(properties).sort();
+    const required = [...(plan.required ?? [])].sort();
+    let valid = true;
+    for (const key of required) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) {
+        state.collector.add(
+          [...path, key],
+          "required",
+          `Required property ${displayValidationKey(key)} is missing.`
+        );
+        valid = false;
+      }
+    }
+    for (const key of propertyNames) {
+      const read = readOwnValue(value, key);
+      if (!read.found) continue;
+      if (read.threw) {
+        state.collector.add([...path, key], "read", "Property could not be read.");
+        valid = false;
+        continue;
+      }
+      if (!evaluate(properties[key], read.value, [...path, key], depth + 1, state)) {
+        valid = false;
+      }
+    }
+
+    const keys = readKeys(value);
+    if (!keys) {
+      state.collector.add(path, "read", "Object properties could not be enumerated.");
+      return false;
+    }
+    const declared = new Set(propertyNames);
+    for (const key of keys) {
+      if (declared.has(key)) continue;
+      const additional = plan.additionalProperties;
+      if (additional === false) {
+        state.collector.add(
+          [...path, key],
+          "additionalProperties",
+          `Additional property ${displayValidationKey(key)} is not allowed.`
+        );
+        valid = false;
+        continue;
+      }
+      if (additional === undefined || additional === true) continue;
+      const read = readOwnValue(value, key);
+      if (!read.found || read.threw) {
+        state.collector.add([...path, key], "read", "Property could not be read.");
+        valid = false;
+        continue;
+      }
+      if (!evaluate(additional, read.value, [...path, key], depth + 1, state)) {
+        valid = false;
+      }
+    }
+    return valid;
+  } finally {
+    state.activeValues.delete(value);
+  }
+}
+
+function evaluateArray(
+  plan: ValidationArrayPlan,
+  value: unknown,
+  path: readonly (string | number)[],
+  depth: number,
+  state: EvaluationState
+): boolean {
+  if (!Array.isArray(value)) {
+    addTypeIssue(state, path, "array", value);
+    return false;
+  }
+  if (!enterValue(state, value, path)) return false;
+  try {
+    let valid = true;
+    if (plan.minItems !== undefined && value.length < plan.minItems) {
+      state.collector.add(path, "minItems", `Array must contain at least ${plan.minItems} items.`);
+      valid = false;
+    }
+    if (plan.maxItems !== undefined && value.length > plan.maxItems) {
+      state.collector.add(path, "maxItems", `Array must contain at most ${plan.maxItems} items.`);
+      valid = false;
+    }
+    const prefixItems = plan.prefixItems ?? [];
+    for (let index = 0; index < Math.min(value.length, prefixItems.length); index += 1) {
+      if (!evaluate(prefixItems[index], value[index], [...path, index], depth + 1, state)) {
+        valid = false;
+      }
+    }
+    for (let index = prefixItems.length; index < value.length; index += 1) {
+      const itemPlan = plan.items;
+      if (itemPlan === false) {
+        state.collector.add([...path, index], "items", "Additional array items are not allowed.");
+        valid = false;
+      } else if (itemPlan !== undefined && itemPlan !== true) {
+        if (!evaluate(itemPlan, value[index], [...path, index], depth + 1, state)) {
+          valid = false;
+        }
+      }
+    }
+    return valid;
+  } finally {
+    state.activeValues.delete(value);
+  }
+}
+
+function evaluateTuple(
+  plan: ValidationTuplePlan,
+  value: unknown,
+  path: readonly (string | number)[],
+  depth: number,
+  state: EvaluationState
+): boolean {
+  if (!Array.isArray(value)) {
+    addTypeIssue(state, path, "array", value);
+    return false;
+  }
+  if (!enterValue(state, value, path)) return false;
+  try {
+    let valid = true;
+    for (let index = 0; index < plan.items.length; index += 1) {
+      if (index >= value.length) {
+        state.collector.add([...path, index], "required", "Tuple item is missing.");
+        valid = false;
+      } else if (!evaluate(plan.items[index], value[index], [...path, index], depth + 1, state)) {
+        valid = false;
+      }
+    }
+    if (value.length > plan.items.length) {
+      if (plan.rest === false || plan.rest === undefined) {
+        state.collector.add(
+          [...path, plan.items.length],
+          "tuple",
+          "Tuple contains more items than expected."
+        );
+        valid = false;
+      } else {
+        for (let index = plan.items.length; index < value.length; index += 1) {
+          if (!evaluate(plan.rest, value[index], [...path, index], depth + 1, state)) {
+            valid = false;
+          }
+        }
+      }
+    }
+    return valid;
+  } finally {
+    state.activeValues.delete(value);
+  }
+}
+
+function evaluateUnion(
+  plan: ValidationUnionPlan | ValidationOneOfPlan,
+  value: unknown,
+  path: readonly (string | number)[],
+  depth: number,
+  state: EvaluationState,
+  oneOf: boolean
+): boolean {
+  let matches = 0;
+  for (const branch of plan.anyOf) {
+    const branchCollector = new IssueCollector(1);
+    const branchValid = withCollector(state, branchCollector, () =>
+      evaluate(branch, value, path, depth, state)
+    );
+    if (branchValid) matches += 1;
+  }
+  if ((!oneOf && matches > 0) || (oneOf && matches === 1)) return true;
+  state.collector.add(
+    path,
+    oneOf ? "oneOf" : "union",
+    oneOf
+      ? matches === 0
+        ? "Value must match exactly one schema."
+        : "Value matches more than one schema."
+      : "Value must match at least one schema."
+  );
+  return false;
+}
+
+function evaluateIntersection(
+  plan: ValidationIntersectionPlan,
+  value: unknown,
+  path: readonly (string | number)[],
+  depth: number,
+  state: EvaluationState
+): boolean {
+  let valid = true;
+  for (const branch of plan.allOf) {
+    if (!evaluate(branch, value, path, depth, state)) valid = false;
+  }
+  return valid;
+}
+
+function evaluateReference(
+  plan: ValidationRefPlan,
+  value: unknown,
+  path: readonly (string | number)[],
+  depth: number,
+  state: EvaluationState
+): boolean {
+  const reference = normalizeReference(plan.name ?? plan.ref!);
+  const target = reference === "#" ? state.root : state.compiled.definitions.get(reference);
+  if (target === undefined) {
+    state.collector.add(path, "ref", `Unknown validation reference ${JSON.stringify(reference)}.`);
+    return false;
+  }
+  if (state.refs.some(frame => frame.name === reference && sameReferenceValue(frame.value, value))) {
+    state.collector.add(
+      path,
+      isObjectLike(value) && state.activeValues.has(value) ? "cycle" : "refCycle",
+      isObjectLike(value) && state.activeValues.has(value)
+        ? "Cyclic value encountered during validation."
+        : "Validation reference cycle did not consume a nested value."
+    );
+    return false;
+  }
+  state.refs.push({ name: reference, value });
+  try {
+    return evaluate(target, value, path, depth, state);
+  } finally {
+    state.refs.pop();
+  }
+}
+
+function evaluate(
+  plan: ValidationPlan,
+  value: unknown,
+  path: readonly (string | number)[],
+  depth: number,
+  state: EvaluationState
+): boolean {
+  if (typeof plan === "boolean") {
+    if (!plan) state.collector.add(path, "never", "Value is not allowed.");
+    return plan;
+  }
+  if (plan.optional && value === undefined) return true;
+  if (plan.nullable && value === null) return true;
+  if (depth > state.compiled.limits.maxDepth) {
+    state.collector.add(path, "maxDepth", "Validation depth limit exceeded.");
+    return false;
+  }
+
+  switch (plan.kind) {
+    case "any":
+      return true;
+    case "never":
+      state.collector.add(path, "never", "Value is not allowed.");
+      return false;
+    case "null":
+      if (value === null) return true;
+      addTypeIssue(state, path, "null", value);
+      return false;
+    case "boolean":
+      if (typeof value === "boolean") return true;
+      addTypeIssue(state, path, "boolean", value);
+      return false;
+    case "string":
+      return evaluateString(plan, value, path, state);
+    case "number":
+    case "integer":
+      return evaluateNumber(plan, value, path, state);
+    case "literal":
+      if (deepEqual(plan.value, value)) return true;
+      state.collector.add(path, "const", "Value does not equal the required literal.");
+      return false;
+    case "enum":
+      if (plan.values.some(candidate => deepEqual(candidate, value))) return true;
+      state.collector.add(path, "enum", "Value is not one of the allowed values.");
+      return false;
+    case "array":
+      return evaluateArray(plan, value, path, depth, state);
+    case "tuple":
+      return evaluateTuple(plan, value, path, depth, state);
+    case "object":
+      return evaluateObject(plan, value, path, depth, state);
+    case "union":
+      return evaluateUnion(plan, value, path, depth, state, plan.oneOf === true);
+    case "oneOf":
+      return evaluateUnion(plan, value, path, depth, state, true);
+    case "intersection":
+      return evaluateIntersection(plan, value, path, depth, state);
+    case "ref":
+      return evaluateReference(plan, value, path, depth, state);
+    default:
+      state.collector.add(path, "plan", "Unsupported validation plan kind.");
+      return false;
+  }
+}
+
+/** Evaluate one compiled static validation plan without any framework dependency. */
+export function evaluateValidationPlan<T>(
+  compiled: CompiledValidationPlan,
+  value: unknown
+): ValidationResult<T> {
+  const collector = new IssueCollector(compiled.limits.maxIssues);
+  const state: EvaluationState = {
+    compiled,
+    collector,
+    activeValues: new WeakSet<object>(),
+    refs: [],
+    root: compiled.root
+  };
+  const valid = evaluate(compiled.root, value, [], 0, state);
+  if (valid) {
+    return { valid: true, value: value as T, issues: [] };
+  }
+  return { valid: false, issues: Object.freeze([...collector.issues]) };
+}
+
+/** Convenience function for callers that already have a plan. */
+export function validateWithPlan<T>(
+  plan: ValidationPlan | ValidationPlanDocument,
+  value: unknown,
+  options: ValidationOptions = {}
+): ValidationResult<T> {
+  return evaluateValidationPlan<T>(compileValidationPlan(plan, options), value);
+}

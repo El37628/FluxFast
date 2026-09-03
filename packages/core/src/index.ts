@@ -32,3 +32,4 @@ export * from "./transport";
 export * from "./history";
 export * from "./prefetch";
 export * from "./router";
+export * from "./validation";
