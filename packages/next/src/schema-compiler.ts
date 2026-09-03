@@ -30,6 +30,71 @@ interface ResourceAlias {
   schema: JsonSchema;
 }
 
+interface UnknownAnalysis {
+  readonly containsUnknown: boolean;
+  readonly kind: "never" | "other" | "unknown";
+  readonly references: ReadonlySet<string>;
+}
+
+const NEVER_ANALYSIS: UnknownAnalysis = {
+  containsUnknown: false,
+  kind: "never",
+  references: new Set()
+};
+const OTHER_ANALYSIS: UnknownAnalysis = {
+  containsUnknown: false,
+  kind: "other",
+  references: new Set()
+};
+const UNKNOWN_ANALYSIS: UnknownAnalysis = {
+  containsUnknown: true,
+  kind: "unknown",
+  references: new Set()
+};
+
+function mergeReferences(
+  analyses: readonly UnknownAnalysis[]
+): ReadonlySet<string> {
+  const references = new Set<string>();
+  for (const analysis of analyses) {
+    for (const name of analysis.references) references.add(name);
+  }
+  return references;
+}
+
+function otherUnknownAnalysis(
+  analyses: readonly UnknownAnalysis[]
+): UnknownAnalysis {
+  const containsUnknown = analyses.some(analysis => analysis.containsUnknown);
+  const references = mergeReferences(analyses);
+  if (!containsUnknown && references.size === 0) return OTHER_ANALYSIS;
+  return { containsUnknown, kind: "other", references };
+}
+
+function unionUnknownAnalysis(
+  analyses: readonly UnknownAnalysis[]
+): UnknownAnalysis {
+  const members = analyses.filter(analysis => analysis.kind !== "never");
+  if (
+    members.length === 0 ||
+    members.some(analysis => analysis.kind === "unknown")
+  ) {
+    return UNKNOWN_ANALYSIS;
+  }
+  return otherUnknownAnalysis(members);
+}
+
+function intersectionUnknownAnalysis(
+  analyses: readonly UnknownAnalysis[]
+): UnknownAnalysis {
+  if (analyses.some(analysis => analysis.kind === "never")) {
+    return NEVER_ANALYSIS;
+  }
+  const members = analyses.filter(analysis => analysis.kind !== "unknown");
+  if (members.length === 0) return UNKNOWN_ANALYSIS;
+  return otherUnknownAnalysis(members);
+}
+
 /** A deterministic code-generation error tied to one manifest location. */
 export class SchemaCompilationError extends TypeError {
   readonly path: string;
@@ -542,10 +607,13 @@ function canRenderInterface(schema: JsonSchema): boolean {
 
 class ResourceTypeCompiler {
   private readonly definitions = new Map<string, NamedDefinition>();
+  private readonly explicitContracts: ResourceAlias[] = [];
   private readonly explicitTypeNames = new Map<string, string>();
+  private readonly mutationContracts: ResourceAlias[] = [];
   private readonly resourceKeyNames = new Map<string, string>();
   private readonly resourceNames = new Map<string, string>();
   private readonly resources: ResourceAlias[] = [];
+  private unknownDefinitions?: ReadonlySet<string>;
 
   constructor(private readonly manifest: FluxFastSchemaManifest) {}
 
@@ -593,42 +661,296 @@ class ResourceTypeCompiler {
         this.schemaContainsUnknown(
           resource.schema,
           resource.context,
-          resource.path,
-          new Set()
+          resource.path
         )
       )
       .map(resource => resource.context.resourceKey);
   }
 
+  contractsWithUnknownTypes(): string[] {
+    this.collectExplicitTypes();
+    this.collectResources();
+    this.collectMutationBodies();
+    const contracts = new Map<string, ResourceAlias>();
+    for (const contract of [
+      ...this.explicitContracts,
+      ...this.resources,
+      ...this.mutationContracts
+    ]) {
+      if (!contracts.has(contract.name)) contracts.set(contract.name, contract);
+    }
+    return [...contracts.values()]
+      .sort(
+        (left, right) =>
+          compareText(left.name, right.name) || compareText(left.path, right.path)
+      )
+      .filter(contract =>
+        this.schemaContainsUnknown(
+          contract.schema,
+          contract.context,
+          contract.path
+        )
+      )
+      .map(contract => contract.name);
+  }
+
   private schemaContainsUnknown(
     schema: SchemaNode,
     context: CompilationContext,
-    path: string,
-    visitedDefinitions: Set<string>
+    path: string
   ): boolean {
-    const compiled = compileSchema(schema, context, path);
-    if (/\bunknown\b/.test(compiled)) return true;
+    const analysis = this.analyzeUnknown(schema, context, path);
+    if (analysis.containsUnknown) return true;
+    const unknownDefinitions = this.findUnknownDefinitions();
+    return [...analysis.references].some(name => unknownDefinitions.has(name));
+  }
 
-    const referencedNames = new Set(context.references.values());
-    if (context.rootType) referencedNames.add(context.rootType);
-    for (const name of referencedNames) {
-      if (!new RegExp(`\\b${name}\\b`).test(compiled)) continue;
-      if (visitedDefinitions.has(name)) continue;
-      const definition = this.definitions.get(name);
-      if (!definition) continue;
-      visitedDefinitions.add(name);
-      if (
-        this.schemaContainsUnknown(
-          definition.schema,
-          definition.context,
-          definition.path,
-          visitedDefinitions
-        )
-      ) {
-        return true;
+  private findUnknownDefinitions(): ReadonlySet<string> {
+    if (this.unknownDefinitions) return this.unknownDefinitions;
+
+    const analyses = new Map<string, UnknownAnalysis>();
+    const dependents = new Map<string, Set<string>>();
+    const unknown = new Set<string>();
+    for (const definition of this.definitions.values()) {
+      const analysis = this.analyzeUnknown(
+        definition.schema,
+        definition.context,
+        definition.path
+      );
+      analyses.set(definition.name, analysis);
+      if (analysis.containsUnknown) unknown.add(definition.name);
+    }
+    for (const [name, analysis] of analyses) {
+      for (const dependency of analysis.references) {
+        if (!analyses.has(dependency)) continue;
+        let names = dependents.get(dependency);
+        if (!names) {
+          names = new Set();
+          dependents.set(dependency, names);
+        }
+        names.add(name);
       }
     }
-    return false;
+
+    const pending = [...unknown];
+    for (let index = 0; index < pending.length; index += 1) {
+      for (const dependent of dependents.get(pending[index]) ?? []) {
+        if (unknown.has(dependent)) continue;
+        unknown.add(dependent);
+        pending.push(dependent);
+      }
+    }
+    this.unknownDefinitions = unknown;
+    return unknown;
+  }
+
+  private analyzeUnknown(
+    schema: SchemaNode,
+    context: CompilationContext,
+    path: string
+  ): UnknownAnalysis {
+    if (schema === true) return UNKNOWN_ANALYSIS;
+    if (schema === false) return NEVER_ANALYSIS;
+
+    const parts: UnknownAnalysis[] = [];
+    if (typeof schema.$ref === "string") {
+      const name = resolveReference(schema.$ref, context, `${path}.$ref`);
+      parts.push({
+        containsUnknown: false,
+        kind: "other",
+        references: new Set([name])
+      });
+    }
+
+    if (schema.const !== undefined) {
+      parts.push(OTHER_ANALYSIS);
+    } else if (Array.isArray(schema.enum)) {
+      parts.push(
+        unionUnknownAnalysis(schema.enum.map(() => OTHER_ANALYSIS))
+      );
+    }
+
+    for (const keyword of ["anyOf", "oneOf"] as const) {
+      if (schema[keyword] === undefined) continue;
+      const alternatives = schemaArray(schema[keyword], `${path}.${keyword}`);
+      parts.push(
+        unionUnknownAnalysis(
+          alternatives.map((item, index) =>
+            this.analyzeUnknown(
+              item,
+              context,
+              `${path}.${keyword}[${index}]`
+            )
+          )
+        )
+      );
+    }
+    if (schema.allOf !== undefined) {
+      const members = schemaArray(schema.allOf, `${path}.allOf`);
+      parts.push(
+        intersectionUnknownAnalysis(
+          members.map((item, index) =>
+            this.analyzeUnknown(
+              item,
+              context,
+              `${path}.allOf[${index}]`
+            )
+          )
+        )
+      );
+    }
+
+    if (schema.const === undefined && schema.enum === undefined) {
+      const explicitTypes = Array.isArray(schema.type)
+        ? schema.type.filter((item): item is string => typeof item === "string")
+        : typeof schema.type === "string"
+          ? [schema.type]
+          : [];
+      if (explicitTypes.length > 0) {
+        parts.push(
+          unionUnknownAnalysis(
+            explicitTypes.map(type =>
+              this.analyzeExplicitTypeUnknown(
+                type,
+                schema,
+                context,
+                path
+              )
+            )
+          )
+        );
+      } else if (
+        schema.properties !== undefined ||
+        schema.additionalProperties !== undefined
+      ) {
+        parts.push(
+          this.analyzeObjectUnknown(
+            schema,
+            context,
+            path
+          )
+        );
+      } else if (schema.items !== undefined || schema.prefixItems !== undefined) {
+        parts.push(
+          this.analyzeArrayUnknown(
+            schema,
+            context,
+            path
+          )
+        );
+      }
+    }
+
+    const result = intersectionUnknownAnalysis(parts);
+    return schema.nullable === true
+      ? unionUnknownAnalysis([result, OTHER_ANALYSIS])
+      : result;
+  }
+
+  private analyzeExplicitTypeUnknown(
+    type: string,
+    schema: JsonSchema,
+    context: CompilationContext,
+    path: string
+  ): UnknownAnalysis {
+    if (type === "array") {
+      return this.analyzeArrayUnknown(
+        schema,
+        context,
+        path
+      );
+    }
+    if (type === "object") {
+      return this.analyzeObjectUnknown(
+        schema,
+        context,
+        path
+      );
+    }
+    return ["null", "boolean", "integer", "number", "string"].includes(type)
+      ? OTHER_ANALYSIS
+      : UNKNOWN_ANALYSIS;
+  }
+
+  private analyzeObjectUnknown(
+    schema: JsonSchema,
+    context: CompilationContext,
+    path: string
+  ): UnknownAnalysis {
+    const properties = schema.properties === undefined
+      ? {}
+      : schemaMap(schema.properties, `${path}.properties`);
+    const propertyAnalyses = Object.keys(properties)
+      .sort()
+      .map(key =>
+        this.analyzeUnknown(
+          properties[key],
+          context,
+          childPath(`${path}.properties`, key)
+        )
+      );
+
+    const additional = schema.additionalProperties;
+    let additionalAnalysis: UnknownAnalysis | undefined;
+    if (additional === true) {
+      additionalAnalysis = UNKNOWN_ANALYSIS;
+    } else if (isRecord(additional)) {
+      additionalAnalysis = this.analyzeUnknown(
+        additional,
+        context,
+        `${path}.additionalProperties`
+      );
+      if (propertyAnalyses.length > 0) additionalAnalysis = UNKNOWN_ANALYSIS;
+    }
+
+    return otherUnknownAnalysis(
+      [...propertyAnalyses, additionalAnalysis].filter(
+        (analysis): analysis is UnknownAnalysis => analysis !== undefined
+      )
+    );
+  }
+
+  private analyzeArrayUnknown(
+    schema: JsonSchema,
+    context: CompilationContext,
+    path: string
+  ): UnknownAnalysis {
+    const analyses: UnknownAnalysis[] = [];
+    if (schema.prefixItems !== undefined) {
+      const prefixItems = schemaArray(schema.prefixItems, `${path}.prefixItems`);
+      analyses.push(
+        ...prefixItems.map((item, index) =>
+          this.analyzeUnknown(
+            item,
+            context,
+            `${path}.prefixItems[${index}]`
+          )
+        )
+      );
+      if (schema.items === true) {
+        analyses.push(UNKNOWN_ANALYSIS);
+      } else if (isRecord(schema.items)) {
+        analyses.push(
+          this.analyzeUnknown(
+            schema.items,
+            context,
+            `${path}.items`
+          )
+        );
+      }
+    } else if (schema.items === undefined || schema.items === true) {
+      analyses.push(UNKNOWN_ANALYSIS);
+    } else if (isRecord(schema.items)) {
+      analyses.push(
+        this.analyzeUnknown(
+          schema.items,
+          context,
+          `${path}.items`
+        )
+      );
+    }
+
+    return otherUnknownAnalysis(analyses);
   }
 
   private renderResourceKeys(resources: ResourceAlias[]): string {
@@ -764,6 +1086,12 @@ class ResourceTypeCompiler {
       };
       this.collectDefinitions(mutation.body, context, bodyPath);
       this.registerDefinition(bodyName, mutation.body, context, bodyPath);
+      this.mutationContracts.push({
+        context,
+        name: bodyName,
+        path: bodyPath,
+        schema: mutation.body
+      });
     }
   }
 
@@ -792,6 +1120,12 @@ class ResourceTypeCompiler {
       };
       this.collectDefinitions(schema, context, schemaPath);
       this.registerDefinition(generatedName, schema, context, schemaPath);
+      this.explicitContracts.push({
+        context,
+        name: generatedName,
+        path: schemaPath,
+        schema
+      });
     }
   }
 
@@ -900,4 +1234,12 @@ export function findFluxFastResourceKeysWithUnknownTypes(
 ): string[] {
   const manifest = validateFluxFastSchemaManifest(value);
   return new ResourceTypeCompiler(manifest).resourcesWithUnknownTypes();
+}
+
+/** Find generated root contracts whose TypeScript includes `unknown`. */
+export function findFluxFastContractsWithUnknownTypes(
+  value: unknown
+): string[] {
+  const manifest = validateFluxFastSchemaManifest(value);
+  return new ResourceTypeCompiler(manifest).contractsWithUnknownTypes();
 }

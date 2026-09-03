@@ -167,6 +167,16 @@ describe("FluxFast project diagnostics", () => {
           message: expect.stringContaining("fluxfast-schema/1 manifest found"),
         }),
         expect.objectContaining({
+          id: "types.fingerprint",
+          status: "pass",
+          message: expect.stringContaining("e".repeat(64)),
+        }),
+        expect.objectContaining({
+          id: "types.general",
+          status: "pass",
+          message: "0 general type contracts",
+        }),
+        expect.objectContaining({
           id: "types.resources",
           status: "pass",
           message: "1 typed resource",
@@ -182,12 +192,160 @@ describe("FluxFast project diagnostics", () => {
           message: "1 mutation operation",
         }),
         expect.objectContaining({
+          id: "types.mutation-contracts",
+          status: "pass",
+          message: "1 mutation body contract",
+        }),
+        expect.objectContaining({
+          id: "types.validators",
+          status: "pass",
+          message: "2 generated client validators",
+        }),
+        expect.objectContaining({
+          id: "types.validators-unsupported",
+          status: "pass",
+          message: "0 contracts cannot receive client validators",
+        }),
+        expect.objectContaining({
+          id: "types.unknown-count",
+          status: "pass",
+          message: "0 generated contracts contain unknown",
+        }),
+        expect.objectContaining({
+          id: "types.identifiers",
+          status: "pass",
+        }),
+        expect.objectContaining({
+          id: "types.modes",
+          status: "pass",
+        }),
+        expect.objectContaining({
           id: "types.generated",
           status: "pass",
           message: "Generated TypeScript is current",
         }),
       ])
     );
+  });
+
+  it("reports schema/2 contract, validator, unknown, and fingerprint metrics", () => {
+    const report = validateFluxProject(
+      initializeTyped({
+        schema: "fluxfast-schema/2",
+        producer: "0.8.0",
+        types: {
+          Profile: {
+            mode: "serialization",
+            schema: { type: "string", minLength: 2 },
+          },
+          Loose: {
+            mode: "validation",
+            schema: {},
+          },
+        },
+      }),
+      { includeTypeDiagnostics: true }
+    );
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "types.manifest",
+          message: expect.stringContaining("fluxfast-schema/2 manifest found"),
+        }),
+        expect.objectContaining({
+          id: "types.general",
+          message: "2 general type contracts",
+        }),
+        expect.objectContaining({
+          id: "types.validators",
+          message: "4 generated client validators",
+        }),
+        expect.objectContaining({
+          id: "types.unknown-count",
+          status: "warning",
+          message: expect.stringContaining('"Loose"'),
+        }),
+      ])
+    );
+  });
+
+  it("reports unsupported validators without hiding generated TypeScript", () => {
+    const report = validateFluxProject(
+      initializeTyped({
+        resources: {
+          tags: {
+            schema: {
+              type: "array",
+              items: { type: "string" },
+              uniqueItems: true,
+            },
+          },
+        },
+      }),
+      { includeTypeDiagnostics: true }
+    );
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "types.validators-unsupported",
+          status: "warning",
+          message: "1 contract cannot receive a client validator",
+        }),
+        expect.objectContaining({
+          id: "types.validator-unsupported.0",
+          status: "warning",
+          message: expect.stringMatching(
+            /TagsResource cannot receive.*TypeScript generation remains available.*Server validation remains authoritative/
+          ),
+        }),
+      ])
+    );
+  });
+
+  it("reports schema mode conflicts alongside normalized identifier collisions", () => {
+    const project = initialize();
+    writeSchemaManifest(tmpDir, {
+      schema: "fluxfast-schema/2",
+      producer: "0.8.0",
+      types: {
+        "invoice-input": {
+          mode: "validation",
+          schema: { type: "string" },
+        },
+        invoice_input: {
+          mode: "serialization",
+          schema: { type: "string" },
+        },
+      },
+    });
+
+    const report = validateFluxProject(detectFluxProject(tmpDir), {
+      includeTypeDiagnostics: true,
+    });
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "types.modes",
+          status: "warning",
+          message: expect.stringMatching(
+            /invoice-input.*validation.*invoice_input.*serialization.*InvoiceInput/
+          ),
+        }),
+        expect.objectContaining({
+          id: "types.identifiers",
+          status: "warning",
+          message: expect.stringContaining("collision"),
+        }),
+      ])
+    );
+    expect(fs.existsSync(path.join(project.generatedDir, "types.generated.ts")))
+      .toBe(false);
   });
 
   it("treats a missing schema manifest as a non-blocking type warning", () => {

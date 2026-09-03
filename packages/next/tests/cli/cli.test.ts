@@ -155,6 +155,40 @@ describe("FluxFast CLI", () => {
     );
   });
 
+  it("prints actionable unsupported-validator diagnostics during generate and check", () => {
+    createTestProject(tmpDir);
+    writeSchemaManifest(tmpDir, {
+      resources: {
+        tags: {
+          schema: {
+            type: "array",
+            items: { type: "string" },
+            uniqueItems: true
+          }
+        }
+      }
+    });
+
+    expect(runCli(["generate"], io)).toBe(0);
+    let output = stdout.join("\n");
+    expect(output).toContain("TagsResource cannot receive a client validator");
+    expect(output).toContain('unsupported validation keyword "uniqueItems"');
+    expect(output).toContain("TypeScript generation remains available");
+    expect(output).toContain("Server validation remains authoritative");
+    expect(
+      fs.readFileSync(
+        path.join(tmpDir, "src/.fluxfast/types.generated.ts"),
+        "utf8"
+      )
+    ).toContain("TagsResource");
+
+    stdout = [];
+    expect(runCli(["generate", "--check"], io)).toBe(0);
+    output = stdout.join("\n");
+    expect(output).toContain("TagsResource cannot receive a client validator");
+    expect(output).toContain("Generated FluxFast files are current");
+  });
+
   it("generates and checks every artifact from an external schema file", () => {
     createTestProject(tmpDir, { layout: "root" });
     const generatedSchema = writeSchemaManifest(tmpDir);
@@ -440,9 +474,18 @@ describe("FluxFast CLI", () => {
     expect(output).toContain("FluxFast Doctor");
     expect(output).toContain("Environment");
     expect(output).toContain("Types");
+    expect(output).toContain("fluxfast-schema/1 manifest found");
+    expect(output).toContain(`Manifest fingerprint ${"e".repeat(64)}`);
+    expect(output).toContain("0 general type contracts");
     expect(output).toContain("1 typed resource");
     expect(output).toContain("1 page route");
     expect(output).toContain("1 mutation operation");
+    expect(output).toContain("1 mutation body contract");
+    expect(output).toContain("2 generated client validators");
+    expect(output).toContain("0 contracts cannot receive client validators");
+    expect(output).toContain("0 generated contracts contain unknown");
+    expect(output).toContain("No generated identifier collisions detected");
+    expect(output).toContain("No schema mode conflicts detected");
     expect(output).toContain("Generated TypeScript is current");
     expect(output).toContain("Configuration");
     expect(output).toContain("home/index");

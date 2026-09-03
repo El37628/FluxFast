@@ -5,6 +5,7 @@ import { compileFluxFastPageRoutes } from "./route-compiler";
 import { compileFluxFastResourceTypes } from "./schema-compiler";
 import { parseFluxFastSchemaManifest } from "./schema-manifest";
 import { compileFluxFastValidatorsWithDiagnostics } from "./validator-compiler";
+import type { ValidatorCompilationDiagnostic } from "./validator-compiler";
 
 export interface GenerateOptions {
   pagesDir?: string;
@@ -29,16 +30,20 @@ export interface FluxFastGenerationOptions extends GenerateOptions {
 
 export interface FluxFastGenerationResult {
   generatedFiles: string[];
+  generatedValidators: readonly string[];
   registryPath: string;
   schemaFile?: string;
+  validatorDiagnostics: readonly ValidatorCompilationDiagnostic[];
 }
 
 export interface FluxFastGenerationCheckResult {
   checkedFiles: string[];
   current: boolean;
+  generatedValidators: readonly string[];
   registryPath: string;
   schemaFile?: string;
   staleFiles: string[];
+  validatorDiagnostics: readonly ValidatorCompilationDiagnostic[];
 }
 
 interface FluxFastGeneratedArtifact {
@@ -48,11 +53,13 @@ interface FluxFastGeneratedArtifact {
 
 interface FluxFastProjectSnapshot {
   artifacts: FluxFastGeneratedArtifact[];
+  generatedValidators: readonly string[];
   generatedDir: string;
   pagesDir: string;
   registryPath: string;
   schemaContent?: string;
   schemaFile?: string;
+  validatorDiagnostics: readonly ValidatorCompilationDiagnostic[];
 }
 
 const PAGE_EXTENSION = /\.(tsx|jsx)$/;
@@ -227,9 +234,14 @@ function createFluxFastProjectSnapshot(
   const artifacts: FluxFastGeneratedArtifact[] = [
     { path: registry.outputFile, content: registry.content }
   ];
+  let generatedValidators: readonly string[] = Object.freeze([]);
+  let validatorDiagnostics: readonly ValidatorCompilationDiagnostic[] = Object.freeze([]);
 
   if (hasSchema) {
     const manifest = parseFluxFastSchemaManifest(schemaContent);
+    const validators = compileFluxFastValidatorsWithDiagnostics(manifest);
+    generatedValidators = validators.contracts;
+    validatorDiagnostics = validators.diagnostics;
     const schemaArtifacts = [
       {
         path: path.join(generatedDir, "types.generated.ts"),
@@ -238,7 +250,7 @@ function createFluxFastProjectSnapshot(
       },
       {
         path: path.join(generatedDir, "validators.generated.ts"),
-        content: compileFluxFastValidatorsWithDiagnostics(manifest).content,
+        content: validators.content,
         label: "validators"
       },
       {
@@ -260,11 +272,13 @@ function createFluxFastProjectSnapshot(
 
   return {
     artifacts,
+    generatedValidators,
     generatedDir,
     pagesDir: registry.pagesDir,
     registryPath: registry.outputFile,
     schemaContent: options.schemaContent,
-    schemaFile: hasSchema ? candidateSchemaFile : undefined
+    schemaFile: hasSchema ? candidateSchemaFile : undefined,
+    validatorDiagnostics
   };
 }
 
@@ -293,8 +307,10 @@ export function generateFluxFastProject(
   }
   return {
     generatedFiles: snapshot.artifacts.map(artifact => artifact.path),
+    generatedValidators: snapshot.generatedValidators,
     registryPath: snapshot.registryPath,
-    schemaFile: snapshot.schemaFile
+    schemaFile: snapshot.schemaFile,
+    validatorDiagnostics: snapshot.validatorDiagnostics
   };
 }
 
@@ -329,8 +345,10 @@ export function checkFluxFastProject(
   return {
     checkedFiles,
     current: staleFiles.length === 0,
+    generatedValidators: snapshot.generatedValidators,
     registryPath: snapshot.registryPath,
     schemaFile: snapshot.schemaFile,
-    staleFiles
+    staleFiles,
+    validatorDiagnostics: snapshot.validatorDiagnostics
   };
 }

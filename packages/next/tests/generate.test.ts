@@ -194,29 +194,27 @@ describe("Pages Registry Generator", () => {
     const generatedDir = path.join(tmpDir, "src/.fluxfast");
     const outputFile = path.join(generatedDir, "pages.generated.ts");
 
-    expect(() =>
-      generateFluxFastProject({
-        pagesDir,
-        generatedDir,
-        outputFile,
-        schemaContent: schemaManifest({
-          tags: {
-            schema: {
-              type: "array",
-              items: { type: "string" },
-              uniqueItems: true
-            }
-          },
-          users: {
-            schema: {
-              type: "array",
-              items: { type: "string" }
-            }
+    const result = generateFluxFastProject({
+      pagesDir,
+      generatedDir,
+      outputFile,
+      schemaContent: schemaManifest({
+        tags: {
+          schema: {
+            type: "array",
+            items: { type: "string" },
+            uniqueItems: true
           }
-        }),
-        log: false
-      })
-    ).not.toThrow();
+        },
+        users: {
+          schema: {
+            type: "array",
+            items: { type: "string" }
+          }
+        }
+      }),
+      log: false
+    });
 
     const types = fs.readFileSync(
       path.join(generatedDir, "types.generated.ts"),
@@ -231,5 +229,12 @@ describe("Pages Registry Generator", () => {
     expect(validators).toContain("UsersResourceValidator");
     expect(validators).not.toContain("TagsResourceValidator");
     expect(validators).toContain('"uniqueItems"');
+    expect(result.generatedValidators).toEqual(["UsersResource"]);
+    expect(result.validatorDiagnostics).toEqual([
+      expect.objectContaining({
+        contract: "TagsResource",
+        keyword: "uniqueItems"
+      })
+    ]);
   });
 });

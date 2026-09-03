@@ -4,7 +4,11 @@ import {
   checkFluxFastProject,
   createPagesRegistrySnapshot,
 } from "../generate";
-import { findFluxFastResourceKeysWithUnknownTypes } from "../schema-compiler";
+import {
+  findFluxFastContractsWithUnknownTypes,
+  findFluxFastResourceKeysWithUnknownTypes,
+  pascalIdentifier
+} from "../schema-compiler";
 import {
   type FluxFastSchemaManifest,
   parseFluxFastSchemaManifest,
@@ -261,6 +265,27 @@ function countMessage(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function findSchemaModeConflicts(manifest: FluxFastSchemaManifest): string[] {
+  const generatedNames = new Map<
+    string,
+    { mode: string; sourceName: string }
+  >();
+  const conflicts: string[] = [];
+  for (const sourceName of Object.keys(manifest.types ?? {}).sort()) {
+    const entry = manifest.types![sourceName];
+    const generatedName = pascalIdentifier(sourceName, "Type");
+    const previous = generatedNames.get(generatedName);
+    if (previous && previous.mode !== entry.mode) {
+      conflicts.push(
+        `${JSON.stringify(previous.sourceName)} (${previous.mode}) and ${JSON.stringify(sourceName)} (${entry.mode}) both generate ${generatedName}`
+      );
+    } else if (!previous) {
+      generatedNames.set(generatedName, { mode: entry.mode, sourceName });
+    }
+  }
+  return conflicts;
+}
+
 function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
   const diagnostics: FluxDiagnostic[] = [];
   const schemaFile = path.join(project.generatedDir, "schema.generated.json");
@@ -307,7 +332,23 @@ function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
       "types.manifest",
       "Types",
       "pass",
-      `fluxfast-schema/1 manifest found at ${relativeSchemaFile}`
+      `${manifest.schema} manifest found at ${relativeSchemaFile}`
+    ),
+    diagnostic(
+      "types.fingerprint",
+      "Types",
+      "pass",
+      `Manifest fingerprint ${manifest.fingerprint}`
+    ),
+    diagnostic(
+      "types.general",
+      "Types",
+      "pass",
+      countMessage(
+        Object.keys(manifest.types ?? {}).length,
+        "general type contract",
+        "general type contracts"
+      )
     ),
     diagnostic(
       "types.resources",
@@ -334,11 +375,49 @@ function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
         "mutation operation",
         "mutation operations"
       )
+    ),
+    diagnostic(
+      "types.mutation-contracts",
+      "Types",
+      "pass",
+      countMessage(
+        manifest.mutations.filter(mutation => mutation.body != null).length,
+        "mutation body contract",
+        "mutation body contracts"
+      )
+    )
+  );
+
+  const modeConflicts = findSchemaModeConflicts(manifest);
+  diagnostics.push(
+    diagnostic(
+      "types.modes",
+      "Types",
+      modeConflicts.length === 0 ? "pass" : "warning",
+      modeConflicts.length === 0
+        ? "No schema mode conflicts detected"
+        : `Schema mode conflict: ${modeConflicts.join("; ")}`
     )
   );
 
   try {
     const unknownResources = findFluxFastResourceKeysWithUnknownTypes(manifest);
+    const unknownContracts = findFluxFastContractsWithUnknownTypes(manifest);
+    diagnostics.push(
+      diagnostic(
+        "types.unknown-count",
+        "Types",
+        unknownContracts.length === 0 ? "pass" : "warning",
+        countMessage(
+          unknownContracts.length,
+          "generated contract contains unknown",
+          "generated contracts contain unknown"
+        ) +
+          (unknownContracts.length === 0
+            ? ""
+            : `: ${unknownContracts.map(name => JSON.stringify(name)).join(", ")}`)
+      )
+    );
     if (unknownResources.length > 0) {
       diagnostics.push(
         diagnostic(
@@ -359,6 +438,46 @@ function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
       schemaFile,
       log: false,
     });
+    diagnostics.push(
+      diagnostic(
+        "types.validators",
+        "Types",
+        "pass",
+        countMessage(
+          result.generatedValidators.length,
+          "generated client validator",
+          "generated client validators"
+        )
+      ),
+      diagnostic(
+        "types.validators-unsupported",
+        "Types",
+        result.validatorDiagnostics.length === 0 ? "pass" : "warning",
+        countMessage(
+          result.validatorDiagnostics.length,
+          "contract cannot receive a client validator",
+          "contracts cannot receive client validators"
+        )
+      )
+    );
+    for (const [index, item] of result.validatorDiagnostics.entries()) {
+      diagnostics.push(
+        diagnostic(
+          `types.validator-unsupported.${index}`,
+          "Types",
+          "warning",
+          `${item.contract} cannot receive a client validator. ${item.message} TypeScript generation remains available. Server validation remains authoritative.`
+        )
+      );
+    }
+    diagnostics.push(
+      diagnostic(
+        "types.identifiers",
+        "Types",
+        "pass",
+        "No generated identifier collisions detected"
+      )
+    );
     const staleTypeFiles = result.staleFiles.filter(
       file => file !== result.registryPath
     );
@@ -380,6 +499,16 @@ function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("collides")) {
+      diagnostics.push(
+        diagnostic(
+          "types.identifiers",
+          "Types",
+          "warning",
+          `Generated identifier collision detected. ${message}`
+        )
+      );
+    }
     diagnostics.push(
       diagnostic(
         "types.generated",
