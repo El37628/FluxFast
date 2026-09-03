@@ -15,9 +15,15 @@ from pydantic import (
     model_validator,
 )
 
-from .contract import _validate_resource_key
+from .contract import _validate_contract_name, _validate_resource_key
 
-SCHEMA_MANIFEST_VERSION: Literal["fluxfast-schema/1"] = "fluxfast-schema/1"
+SCHEMA_MANIFEST_V1: Literal["fluxfast-schema/1"] = "fluxfast-schema/1"
+SCHEMA_MANIFEST_V2: Literal["fluxfast-schema/2"] = "fluxfast-schema/2"
+# Keep the v1 name as a compatibility alias for integrations that imported it
+# before schema/2 existed.  New code that needs the current format should use
+# ``SCHEMA_MANIFEST_V2`` explicitly.
+SCHEMA_MANIFEST_VERSION: Literal["fluxfast-schema/1"] = SCHEMA_MANIFEST_V1
+SCHEMA_MANIFEST_VERSION_2: Literal["fluxfast-schema/2"] = SCHEMA_MANIFEST_V2
 
 _FINGERPRINT_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _SEMVER_PATTERN = re.compile(
@@ -31,6 +37,7 @@ _SEMVER_PATTERN = re.compile(
 JsonSchema: TypeAlias = dict[str, JsonValue]
 RouteParameterLocation = Literal["path", "query"]
 MutationMethod = Literal["DELETE", "PATCH", "POST", "PUT"]
+ContractMode = Literal["serialization", "validation"]
 
 
 def _validate_metadata_name(value: str, *, label: str) -> str:
@@ -71,6 +78,15 @@ class _ManifestModel(BaseModel):
 class ResourceSchemaEntry(_ManifestModel):
     """Serialization-mode JSON Schema for one logical resource key."""
 
+    json_schema: JsonSchema = Field(alias="schema")
+
+    _schema_is_standard_json = field_validator("json_schema")(_validate_json_schema)
+
+
+class TypeSchemaEntry(_ManifestModel):
+    """JSON Schema and Pydantic mode for one named application contract."""
+
+    mode: ContractMode
     json_schema: JsonSchema = Field(alias="schema")
 
     _schema_is_standard_json = field_validator("json_schema")(_validate_json_schema)
@@ -144,9 +160,12 @@ class MutationRouteSchema(_ManifestModel):
 class SchemaManifest(_ManifestModel):
     """Complete versioned manifest consumed by FluxFast code generation."""
 
-    schema_version: Literal["fluxfast-schema/1"] = Field(alias="schema")
+    schema_version: Literal["fluxfast-schema/1", "fluxfast-schema/2"] = Field(
+        alias="schema"
+    )
     producer: str
     fingerprint: str
+    types: dict[str, TypeSchemaEntry] | None = None
     resources: dict[str, ResourceSchemaEntry] = Field(default_factory=dict)
     pages: list[PageRouteSchema] = Field(default_factory=list)
     mutations: list[MutationRouteSchema] = Field(default_factory=list)
@@ -174,3 +193,25 @@ class SchemaManifest(_ManifestModel):
         for key in value:
             _validate_resource_key(key)
         return value
+
+    @field_validator("types")
+    @classmethod
+    def validate_type_names(
+        cls,
+        value: dict[str, TypeSchemaEntry] | None,
+    ) -> dict[str, TypeSchemaEntry] | None:
+        if value is not None:
+            for name in value:
+                _validate_contract_name(name)
+        return value
+
+    @model_validator(mode="after")
+    def validate_schema_version_features(self) -> SchemaManifest:
+        if self.schema_version == SCHEMA_MANIFEST_V1:
+            if self.types is not None:
+                raise ValueError(
+                    "fluxfast-schema/1 cannot contain explicit type contracts"
+                )
+        elif self.types is None:
+            raise ValueError("fluxfast-schema/2 requires a types object")
+        return self

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  FLUXFAST_SCHEMA_MANIFEST_V2,
   FLUXFAST_SCHEMA_MANIFEST_VERSION,
   parseFluxFastSchemaManifest,
   SchemaManifestValidationError,
@@ -130,9 +131,61 @@ describe("FluxFast schema manifest validation", () => {
   it("rejects unknown schema versions", () => {
     expectInvalid(
       manifest => {
-        manifest.schema = "fluxfast-schema/2";
+        manifest.schema = "fluxfast-schema/3";
       },
-      /at \$\.schema: unsupported version "fluxfast-schema\/2"/
+      /at \$\.schema: unsupported version "fluxfast-schema\/3"/
+    );
+  });
+
+  it("accepts schema/2 with explicitly registered application types", () => {
+    const manifest = validManifest();
+    manifest.schema = FLUXFAST_SCHEMA_MANIFEST_V2;
+    manifest.types = {
+      User: {
+        mode: "serialization",
+        schema: {
+          type: "object",
+          properties: { id: { type: "integer" } },
+          required: ["id"]
+        }
+      }
+    };
+
+    expect(validateFluxFastSchemaManifest(manifest)).toBe(manifest);
+  });
+
+  it("requires types for schema/2 and rejects them for schema/1", () => {
+    const withoutTypes = validManifest();
+    withoutTypes.schema = FLUXFAST_SCHEMA_MANIFEST_V2;
+    expect(() => validateFluxFastSchemaManifest(withoutTypes)).toThrow(
+      /at \$\.types: is required for fluxfast-schema\/2/
+    );
+
+    const withTypes = validManifest();
+    withTypes.types = {};
+    expect(() => validateFluxFastSchemaManifest(withTypes)).toThrow(
+      /at \$\.types: fluxfast-schema\/1 cannot contain explicit type contracts/
+    );
+  });
+
+  it("validates contract names, modes, and schemas", () => {
+    const manifest = validManifest();
+    manifest.schema = FLUXFAST_SCHEMA_MANIFEST_V2;
+    manifest.types = {
+      "bad\nname": { mode: "serialization", schema: {} }
+    };
+    expect(() => validateFluxFastSchemaManifest(manifest)).toThrow(
+      /at \$\.types\["bad\\nname"\]: must not contain control characters/
+    );
+
+    manifest.types = { User: { mode: "both", schema: {} } };
+    expect(() => validateFluxFastSchemaManifest(manifest)).toThrow(
+      /at \$\.types\.User\.mode: must be either/
+    );
+
+    manifest.types = { User: { mode: "validation", schema: [] } };
+    expect(() => validateFluxFastSchemaManifest(manifest)).toThrow(
+      /at \$\.types\.User\.schema: must be an object/
     );
   });
 
