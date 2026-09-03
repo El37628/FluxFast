@@ -109,6 +109,14 @@ function prepareConsumer(projectRoot, manifestText) {
       },
     }, null, 2)}\n`,
   );
+  writeFile(
+    projectRoot,
+    "node_modules/@fluxfast/core/package.json",
+    `${JSON.stringify({
+      name: "@fluxfast/core",
+      version: corePackage.version,
+    }, null, 2)}\n`,
+  );
   writeFile(projectRoot, "tsconfig.json", "{}\n");
   writeFile(
     projectRoot,
