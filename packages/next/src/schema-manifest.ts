@@ -85,6 +85,9 @@ const MUTATION_METHODS = new Set<FluxFastMutationMethod>([
 
 type UnknownRecord = Record<string, unknown>;
 
+const MAX_SCHEMA_VALUE_NODES = 10_000;
+const MAX_SCHEMA_VALUE_DEPTH = 64;
+
 function fail(path: string, reason: string): never {
   throw new SchemaManifestValidationError(path, reason);
 }
@@ -166,8 +169,11 @@ function assertRoutePath(value: unknown, path: string): asserts value is string 
 function assertJsonSchema(value: unknown, path: string): asserts value is JsonSchema {
   assertRecord(value, path);
 
-  const pending: Array<{ path: string; value: unknown }> = [{ path, value }];
+  const pending: Array<{ path: string; value: unknown; depth: number }> = [
+    { path, value, depth: 0 }
+  ];
   const visited = new WeakSet<object>();
+  let nodes = 0;
 
   while (pending.length > 0) {
     const current = pending.pop()!;
@@ -179,6 +185,12 @@ function assertJsonSchema(value: unknown, path: string): asserts value is JsonSc
       typeof item === "boolean"
     ) {
       continue;
+    }
+    if (current.depth > MAX_SCHEMA_VALUE_DEPTH) {
+      fail(
+        current.path,
+        `schema value nesting exceeds the maximum of ${MAX_SCHEMA_VALUE_DEPTH}`
+      );
     }
     if (typeof item === "number") {
       if (!Number.isFinite(item)) {
@@ -196,19 +208,44 @@ function assertJsonSchema(value: unknown, path: string): asserts value is JsonSc
       fail(current.path, "must not contain circular or shared object references");
     }
     visited.add(item);
+    nodes += 1;
+    if (nodes > MAX_SCHEMA_VALUE_NODES) {
+      fail(
+        current.path,
+        `must not contain more than ${MAX_SCHEMA_VALUE_NODES} JSON value nodes`
+      );
+    }
 
     if (Array.isArray(item)) {
+      if (item.length > MAX_SCHEMA_VALUE_NODES) {
+        fail(
+          current.path,
+          `must not contain arrays with more than ${MAX_SCHEMA_VALUE_NODES} entries`
+        );
+      }
       for (let index = item.length - 1; index >= 0; index -= 1) {
-        pending.push({ path: `${current.path}[${index}]`, value: item[index] });
+        pending.push({
+          path: `${current.path}[${index}]`,
+          value: item[index],
+          depth: current.depth + 1
+        });
       }
       continue;
     }
 
     assertRecord(item, current.path);
-    for (const key of Object.keys(item)) {
+    const keys = Object.keys(item);
+    if (keys.length > MAX_SCHEMA_VALUE_NODES) {
+      fail(
+        current.path,
+        `must not contain objects with more than ${MAX_SCHEMA_VALUE_NODES} properties`
+      );
+    }
+    for (const key of keys) {
       pending.push({
         path: childPath(current.path, key),
-        value: item[key]
+        value: item[key],
+        depth: current.depth + 1
       });
     }
   }

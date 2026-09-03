@@ -271,6 +271,97 @@ interface SchemaWorkItem {
   readonly depth: number;
 }
 
+interface SchemaBoundsState {
+  nodes: number;
+}
+
+interface JsonValueWorkItem {
+  readonly value: unknown;
+  readonly path: string;
+  readonly depth: number;
+}
+
+function assertJsonValueBounds(
+  value: unknown,
+  path: string,
+  depth: number,
+  state: SchemaBoundsState
+): void {
+  const pending: JsonValueWorkItem[] = [{ value, path, depth }];
+  const visited = new WeakSet<object>();
+
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    const item = current.value;
+    if (
+      item === null ||
+      typeof item === "string" ||
+      typeof item === "number" ||
+      typeof item === "boolean"
+    ) {
+      continue;
+    }
+    if (current.depth > MAX_SCHEMA_DEPTH) {
+      fail(
+        current.path,
+        `schema value nesting exceeds the maximum of ${MAX_SCHEMA_DEPTH}`
+      );
+    }
+    if (typeof item !== "object") {
+      fail(current.path, "schema values must be JSON-compatible");
+    }
+    if (visited.has(item)) continue;
+    visited.add(item);
+    state.nodes += 1;
+    if (state.nodes > MAX_SCHEMA_NODES) {
+      fail(
+        current.path,
+        `schema contains more than ${MAX_SCHEMA_NODES} nodes`
+      );
+    }
+
+    let keys: string[];
+    if (Array.isArray(item)) {
+      if (item.length > MAX_SCHEMA_NODES) {
+        fail(
+          current.path,
+          `schema value array contains more than ${MAX_SCHEMA_NODES} entries`
+        );
+      }
+      for (let index = item.length - 1; index >= 0; index -= 1) {
+        pending.push({
+          value: item[index],
+          path: `${current.path}[${index}]`,
+          depth: current.depth + 1
+        });
+      }
+      continue;
+    }
+    if (!isRecord(item)) {
+      fail(current.path, "schema values must be plain JSON objects");
+    }
+    try {
+      keys = Object.keys(item);
+    } catch {
+      fail(current.path, "schema value properties could not be enumerated");
+    }
+    if (keys.length > MAX_SCHEMA_NODES) {
+      fail(
+        current.path,
+        `schema value contains more than ${MAX_SCHEMA_NODES} properties`
+      );
+    }
+    for (let index = keys.length - 1; index >= 0; index -= 1) {
+      const key = keys[index];
+      pending.push({
+        value: item[key],
+        path: childPath(current.path, key),
+        depth: current.depth + 1
+      });
+    }
+  }
+}
+
 /**
  * Bound schema traversal before the recursive compiler passes run. The
  * manifest is developer-authored, but generated code must fail with a stable
@@ -279,7 +370,7 @@ interface SchemaWorkItem {
 function assertSchemaBounds(schema: SchemaNode, path: string): void {
   const pending: SchemaWorkItem[] = [{ schema, path, depth: 0 }];
   const visited = new WeakSet<object>();
-  let nodes = 0;
+  const state: SchemaBoundsState = { nodes: 0 };
 
   while (pending.length > 0) {
     const current = pending.pop()!;
@@ -293,8 +384,8 @@ function assertSchemaBounds(schema: SchemaNode, path: string): void {
     const record = schemaRecord(current.schema, current.path);
     if (visited.has(record)) continue;
     visited.add(record);
-    nodes += 1;
-    if (nodes > MAX_SCHEMA_NODES) {
+    state.nodes += 1;
+    if (state.nodes > MAX_SCHEMA_NODES) {
       fail(
         current.path,
         `schema contains more than ${MAX_SCHEMA_NODES} nodes`
@@ -314,28 +405,38 @@ function assertSchemaBounds(schema: SchemaNode, path: string): void {
       );
     }
     for (const key of keys) {
-      if (!SUBSCHEMA_KEYS.has(key)) continue;
+      if (!SUBSCHEMA_KEYS.has(key)) {
+        if (Object.prototype.hasOwnProperty.call(record, key)) {
+          assertJsonValueBounds(
+            record[key],
+            childPath(current.path, key),
+            current.depth + 1,
+            state
+          );
+        }
+        continue;
+      }
       const child = record[key];
-      const childPath = current.path + "." + key;
+      const subschemaPath = current.path + "." + key;
       if (key === "$defs" || key === "definitions" || key === "properties") {
-        const map = schemaRecord(child, childPath);
+        const map = schemaRecord(child, subschemaPath);
         let names: string[];
         try {
           names = Object.keys(map);
         } catch {
-          fail(childPath, "schema map could not be enumerated");
+          fail(subschemaPath, "schema map could not be enumerated");
         }
         if (names.length > MAX_SCHEMA_NODES) {
           fail(
-            childPath,
+            subschemaPath,
             `schema map contains more than ${MAX_SCHEMA_NODES} entries`
           );
         }
         for (const name of names) {
           const item = map[name];
           pending.push({
-            schema: typeof item === "boolean" ? item : schemaRecord(item, childPath + "." + name),
-            path: childPath + "." + name,
+            schema: typeof item === "boolean" ? item : schemaRecord(item, subschemaPath + "." + name),
+            path: subschemaPath + "." + name,
             depth: current.depth + 1
           });
         }
@@ -347,18 +448,18 @@ function assertSchemaBounds(schema: SchemaNode, path: string): void {
         key === "oneOf" ||
         key === "prefixItems"
       ) {
-        if (!Array.isArray(child)) fail(childPath, "expected an array of JSON Schemas");
+        if (!Array.isArray(child)) fail(subschemaPath, "expected an array of JSON Schemas");
         if (child.length > MAX_SCHEMA_NODES) {
           fail(
-            childPath,
+            subschemaPath,
             `schema branch list contains more than ${MAX_SCHEMA_NODES} entries`
           );
         }
         for (let index = 0; index < child.length; index += 1) {
           const item = child[index];
           pending.push({
-            schema: typeof item === "boolean" ? item : schemaRecord(item, childPath + "[" + index + "]"),
-            path: childPath + "[" + index + "]",
+            schema: typeof item === "boolean" ? item : schemaRecord(item, subschemaPath + "[" + index + "]"),
+            path: subschemaPath + "[" + index + "]",
             depth: current.depth + 1
           });
         }
@@ -366,8 +467,8 @@ function assertSchemaBounds(schema: SchemaNode, path: string): void {
       }
       if (typeof child !== "boolean") {
         pending.push({
-          schema: schemaRecord(child, childPath),
-          path: childPath,
+          schema: schemaRecord(child, subschemaPath),
+          path: subschemaPath,
           depth: current.depth + 1
         });
       }

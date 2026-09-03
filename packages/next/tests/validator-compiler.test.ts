@@ -9,6 +9,7 @@ import {
   compileFluxFastValidatorsWithDiagnostics,
   compileJsonSchemaToValidationPlan
 } from "../src/validator-compiler";
+import { compileFluxFastTypes } from "../src/schema-compiler";
 
 const fingerprint = "f".repeat(64);
 
@@ -363,6 +364,36 @@ describe("FluxFast validator compiler", () => {
     expect(() => compileJsonSchemaToValidationPlan(nested)).toThrow(
       /schema nesting exceeds the maximum/
     );
+  });
+
+  it("bounds deeply nested literal values before recursive rendering", () => {
+    let literal: unknown = "leaf";
+    for (let depth = 0; depth < 65; depth += 1) {
+      literal = { value: literal };
+    }
+
+    expect(() =>
+      compileJsonSchemaToValidationPlan({ const: literal } as Record<string, unknown>)
+    ).toThrow(/schema value nesting exceeds the maximum/);
+
+    expect(() =>
+      compileFluxFastValidators(
+        manifest({
+          deeplyNested: { schema: { const: literal } }
+        })
+      )
+    ).toThrow(/schema value nesting exceeds the maximum/);
+
+    expect(() =>
+      compileFluxFastTypes(
+        manifest({}, [], {
+          DeepLiteral: {
+            mode: "serialization",
+            schema: { const: literal }
+          }
+        })
+      )
+    ).toThrow(/schema value nesting exceeds the maximum/);
   });
 
   it("supports schema/1 and remains byte-for-byte deterministic", () => {
