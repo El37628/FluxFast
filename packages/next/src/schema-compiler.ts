@@ -518,6 +518,7 @@ function canRenderInterface(schema: JsonSchema): boolean {
 
 class ResourceTypeCompiler {
   private readonly definitions = new Map<string, NamedDefinition>();
+  private readonly explicitTypeNames = new Map<string, string>();
   private readonly resourceKeyNames = new Map<string, string>();
   private readonly resourceNames = new Map<string, string>();
   private readonly resources: ResourceAlias[] = [];
@@ -525,6 +526,7 @@ class ResourceTypeCompiler {
   constructor(private readonly manifest: FluxFastSchemaManifest) {}
 
   compile(): string {
+    this.collectExplicitTypes();
     this.collectResources();
     const resources = [...this.resources].sort((left, right) =>
       compareText(left.context.resourceKey, right.context.resourceKey)
@@ -688,6 +690,34 @@ class ResourceTypeCompiler {
     }
   }
 
+  private collectExplicitTypes(): void {
+    for (const typeName of Object.keys(this.manifest.types ?? {}).sort()) {
+      const typePath = childPath("$.types", typeName);
+      const schemaPath = `${typePath}.schema`;
+      const schema = this.manifest.types![typeName].schema;
+      const generatedName = pascalIdentifier(typeName, "Type");
+      const existingName = this.explicitTypeNames.get(generatedName);
+      if (existingName !== undefined) {
+        fail(
+          typePath,
+          `type contract ${JSON.stringify(typeName)} collides with ${JSON.stringify(
+            existingName
+          )} as TypeScript name ${generatedName}`
+        );
+      }
+      this.explicitTypeNames.set(generatedName, typeName);
+
+      const context: CompilationContext = {
+        references: new Map(),
+        resourceAlias: generatedName,
+        resourceKey: typeName,
+        rootType: generatedName
+      };
+      this.collectDefinitions(schema, context, schemaPath);
+      this.registerDefinition(generatedName, schema, context, schemaPath);
+    }
+  }
+
   private collectDefinitions(
     schema: JsonSchema,
     context: CompilationContext,
@@ -771,10 +801,20 @@ class ResourceTypeCompiler {
   }
 }
 
-/** Compile validated Pydantic serialization schemas into deterministic TypeScript. */
-export function compileFluxFastResourceTypes(value: unknown): string {
+/** Compile validated FluxFast schemas into deterministic TypeScript contracts. */
+export function compileFluxFastTypes(value: unknown): string {
   const manifest = validateFluxFastSchemaManifest(value);
   return new ResourceTypeCompiler(manifest).compile();
+}
+
+/**
+ * Compile validated resource schemas into deterministic TypeScript.
+ *
+ * This compatibility name now also emits explicit application contracts from
+ * schema/2 manifests; existing resource-only callers keep their old output.
+ */
+export function compileFluxFastResourceTypes(value: unknown): string {
+  return compileFluxFastTypes(value);
 }
 
 /** Find resource contracts whose generated TypeScript contains `unknown`. */
