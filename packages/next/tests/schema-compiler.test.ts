@@ -3,7 +3,11 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { compileFluxFastResourceTypes } from "../src/schema-compiler";
+import {
+  compileFluxFastResourceTypes,
+  findFluxFastContractsWithUnknownTypes,
+  findFluxFastResourceKeysWithUnknownTypes
+} from "../src/schema-compiler";
 
 const fingerprint = "b".repeat(64);
 
@@ -294,6 +298,151 @@ declare module "@fluxfast/core" {
   totals: "totals",
 } as const;`);
     expect(output).not.toContain("any");
+  });
+
+  it("detects semantic unknowns without confusing literal values or property names", () => {
+    const input = schema2Manifest({
+      EnumUnknown: {
+        mode: "validation",
+        schema: { enum: ["unknown"] }
+      },
+      ConstUnknown: {
+        mode: "validation",
+        schema: { const: "unknown" }
+      },
+      PropertyUnknown: {
+        mode: "validation",
+        schema: {
+          type: "object",
+          properties: { unknown: { type: "string" } }
+        }
+      },
+      LiteralMatchesDefinition: {
+        mode: "validation",
+        schema: {
+          $defs: { Mystery: {} },
+          const: "Mystery"
+        }
+      },
+      Loose: {
+        mode: "validation",
+        schema: {}
+      }
+    });
+
+    expect(findFluxFastContractsWithUnknownTypes(input)).toEqual(["Loose"]);
+    expect(
+      findFluxFastResourceKeysWithUnknownTypes(
+        manifest({
+          literals: {
+            schema: {
+              type: "object",
+              properties: {
+                unknown: { const: "unknown" }
+              }
+            }
+          },
+          loose: { schema: {} }
+        })
+      )
+    ).toEqual(["loose"]);
+  });
+
+  it("counts a reused explicit and mutation contract once", () => {
+    const body = {};
+    const input = schema2Manifest(
+      {
+        CreateRoomBody: { mode: "validation", schema: body }
+      },
+      {},
+      [
+        {
+          name: "create_room",
+          path: "/rooms",
+          method: "POST",
+          parameters: [],
+          body
+        }
+      ]
+    );
+
+    expect(findFluxFastContractsWithUnknownTypes(input)).toEqual([
+      "CreateRoomBody"
+    ]);
+  });
+
+  it("propagates unknown through mutually recursive definitions", () => {
+    const definitions = {
+      A: {
+        type: "object",
+        properties: {
+          next: { $ref: "#/$defs/B" },
+          value: {}
+        }
+      },
+      B: {
+        type: "object",
+        properties: { next: { $ref: "#/$defs/A" } }
+      }
+    };
+    const input = schema2Manifest({
+      First: {
+        mode: "validation",
+        schema: { $defs: definitions, $ref: "#/$defs/A" }
+      },
+      Second: {
+        mode: "validation",
+        schema: { $defs: definitions, $ref: "#/$defs/B" }
+      }
+    });
+
+    expect(findFluxFastContractsWithUnknownTypes(input)).toEqual([
+      "First",
+      "Second"
+    ]);
+  });
+
+  it("handles repeated references to one acyclic unknown definition", () => {
+    const input = schema2Manifest({
+      Repeated: {
+        mode: "validation",
+        schema: {
+          $defs: { Shared: {} },
+          type: "object",
+          properties: {
+            left: { $ref: "#/$defs/Shared" },
+            right: { $ref: "#/$defs/Shared" }
+          }
+        }
+      }
+    });
+
+    expect(findFluxFastContractsWithUnknownTypes(input)).toEqual([
+      "Repeated"
+    ]);
+  });
+
+  it("walks a long shallow reference graph without using the call stack", () => {
+    const definitions: Record<string, Record<string, unknown>> = {};
+    const definitionCount = 9_000;
+    for (let index = 0; index < definitionCount; index += 1) {
+      definitions[`Node${index}`] = index === definitionCount - 1
+        ? {}
+        : { $ref: `#/$defs/Node${index + 1}` };
+    }
+    const input = schema2Manifest({
+      LongChain: {
+        mode: "validation",
+        schema: {
+          $defs: definitions,
+          $ref: "#/$defs/Node0"
+        }
+      }
+    });
+
+    expect(findFluxFastContractsWithUnknownTypes(input)).toEqual([
+      "LongChain"
+    ]);
   });
 
   it("supports nested, recursive, and allOf references", () => {

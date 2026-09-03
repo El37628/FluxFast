@@ -639,6 +639,7 @@ export interface ValidatorCompilationDiagnostic {
 
 export interface ValidatorCompilationResult {
   readonly content: string;
+  readonly contracts: readonly string[];
   readonly diagnostics: readonly ValidatorCompilationDiagnostic[];
 }
 
@@ -1390,6 +1391,7 @@ export function compileFluxFastValidatorsWithDiagnostics(
       result.diagnostics,
       true
     ),
+    contracts: Object.freeze(result.contracts.map(contract => contract.name)),
     diagnostics: Object.freeze([...result.diagnostics])
   };
 }

@@ -19,6 +19,7 @@ import {
   type InitPlan,
 } from "./init";
 import { detectFluxProject } from "./project";
+import type { ValidatorCompilationDiagnostic } from "../validator-compiler";
 
 export interface CliIo {
   cwd: string;
@@ -136,6 +137,20 @@ function renderFixes(report: FluxValidationReport, io: CliIo): void {
   io.stdout("\nFix:\n");
   for (const fix of fixes) {
     io.stdout(`  ${fix}`);
+  }
+}
+
+function renderValidatorDiagnostics(
+  diagnostics: readonly ValidatorCompilationDiagnostic[],
+  io: CliIo
+): void {
+  for (const item of diagnostics) {
+    io.stdout(`! ${item.contract} cannot receive a client validator.`);
+    io.stdout(`  ${item.message}`);
+  }
+  if (diagnostics.length > 0) {
+    io.stdout("  TypeScript generation remains available.");
+    io.stdout("  Server validation remains authoritative.");
   }
 }
 
@@ -287,6 +302,7 @@ function runGenerate(args: string[], io: CliIo): number {
 
   if (check) {
     const result = checkFluxFastProject(options);
+    renderValidatorDiagnostics(result.validatorDiagnostics, io);
     if (result.current) {
       io.stdout("✓ Generated FluxFast files are current.");
       return 0;
@@ -300,6 +316,7 @@ function runGenerate(args: string[], io: CliIo): number {
   }
 
   const result = generateFluxFastProject(options);
+  renderValidatorDiagnostics(result.validatorDiagnostics, io);
   if (schemaSourceFile !== undefined && result.schemaFile) {
     io.stdout(
       `✓ Generated FluxFast schema at ${relativeProjectPath(project, result.schemaFile).replace(/\\/g, "/")}`

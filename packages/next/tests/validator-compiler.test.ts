@@ -285,6 +285,7 @@ describe("FluxFast validator compiler", () => {
         path: "$.resources.rooms.schema.uniqueItems"
       })
     ]);
+    expect(result.contracts).toEqual(["User", "UsersResource"]);
     expect(result.content).toContain("UsersResourceValidator");
     expect(result.content).toContain("UserValidator");
     expect(result.content).not.toContain("RoomsResourceValidator");
