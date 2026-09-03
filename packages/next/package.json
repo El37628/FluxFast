@@ -39,7 +39,7 @@
     },
     "./server": {
       "types": "./dist/server.d.ts",
-      "import": "./dist/esm/server.js",
+      "import": "./dist/server.js",
       "require": "./dist/server.js",
       "default": "./dist/server.js"
     },

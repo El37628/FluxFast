@@ -18,18 +18,21 @@ async function main() {
     coreEsm,
     nextEsm,
     nextClientEsm,
+    nextServerEsm,
     nextGenerateEsm,
     nextConfigEsm,
   ] = await Promise.all([
     import("@fluxfast/core"),
     import("@fluxfast/next"),
     import("@fluxfast/next/client"),
+    import("@fluxfast/next/server"),
     import("@fluxfast/next/generate"),
     import("@fluxfast/next/next-config"),
   ]);
   assert.equal(typeof coreEsm.createValidator, "function");
   assert.equal(typeof nextEsm.useForm, "function");
   assert.equal(typeof nextClientEsm.useForm, "function");
+  assert.equal(typeof nextServerEsm.createFluxNextPage, "function");
   assert.equal(typeof nextGenerateEsm.generateFluxFastProject, "function");
   assert.equal(typeof nextConfigEsm.withFluxFast, "function");
   for (const packageName of ["core", "next"]) {
