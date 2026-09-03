@@ -37,8 +37,39 @@ function validationPatternError(pattern: string): string | undefined {
   if (/\(\?(?:[=!]|<[=!]|[a-zA-Z-]+(?:\)|:|=|!))/.test(pattern)) {
     return "lookaround or inline regex flags are not supported by the native validator";
   }
+  if (/\(\?P<|\(\?<[^=!]/.test(pattern)) {
+    return "named capture groups are not supported by the native validator";
+  }
   if (/\)(?:[*+?]|\{\d+(?:,\d*)?\})(?:[?+])?/.test(pattern)) {
     return "quantified groups are rejected to keep validation traversal bounded";
+  }
+  let quantifiers = 0;
+  let inCharacterClass = false;
+  let escaped = false;
+  for (const character of pattern) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === "[") {
+      inCharacterClass = true;
+      continue;
+    }
+    if (character === "]") {
+      inCharacterClass = false;
+      continue;
+    }
+    if (inCharacterClass) continue;
+    if (character === "*" || character === "+" || character === "?") {
+      quantifiers += 1;
+    }
+  }
+  if (quantifiers > 1) {
+    return "patterns with multiple quantifiers are rejected to keep validation linear";
   }
   return undefined;
 }
@@ -657,9 +688,9 @@ class JsonSchemaPlanCompiler {
           try {
             new RegExp(pattern, "u");
           } catch (error) {
-            fail(
+            unsupported(
               path + ".pattern",
-              "is not a valid JavaScript regular expression (" +
+              "is not a regular expression supported by the native validator (" +
                 (error instanceof Error ? error.message : String(error)) +
                 ")",
               "pattern"

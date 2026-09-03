@@ -311,6 +311,49 @@ describe("FluxFast validator compiler", () => {
     }
   });
 
+  it("reports regex syntax and backtracking patterns as unsupported contracts", () => {
+    const result = compileFluxFastValidatorsWithDiagnostics(
+      manifest(
+        {
+          unsafe: {
+            schema: {
+              type: "string",
+              pattern: "(?P<word>a+)"
+            }
+          },
+          backtracking: {
+            schema: {
+              type: "string",
+              pattern: "^a*a*a*a*a*b$"
+            }
+          },
+          safe: {
+            schema: {
+              type: "string",
+              pattern: "^item-[0-9]+$"
+            }
+          }
+        }
+      )
+    );
+
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        contract: "BacktrackingResource",
+        keyword: "pattern",
+        path: "$.resources.backtracking.schema.pattern"
+      }),
+      expect.objectContaining({
+        contract: "UnsafeResource",
+        keyword: "pattern",
+        path: "$.resources.unsafe.schema.pattern"
+      })
+    ]);
+    expect(result.content).toContain("SafeResourceValidator");
+    expect(result.content).not.toContain("UnsafeResourceValidator");
+    expect(result.content).not.toContain("BacktrackingResourceValidator");
+  });
+
   it("supports schema/1 and remains byte-for-byte deterministic", () => {
     const input = manifest(
       {
