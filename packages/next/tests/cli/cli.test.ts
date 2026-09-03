@@ -276,6 +276,7 @@ describe("FluxFast CLI", () => {
     const generatedFiles = [
       project.registryPath,
       path.join(project.generatedDir, "types.generated.ts"),
+      path.join(project.generatedDir, "validators.generated.ts"),
       path.join(project.generatedDir, "routes.generated.ts"),
       path.join(project.generatedDir, "mutations.generated.ts"),
     ];
@@ -315,6 +316,7 @@ describe("FluxFast CLI", () => {
     const generatedFiles = [
       project.registryPath,
       path.join(project.generatedDir, "types.generated.ts"),
+      path.join(project.generatedDir, "validators.generated.ts"),
       path.join(project.generatedDir, "routes.generated.ts"),
       path.join(project.generatedDir, "mutations.generated.ts"),
     ];
