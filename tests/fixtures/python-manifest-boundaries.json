@@ -1,0 +1,16 @@
+{
+  "schema": "fluxfast-schema/2",
+  "producer": "0.8.0",
+  "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "types": {
+    "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀": {
+      "mode": "validation",
+      "schema": {
+        "minimum": 9007199254740991
+      }
+    }
+  },
+  "resources": {},
+  "pages": [],
+  "mutations": []
+}

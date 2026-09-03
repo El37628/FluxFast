@@ -1,11 +1,26 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import {
+  DEFAULT_VALIDATION_MAX_OPERATIONS,
   ValidationError,
   createValidator,
   formatValidationPath,
   refineValidator,
   type ValidationPlan
 } from "../src";
+
+interface ValidationPatternCases {
+  accepted: Array<{ pattern: string; valid: string; invalid: string }>;
+  rejected: string[];
+}
+
+const validationPatternCases = JSON.parse(
+  fs.readFileSync(
+    path.resolve(__dirname, "../../../tests/fixtures/validation-pattern-cases.json"),
+    "utf8"
+  )
+) as ValidationPatternCases;
 
 describe("FluxFast validation runtime", () => {
   it("validates primitives and exposes the result, guard, and assertion APIs", () => {
@@ -438,6 +453,148 @@ describe("FluxFast validation runtime", () => {
     expect(() => arrayValidator.validate(revoked.proxy)).not.toThrow();
   });
 
+  it("bounds huge sparse arrays and hostile length or prototype traps", () => {
+    const validator = createValidator(
+      { kind: "array", items: { kind: "string" } },
+      { maxOperations: 8 }
+    );
+    const sparse: unknown[] = [];
+    sparse.length = 1_000_000_000;
+    expect(validator.validate(sparse)).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "maxOperations" })
+      ])
+    });
+
+    const throwingLength = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === "length") throw new Error("length trap");
+        return Reflect.get(target, property, receiver);
+      }
+    });
+    expect(() => validator.validate(throwingLength)).not.toThrow();
+    expect(validator.validate(throwingLength)).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "read" })]
+    });
+
+    const throwingPrototype = new Proxy({}, {
+      getPrototypeOf() {
+        throw new Error("prototype trap");
+      }
+    });
+    const objectValidator = createValidator({ kind: "object" });
+    expect(() => objectValidator.validate(throwingPrototype)).not.toThrow();
+    expect(objectValidator.validate(throwingPrototype)).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "type" })]
+    });
+  });
+
+  it("applies the operation boundary before pattern or format work", () => {
+    const maximumStringLength = DEFAULT_VALIDATION_MAX_OPERATIONS - 1;
+    const atBudget = "a".repeat(maximumStringLength);
+    const overBudget = `${atBudget}a`;
+    const hostileNonMatch = `${"a".repeat(maximumStringLength - 1)}!`;
+    const pattern = createValidator({ kind: "string", pattern: "^a+$" });
+    const format = createValidator({ kind: "string", format: "email" });
+
+    expect(pattern.is(atBudget)).toBe(true);
+    expect(pattern.is(hostileNonMatch)).toBe(false);
+    expect(pattern.validate(overBudget)).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "maxOperations" })]
+    });
+    expect(format.validate(overBudget)).toMatchObject({
+      valid: false,
+      issues: [expect.objectContaining({ code: "maxOperations" })]
+    });
+  });
+
+  it("accepts shared DAG values and null-prototype prototype-sensitive properties", () => {
+    const childPlan: ValidationPlan = {
+      kind: "object",
+      properties: { value: { kind: "string" } },
+      required: ["value"]
+    };
+    const validator = createValidator({
+      kind: "object",
+      properties: {
+        left: childPlan,
+        right: childPlan,
+        dangerous: {
+          kind: "object",
+          properties: Object.fromEntries([
+            ["__proto__", { kind: "string" }],
+            ["constructor", { kind: "string" }],
+            ["prototype", { kind: "string" }]
+          ]),
+          required: ["__proto__", "constructor", "prototype"]
+        }
+      },
+      required: ["left", "right", "dangerous"]
+    });
+    const shared = { value: "safe" };
+    const dangerous = Object.create(null) as Record<string, unknown>;
+    dangerous.__proto__ = "safe";
+    dangerous.constructor = "safe";
+    dangerous.prototype = "safe";
+
+    expect(validator.is({ left: shared, right: shared, dangerous })).toBe(true);
+    expect(Object.prototype).not.toHaveProperty("polluted");
+  });
+
+  it("caps and freezes hundreds of independent issues", () => {
+    const properties = Object.fromEntries(
+      Array.from({ length: 250 }, (_, index) => [
+        `field${index}`,
+        { kind: "string" as const }
+      ])
+    );
+    const validator = createValidator({
+      kind: "object",
+      properties,
+      required: Object.keys(properties)
+    });
+    const result = validator.validate({});
+
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.issues).toHaveLength(100);
+    expect(Object.isFrozen(result.issues)).toBe(true);
+    for (const issue of result.issues) {
+      expect(Object.isFrozen(issue)).toBe(true);
+      expect(Object.isFrozen(issue.path)).toBe(true);
+    }
+  });
+
+  it("distinguishes deep values from cycles and reports the depth bound", () => {
+    const recursive: ValidationPlan = {
+      kind: "ref",
+      name: "Node",
+      definitions: {
+        Node: {
+          kind: "object",
+          properties: { child: { kind: "ref", name: "Node" } },
+          required: ["child"]
+        }
+      }
+    };
+    let value: Record<string, unknown> = {};
+    for (let depth = 0; depth < 70; depth += 1) {
+      value = { child: value };
+    }
+    const result = createValidator(recursive).validate(value);
+    expect(result).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ code: "maxDepth" })])
+    });
+    if (!result.valid) {
+      expect(result.issues.some(issue => issue.code === "cycle")).toBe(false);
+    }
+  });
+
   it("uses exact multipleOf checks for safe integers and decimal boundaries", () => {
     const even = createValidator({ kind: "number", multipleOf: 2 });
     expect(even.is(Number.MAX_SAFE_INTEGER)).toBe(false);
@@ -464,6 +621,27 @@ describe("FluxFast validation runtime", () => {
       /multiple quantifiers/
     );
     expect(createValidator({ kind: "string", pattern: "^é+$" }).is("éé")).toBe(true);
+  });
+
+  it("enforces the shared adversarial pattern policy table", () => {
+    for (const testCase of validationPatternCases.accepted) {
+      const validator = createValidator({
+        kind: "string",
+        pattern: testCase.pattern
+      });
+      expect(validator.is(testCase.valid), testCase.pattern).toBe(true);
+      expect(validator.is(testCase.invalid), testCase.pattern).toBe(false);
+    }
+    for (const pattern of validationPatternCases.rejected) {
+      expect(
+        () => createValidator({ kind: "string", pattern }),
+        pattern
+      ).toThrow();
+    }
+    expect(() => createValidator({
+      kind: "string",
+      pattern: "a".repeat(8_193)
+    })).toThrow(/pattern is too long/);
   });
 
   it("accepts Pydantic date and time spellings while rejecting impossible years", () => {
@@ -523,6 +701,36 @@ describe("FluxFast validation runtime", () => {
     expect(() => createValidator({ kind: "any", examples: [nested] })).toThrow(
       /plan values exceed the maximum nesting depth/
     );
+  });
+
+  it("enforces exact validation-plan child, string, cycle, and sharing boundaries", () => {
+    expect(() => createValidator({
+      kind: "any",
+      examples: Array.from({ length: 10_000 }, () => null)
+    })).not.toThrow();
+    expect(() => createValidator({
+      kind: "any",
+      examples: Array.from({ length: 10_001 }, () => null)
+    })).toThrow(/plan arrays contain more than 10000 entries/);
+
+    expect(() => createValidator({
+      kind: "any",
+      description: "x".repeat(65_536)
+    })).not.toThrow();
+    expect(() => createValidator({
+      kind: "any",
+      description: "x".repeat(65_537)
+    })).toThrow(/string exceeds the maximum length of 65536/);
+
+    const circular: ValidationPlan = { kind: "array", items: { kind: "any" } };
+    (circular as { items: ValidationPlan }).items = circular;
+    expect(() => createValidator(circular)).toThrow(/plan values cannot be circular/);
+
+    const shared: ValidationPlan = { kind: "string" };
+    expect(() => createValidator({
+      kind: "tuple",
+      items: [shared, shared]
+    })).not.toThrow();
   });
 
   it("enforces one aggregate budget across plan JSON values", () => {

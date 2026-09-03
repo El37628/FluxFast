@@ -18,6 +18,7 @@ type SchemaNode = JsonSchema | boolean;
 type PlanDocument = ValidationPlanDocument;
 
 const VALIDATION_PATTERN_MAX_LENGTH = 8192;
+const VALIDATION_PATTERN_MAX_REPETITION = 10_000;
 
 /**
  * Keep compiler output portable when it is consumed with the published core
@@ -46,6 +47,7 @@ function validationPatternError(pattern: string): string | undefined {
   let quantifiers = 0;
   let inCharacterClass = false;
   let escaped = false;
+  let hasAlternation = false;
   for (let index = 0; index < pattern.length; index += 1) {
     const character = pattern[index];
     if (escaped) {
@@ -65,14 +67,26 @@ function validationPatternError(pattern: string): string | undefined {
       continue;
     }
     if (inCharacterClass) continue;
+    if (character === "|") {
+      hasAlternation = true;
+      continue;
+    }
     if (character === "?" && pattern[index - 1] === "(") continue;
     if (character === "*" || character === "+" || character === "?") {
       quantifiers += 1;
       continue;
     }
     if (character === "{") {
-      const quantifier = /^\{\d+(?:,\d*)?\}/.exec(pattern.slice(index));
+      const quantifier = /^\{(\d+)(?:,(\d*))?\}/.exec(pattern.slice(index));
       if (quantifier) {
+        const minimum = Number(quantifier[1]);
+        const maximum = quantifier[2] ? Number(quantifier[2]) : minimum;
+        if (
+          minimum > VALIDATION_PATTERN_MAX_REPETITION ||
+          maximum > VALIDATION_PATTERN_MAX_REPETITION
+        ) {
+          return `pattern repetition exceeds the maximum of ${VALIDATION_PATTERN_MAX_REPETITION}`;
+        }
         quantifiers += 1;
         index += quantifier[0].length - 1;
       }
@@ -80,6 +94,12 @@ function validationPatternError(pattern: string): string | undefined {
   }
   if (quantifiers > 1) {
     return "patterns with multiple quantifiers are rejected to keep validation linear";
+  }
+  if (hasAlternation) {
+    return "patterns with alternation are rejected to keep validation linear";
+  }
+  if (quantifiers > 0 && !pattern.startsWith("^")) {
+    return "quantified patterns must be anchored at the start to keep validation linear";
   }
   return undefined;
 }
@@ -608,6 +628,21 @@ function decodeReference(reference: string, path: string): string {
     fail(
       path,
       "contains invalid URI escaping: " + JSON.stringify(reference),
+      "$ref"
+    );
+  }
+  if (decoded.includes("/")) {
+    fail(
+      path,
+      "must point directly to a local definition; received " +
+        JSON.stringify(reference),
+      "$ref"
+    );
+  }
+  if (/~(?:[^01]|$)/.test(decoded)) {
+    fail(
+      path,
+      "contains invalid JSON Pointer escaping: " + JSON.stringify(reference),
       "$ref"
     );
   }

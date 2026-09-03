@@ -145,6 +145,123 @@ describe("Pages Registry Generator", () => {
     expect(fs.readFileSync(outsideFile, "utf8")).toBe("leave me alone");
   });
 
+  it("refuses page-only and schema generation through a symlinked output directory", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-output-test-"));
+    fs.mkdirSync(path.dirname(generatedDir), { recursive: true });
+    fs.symlinkSync(outside, generatedDir, "dir");
+
+    try {
+      expect(() => generatePagesRegistry({
+        pagesDir,
+        outputFile: path.join(generatedDir, "pages.generated.ts"),
+        log: false
+      })).toThrow(/must not traverse the symbolic link/);
+      expect(fs.readdirSync(outside)).toEqual([]);
+
+      expect(() => generateFluxFastProject({
+        pagesDir,
+        generatedDir,
+        outputFile: path.join(generatedDir, "pages.generated.ts"),
+        schemaContent: schemaManifest(),
+        log: false
+      })).toThrow(/must not traverse the symbolic link/);
+      expect(fs.readdirSync(outside)).toEqual([]);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses an intermediate symlink in a nested output directory", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-nested-output-test-"));
+    const redirected = path.join(tmpDir, "src/redirected");
+    const generatedDir = path.join(redirected, "nested/.fluxfast");
+    fs.mkdirSync(path.dirname(redirected), { recursive: true });
+    fs.symlinkSync(outside, redirected, "dir");
+
+    try {
+      expect(() => generateFluxFastProject({
+        pagesDir,
+        generatedDir,
+        outputFile: path.join(generatedDir, "pages.generated.ts"),
+        schemaContent: schemaManifest(),
+        log: false
+      })).toThrow(/must not traverse the symbolic link/);
+      expect(fs.readdirSync(outside)).toEqual([]);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    "schema.generated.json",
+    "pages.generated.ts",
+    "types.generated.ts",
+    "validators.generated.ts",
+    "routes.generated.ts",
+    "mutations.generated.ts"
+  ])("keeps every generated artifact unchanged when %s is a symlink", unsafeName => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-artifact-test-"));
+    const names = [
+      "schema.generated.json",
+      "pages.generated.ts",
+      "types.generated.ts",
+      "validators.generated.ts",
+      "routes.generated.ts",
+      "mutations.generated.ts"
+    ];
+    fs.mkdirSync(generatedDir, { recursive: true });
+    for (const name of names) {
+      fs.writeFileSync(path.join(generatedDir, name), `original:${name}`, "utf8");
+    }
+    const outsideFile = path.join(outside, unsafeName);
+    fs.writeFileSync(outsideFile, `outside:${unsafeName}`, "utf8");
+    fs.unlinkSync(path.join(generatedDir, unsafeName));
+    fs.symlinkSync(outsideFile, path.join(generatedDir, unsafeName));
+
+    try {
+      expect(() => generateFluxFastProject({
+        pagesDir,
+        generatedDir,
+        outputFile: path.join(generatedDir, "pages.generated.ts"),
+        schemaFile: path.join(generatedDir, "schema.generated.json"),
+        schemaContent: schemaManifest(),
+        log: false
+      })).toThrow(/must not traverse the symbolic link/);
+      for (const name of names) {
+        const expected = name === unsafeName
+          ? `outside:${unsafeName}`
+          : `original:${name}`;
+        expect(fs.readFileSync(path.join(generatedDir, name), "utf8")).toBe(expected);
+      }
+      expect(fs.readFileSync(outsideFile, "utf8")).toBe(`outside:${unsafeName}`);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an oversized manifest without changing generated files", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    const outputFile = path.join(generatedDir, "pages.generated.ts");
+    fs.mkdirSync(generatedDir, { recursive: true });
+    fs.writeFileSync(outputFile, "existing registry", "utf8");
+
+    expect(() => generateFluxFastProject({
+      pagesDir,
+      generatedDir,
+      outputFile,
+      schemaContent: " ".repeat(8 * 1024 * 1024 + 1),
+      log: false
+    })).toThrow(/source must not exceed 8388608 characters/);
+    expect(fs.readdirSync(generatedDir)).toEqual(["pages.generated.ts"]);
+    expect(fs.readFileSync(outputFile, "utf8")).toBe("existing registry");
+  });
+
   it("keeps hostile resource and model names inside fixed generated files", () => {
     const pagesDir = path.join(tmpDir, "src/flux-pages");
     const generatedDir = path.join(tmpDir, "src/.fluxfast");

@@ -78,8 +78,11 @@ def test_duplicate_resource_contract_is_rejected_without_replacing_original() ->
         ("", "non-empty string"),
         (" ", "non-empty string"),
         ("x" * 129, "at most 128"),
+        ("😀" * 65, "at most 128"),
         ("rooms,summary", "commas"),
         ("rooms\n", "control characters"),
+        ("rooms\x7f", "control characters"),
+        ("rooms\x85", "control characters"),
     ],
 )
 def test_define_resource_reuses_logical_key_validation(key: str, message: str) -> None:
@@ -145,7 +148,10 @@ def test_duplicate_type_contract_is_rejected_without_replacing_original() -> Non
         ("", "non-empty string"),
         (" " , "non-empty string"),
         ("x" * 129, "at most 128"),
+        ("😀" * 65, "at most 128"),
         ("User\n", "control characters"),
+        ("User\x7f", "control characters"),
+        ("User\x85", "control characters"),
     ],
 )
 def test_define_type_validates_names(name: str, message: str) -> None:

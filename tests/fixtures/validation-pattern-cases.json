@@ -1,0 +1,33 @@
+{
+  "accepted": [
+    {
+      "pattern": "^item-[0-9]+$",
+      "valid": "item-123",
+      "invalid": "item-abc"
+    },
+    {
+      "pattern": "^[A-Za-z0-9_-]{1,32}$",
+      "valid": "safe_value-1",
+      "invalid": "unsafe value"
+    },
+    {
+      "pattern": "^é+$",
+      "valid": "éé",
+      "invalid": "ee"
+    }
+  ],
+  "rejected": [
+    "^(a+)+$",
+    "^(a|aa)+$",
+    "a+$",
+    "^safe|a+$",
+    "^(a+)\\1$",
+    "(?P<word>a+)",
+    "(?=a)a",
+    "(?<=a)b",
+    "(?i:a)",
+    "^a+b+$",
+    "^a{10001}$",
+    "["
+  ]
+}

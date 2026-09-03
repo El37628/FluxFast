@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Literal, TypeAlias
+from dataclasses import dataclass
+from typing import Any, Literal, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -15,7 +16,11 @@ from pydantic import (
     model_validator,
 )
 
-from .contract import _validate_contract_name, _validate_resource_key
+from .contract import (
+    _javascript_string_length,
+    _validate_contract_name,
+    _validate_resource_key,
+)
 
 SCHEMA_MANIFEST_V1: Literal["fluxfast-schema/1"] = "fluxfast-schema/1"
 SCHEMA_MANIFEST_V2: Literal["fluxfast-schema/2"] = "fluxfast-schema/2"
@@ -34,40 +39,146 @@ _SEMVER_PATTERN = re.compile(
     r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
 
+_MAX_JSON_VALUE_COUNT = 100_000
+_MAX_JSON_CHILDREN = 10_000
+_MAX_JSON_DEPTH = 64
+_MAX_JSON_STRING_LENGTH = 65_536
+_MAX_JSON_TOTAL_STRING_LENGTH = 8 * 1024 * 1024
+_MAX_JSON_SAFE_INTEGER = 9_007_199_254_740_991
+
 JsonSchema: TypeAlias = dict[str, JsonValue]
 RouteParameterLocation = Literal["path", "query"]
 MutationMethod = Literal["DELETE", "PATCH", "POST", "PUT"]
 ContractMode = Literal["serialization", "validation"]
 
 
+@dataclass(slots=True)
+class _JsonBoundsBudget:
+    values: int = 0
+    string_length: int = 0
+
+
+def _validate_json_value_bounds(
+    value: Any,
+    *,
+    label: str,
+    budget: _JsonBoundsBudget | None = None,
+) -> None:
+    """Bound JSON-like data iteratively before recursive canonicalization."""
+
+    shared_budget = budget if budget is not None else _JsonBoundsBudget()
+    pending: list[tuple[Any, int, bool]] = [(value, 0, False)]
+    active: set[int] = set()
+
+    while pending:
+        item, depth, exiting = pending.pop()
+        if exiting:
+            active.discard(id(item))
+            continue
+
+        shared_budget.values += 1
+        if shared_budget.values > _MAX_JSON_VALUE_COUNT:
+            raise ValueError(
+                f"{label} must not contain more than "
+                f"{_MAX_JSON_VALUE_COUNT} JSON values"
+            )
+        if depth > _MAX_JSON_DEPTH:
+            raise ValueError(
+                f"{label} must not exceed a nesting depth of {_MAX_JSON_DEPTH}"
+            )
+
+        if isinstance(item, str):
+            item_length = _javascript_string_length(item)
+            if item_length > _MAX_JSON_STRING_LENGTH:
+                raise ValueError(
+                    f"{label} must not contain strings longer than "
+                    f"{_MAX_JSON_STRING_LENGTH} characters"
+                )
+            shared_budget.string_length += item_length
+            if shared_budget.string_length > _MAX_JSON_TOTAL_STRING_LENGTH:
+                raise ValueError(
+                    f"{label} must not contain more than "
+                    f"{_MAX_JSON_TOTAL_STRING_LENGTH} total string characters"
+                )
+            continue
+        if item is None or isinstance(item, bool):
+            continue
+        if isinstance(item, int):
+            if abs(item) > _MAX_JSON_SAFE_INTEGER:
+                raise ValueError(
+                    f"{label} must not contain integers outside the "
+                    "JavaScript safe integer range"
+                )
+            continue
+        if isinstance(item, float):
+            if not math.isfinite(item):
+                raise ValueError(f"{label} must not contain non-finite numbers")
+            if item.is_integer() and abs(item) > _MAX_JSON_SAFE_INTEGER:
+                raise ValueError(
+                    f"{label} must not contain integers outside the "
+                    "JavaScript safe integer range"
+                )
+            continue
+        if not isinstance(item, (dict, list)):
+            raise TypeError(f"{label} must contain only JSON-compatible values")
+
+        identity = id(item)
+        if identity in active:
+            raise ValueError(f"{label} must not contain circular object references")
+        active.add(identity)
+        pending.append((item, depth, True))
+
+        if len(item) > _MAX_JSON_CHILDREN:
+            collection = "arrays" if isinstance(item, list) else "objects"
+            entries = "entries" if isinstance(item, list) else "properties"
+            raise ValueError(
+                f"{label} must not contain {collection} with more than "
+                f"{_MAX_JSON_CHILDREN} {entries}"
+            )
+        if isinstance(item, list):
+            pending.extend((child, depth + 1, False) for child in reversed(item))
+            continue
+
+        keys = list(item)
+        for key in keys:
+            if not isinstance(key, str):
+                raise TypeError(f"{label} object keys must be strings")
+        for key in reversed(keys):
+            key_length = _javascript_string_length(key)
+            if key_length > _MAX_JSON_STRING_LENGTH:
+                raise ValueError(
+                    f"{label} must not contain keys longer than "
+                    f"{_MAX_JSON_STRING_LENGTH} characters"
+                )
+            shared_budget.string_length += key_length
+            if shared_budget.string_length > _MAX_JSON_TOTAL_STRING_LENGTH:
+                raise ValueError(
+                    f"{label} must not contain more than "
+                    f"{_MAX_JSON_TOTAL_STRING_LENGTH} total string characters"
+                )
+            pending.append((item[key], depth + 1, False))
+
+
 def _validate_metadata_name(value: str, *, label: str) -> str:
-    if not value.strip() or len(value) > 128:
+    if not value.strip() or _javascript_string_length(value) > 128:
         raise ValueError(f"{label} must be a non-empty string of at most 128 characters")
-    if any(ord(char) < 32 for char in value):
+    if any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in value):
         raise ValueError(f"{label} must not contain control characters")
     return value
 
 
 def _validate_route_path(value: str) -> str:
-    if not value.startswith("/") or len(value) > 2048:
+    if not value.startswith("/") or _javascript_string_length(value) > 2048:
         raise ValueError("route path must start with '/' and be at most 2048 characters")
-    if any(ord(char) < 32 for char in value):
+    if any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in value):
         raise ValueError("route path must not contain control characters")
     return value
 
 
 def _validate_json_schema(value: JsonSchema) -> JsonSchema:
-    """Reject non-finite numbers that standard JSON cannot represent."""
+    """Reject schemas that cannot be handled safely by JavaScript tooling."""
 
-    pending: list[JsonValue] = [value]
-    while pending:
-        item = pending.pop()
-        if isinstance(item, float) and not math.isfinite(item):
-            raise ValueError("JSON Schema must not contain non-finite numbers")
-        if isinstance(item, dict):
-            pending.extend(item.values())
-        elif isinstance(item, list):
-            pending.extend(item)
+    _validate_json_value_bounds(value, label="JSON Schema")
     return value
 
 
@@ -214,4 +325,8 @@ class SchemaManifest(_ManifestModel):
                 )
         elif self.types is None:
             raise ValueError("fluxfast-schema/2 requires a types object")
+        _validate_json_value_bounds(
+            self.model_dump(mode="json", by_alias=True, exclude_none=True),
+            label="schema manifest",
+        )
         return self

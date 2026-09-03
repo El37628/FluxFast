@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import math
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -231,6 +234,123 @@ def test_manifest_rejects_unknown_fields_and_non_json_schema_values() -> None:
         ResourceSchemaEntry(schema={"default": math.inf})
 
 
+def test_schema_values_enforce_depth_child_and_string_boundaries() -> None:
+    nested: object = "leaf"
+    for _ in range(65):
+        nested = {"value": nested}
+    with pytest.raises(ValidationError, match="nesting depth"):
+        ResourceSchemaEntry(schema={"default": nested})
+
+    with pytest.raises(ValidationError, match="more than 10000 properties"):
+        ResourceSchemaEntry(
+            schema={
+                "properties": {
+                    f"field-{index}": {} for index in range(10_001)
+                }
+            }
+        )
+
+    ResourceSchemaEntry(schema={"description": "x" * 65_536})
+    with pytest.raises(ValidationError, match="longer than 65536"):
+        ResourceSchemaEntry(schema={"description": "x" * 65_537})
+
+    ResourceSchemaEntry(schema={"description": "😀" * 32_768})
+    with pytest.raises(ValidationError, match="longer than 65536"):
+        ResourceSchemaEntry(schema={"description": "😀" * 32_769})
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        {"const": 9_007_199_254_740_992},
+        {"enum": [-9_007_199_254_740_992]},
+        {"minimum": 9_007_199_254_740_992.0},
+        {"maximum": 1e308},
+        {"minimum": 10**5_000},
+        {"metadata": {"value": -(10**5_000)}},
+    ],
+)
+def test_schema_values_reject_integers_javascript_cannot_represent_safely(
+    schema: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError, match="JavaScript safe integer range"):
+        ResourceSchemaEntry(schema=schema)
+
+
+def test_schema_values_accept_javascript_safe_integer_boundaries() -> None:
+    ResourceSchemaEntry(
+        schema={
+            "minimum": -9_007_199_254_740_991,
+            "maximum": 9_007_199_254_740_991,
+        }
+    )
+
+
+def test_shared_python_manifest_boundary_fixture_is_valid() -> None:
+    fixture = (
+        Path(__file__).parents[3]
+        / "tests"
+        / "fixtures"
+        / "python-manifest-boundaries.json"
+    )
+    type_name = "😀" * 64
+    python_manifest = SchemaManifest(
+        schema=SCHEMA_MANIFEST_V2,
+        producer="0.8.0",
+        fingerprint=FINGERPRINT,
+        types={
+            type_name: TypeSchemaEntry(
+                mode="validation",
+                schema={"minimum": 9_007_199_254_740_991},
+            )
+        },
+    )
+    fixture_value = json.loads(fixture.read_text(encoding="utf8"))
+
+    assert fixture_value == python_manifest.model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
+    assert len(type_name.encode("utf-16-le")) // 2 == 128
+
+
+def test_manifest_bounds_collections_and_aggregate_metadata() -> None:
+    page = PageRouteSchema(name="page", path="/page")
+    with pytest.raises(ValidationError, match="more than 10000 entries"):
+        SchemaManifest(
+            schema=SCHEMA_MANIFEST_VERSION,
+            producer="0.7.0",
+            fingerprint=FINGERPRINT,
+            pages=[page] * 10_001,
+        )
+
+    large_page = PageRouteSchema(
+        name="n" * 128,
+        path=f"/{'p' * 2047}",
+    )
+    with pytest.raises(ValidationError, match="total string characters"):
+        SchemaManifest(
+            schema=SCHEMA_MANIFEST_VERSION,
+            producer="0.7.0",
+            fingerprint=FINGERPRINT,
+            pages=[large_page] * 4_100,
+        )
+
+
+def test_manifest_counts_shared_aliases_as_serialized_contributions() -> None:
+    shared_schema: dict[str, object] = {"description": "x" * 60_000}
+    shared_resource = ResourceSchemaEntry(schema=shared_schema)
+
+    with pytest.raises(ValidationError, match="total string characters"):
+        SchemaManifest(
+            schema=SCHEMA_MANIFEST_VERSION,
+            producer="0.7.0",
+            fingerprint=FINGERPRINT,
+            resources={
+                f"resource-{index}": shared_resource for index in range(140)
+            },
+        )
+
+
 def test_route_descriptors_reject_unsafe_shapes() -> None:
     with pytest.raises(ValidationError, match="must be required"):
         RouteParameterSchema(
@@ -245,6 +365,44 @@ def test_route_descriptors_reject_unsafe_shapes() -> None:
         MutationRouteSchema.model_validate(
             {"name": "upload", "path": "/upload", "method": "GET"}
         )
+
+
+@pytest.mark.parametrize("control", ["\x00", "\x7f", "\x85"])
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda control: SchemaManifest(
+            schema=SCHEMA_MANIFEST_VERSION,
+            producer="0.7.0",
+            fingerprint=FINGERPRINT,
+            resources={f"rooms{control}": ResourceSchemaEntry(schema={})},
+        ),
+        lambda control: PageRouteSchema(name=f"rooms{control}", path="/rooms"),
+        lambda control: PageRouteSchema(name="rooms", path=f"/rooms{control}"),
+        lambda control: RouteParameterSchema(
+            name=f"room{control}id",
+            location="query",
+            required=False,
+            schema={},
+        ),
+        lambda control: MutationRouteSchema(
+            name=f"update{control}room",
+            path="/rooms",
+            method="POST",
+        ),
+        lambda control: MutationRouteSchema(
+            name="update_room",
+            path=f"/rooms{control}",
+            method="POST",
+        ),
+    ],
+)
+def test_manifest_rejects_control_characters_across_names_and_paths(
+    control: str,
+    factory: Callable[[str], object],
+) -> None:
+    with pytest.raises(ValidationError, match="control characters"):
+        factory(control)
 
 
 def test_manifest_collection_defaults_are_not_shared() -> None:

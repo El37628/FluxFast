@@ -378,6 +378,12 @@ function decodeReferenceSegment(value: string, path: string): string {
   } catch {
     fail(path, `contains invalid URI escaping: ${JSON.stringify(value)}`);
   }
+  if (decoded.includes("/")) {
+    fail(path, `must point directly to a local definition; received ${JSON.stringify(value)}`);
+  }
+  if (/~(?:[^01]|$)/.test(decoded)) {
+    fail(path, `contains invalid JSON Pointer escaping: ${JSON.stringify(value)}`);
+  }
   return decoded.replace(/~1/g, "/").replace(/~0/g, "~");
 }
 
