@@ -7,11 +7,11 @@ test("selects current Python with the previous JavaScript packages", () => {
   assert.deepEqual(
     resolvePublishedMixedPairing({
       pairing: "python-current",
-      releaseVersion: "v0.7.0"
+      releaseVersion: "v0.8.0"
     }),
     {
-      pythonVersion: "0.7.0",
-      javascriptVersion: "0.6.0",
+      pythonVersion: "0.8.0",
+      javascriptVersion: "0.7.0",
       backendFixture: "distributed_backend.py",
       frontendFixture: "distributed-home.tsx",
       mode: "distributed"
@@ -23,16 +23,15 @@ test("selects previous Python with the current JavaScript packages", () => {
   assert.deepEqual(
     resolvePublishedMixedPairing({
       pairing: "javascript-current",
-      releaseVersion: "0.7.0",
-      previousVersion: "v0.6.0"
+      releaseVersion: "0.8.0",
+      previousVersion: "v0.7.0"
     }),
     {
-      pythonVersion: "0.6.0",
-      javascriptVersion: "0.7.0",
-      backendFixture: "mixed-legacy-backend.py",
-      frontendFixture: "mixed-home.tsx",
-      expectedCapabilities: "deferred-resources,live-resources",
-      mode: "legacy"
+      pythonVersion: "0.7.0",
+      javascriptVersion: "0.8.0",
+      backendFixture: "distributed_backend.py",
+      frontendFixture: "distributed-generated-home.tsx",
+      mode: "distributed"
     }
   );
 });

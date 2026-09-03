@@ -8,7 +8,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 
-from fluxfast import FluxFast, Page
+from fluxfast import FluxFast, Page, __version__
 from fluxfast.cli import (
     DevConfig,
     DevServerError,
@@ -44,6 +44,11 @@ def _schema_app() -> FastAPI:
     flux = FluxFast(app)
     flux.define_resource("rooms", list[Room])
     return app
+
+
+def _current_schema_version() -> str:
+    major, minor, *_rest = (int(part) for part in __version__.split(".", 2))
+    return "fluxfast-schema/2" if major > 0 or minor >= 8 else "fluxfast-schema/1"
 
 
 def test_frontend_command_detects_package_manager(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -191,7 +196,9 @@ def test_schema_command_writes_deterministic_manifest_to_stdout(
     assert first == second
     assert first.endswith("\n")
     manifest = json.loads(first)
-    assert manifest["schema"] == "fluxfast-schema/1"
+    assert manifest["schema"] == _current_schema_version()
+    if manifest["schema"] == "fluxfast-schema/2":
+        assert manifest["types"] == {}
     assert manifest["resources"]["rooms"]["schema"]["type"] == "array"
 
 
@@ -303,13 +310,21 @@ def test_types_command_passes_current_schema_to_frontend_cli(
         *,
         cwd: Path,
         check: bool,
+        capture_output: bool,
+        text: bool,
+        encoding: str,
+        errors: str,
     ) -> CompletedProcess[str]:
         schema_file = Path(command[-1])
         payload = json.loads(schema_file.read_text(encoding="utf8"))
         observed["payload"] = payload
         observed["cwd"] = cwd
         observed["subprocess_check"] = check
-        return CompletedProcess(command, 7)
+        observed["capture_output"] = capture_output
+        observed["text"] = text
+        observed["encoding"] = encoding
+        observed["errors"] = errors
+        return CompletedProcess(command, 7, stdout="", stderr="")
 
     monkeypatch.setattr("fluxfast.cli._type_generation_command", command)
     monkeypatch.setattr("fluxfast.cli.subprocess.run", run)
@@ -319,8 +334,118 @@ def test_types_command_passes_current_schema_to_frontend_cli(
     assert observed["cwd"] == frontend.resolve()
     assert observed["check"] is True
     assert observed["subprocess_check"] is False
-    assert observed["payload"]["schema"] == "fluxfast-schema/1"  # type: ignore[index]
+    assert observed["capture_output"] is True
+    assert observed["text"] is True
+    assert observed["encoding"] == "utf-8"
+    assert observed["errors"] == "replace"
+    assert observed["payload"]["schema"] == _current_schema_version()  # type: ignore[index]
     assert not Path(observed["schema_file"]).exists()  # type: ignore[arg-type]
+
+
+def test_types_command_explains_schema_v2_mismatch_with_old_javascript_tooling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "package.json").write_text("{}\n", encoding="utf8")
+    app = FastAPI()
+    FluxFast(app).define_type("Room", Room)
+
+    monkeypatch.setattr("fluxfast.cli._load_schema_app", lambda _app_import: app)
+    monkeypatch.setattr(
+        "fluxfast.cli._type_generation_command",
+        lambda _frontend, _schema_file, *, check: ["frontend-cli"],
+    )
+    old_tooling_error = (
+        "[fluxfast] Invalid schema manifest at $.types: is not a supported field\n"
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.subprocess.run",
+        lambda *_args, **_kwargs: CompletedProcess(
+            ["frontend-cli"], 1, stdout="", stderr=old_tooling_error
+        ),
+    )
+
+    assert run_types("backend:app", frontend=frontend) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith(old_tooling_error)
+    assert (
+        "FluxFast schema fluxfast-schema/2 requires JavaScript tooling\n"
+        "with schema/2 support.\n\n"
+        "Upgrade @fluxfast/next before regenerating contracts."
+    ) in captured.err
+
+
+def test_types_command_does_not_mislabel_other_generation_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "package.json").write_text("{}\n", encoding="utf8")
+
+    monkeypatch.setattr(
+        "fluxfast.cli._load_schema_app", lambda _app_import: _schema_app()
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli._schema_manifest_text",
+        lambda _app: '{"schema":"fluxfast-schema/1"}\n',
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli._type_generation_command",
+        lambda _frontend, _schema_file, *, check: ["frontend-cli"],
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.subprocess.run",
+        lambda *_args, **_kwargs: CompletedProcess(
+            ["frontend-cli"], 2, stdout="partial output\n", stderr="other failure\n"
+        ),
+    )
+
+    assert run_types("backend:app", frontend=frontend) == 2
+    captured = capsys.readouterr()
+    assert captured.out == "partial output\n"
+    assert captured.err == "other failure\n"
+    assert "Upgrade @fluxfast/next" not in captured.err
+
+
+def test_types_command_does_not_mislabel_schema_one_types_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "package.json").write_text("{}\n", encoding="utf8")
+
+    monkeypatch.setattr(
+        "fluxfast.cli._load_schema_app", lambda _app_import: _schema_app()
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli._schema_manifest_text",
+        lambda _app: '{"schema":"fluxfast-schema/1"}\n',
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli._type_generation_command",
+        lambda _frontend, _schema_file, *, check: ["frontend-cli"],
+    )
+    monkeypatch.setattr(
+        "fluxfast.cli.subprocess.run",
+        lambda *_args, **_kwargs: CompletedProcess(
+            ["frontend-cli"],
+            1,
+            stdout="",
+            stderr="Invalid schema manifest at $.types: is not a supported field\n",
+        ),
+    )
+
+    assert run_types("backend:app", frontend=frontend) == 1
+    captured = capsys.readouterr()
+    assert "Upgrade @fluxfast/next" not in captured.err
 
 
 def test_types_parser_forwards_frontend_and_check(

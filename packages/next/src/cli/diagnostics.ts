@@ -111,6 +111,126 @@ function packageDiagnostic(
   );
 }
 
+interface FluxFastPackageVersion {
+  major: number;
+  minor: number;
+  text: string;
+}
+
+function exactFluxFastVersion(
+  text: string | undefined
+): FluxFastPackageVersion | undefined {
+  if (text === undefined) return undefined;
+  const match = /^v?(\d+)\.(\d+)\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.exec(
+    text.trim()
+  );
+  return match
+    ? { major: Number(match[1]), minor: Number(match[2]), text }
+    : undefined;
+}
+
+function sameFluxFastReleaseLine(
+  left: FluxFastPackageVersion,
+  right: FluxFastPackageVersion
+): boolean {
+  return left.major === right.major && left.minor === right.minor;
+}
+
+/** Diagnose package layouts whose generated and adapter code resolve different core APIs. */
+export function validateFluxFastPackagePairs(
+  project: FluxProjectInfo,
+  options: { requireInstalledRootCore?: boolean } = {}
+): FluxDiagnostic[] {
+  const diagnostics: FluxDiagnostic[] = [];
+  const nextVersion = exactFluxFastVersion(
+    project.packages.fluxfastNext.installedVersion ??
+      project.packages.fluxfastNext.effectiveVersion
+  );
+  const rootCoreVersion = exactFluxFastVersion(
+    project.packages.fluxfastCore.installedVersion ??
+      project.packages.fluxfastCore.effectiveVersion
+  );
+
+  if (
+    (options.requireInstalledRootCore ||
+      project.packages.fluxfastNext.installedVersion) &&
+    !project.packages.fluxfastCore.installedVersion
+  ) {
+    diagnostics.push(
+      diagnostic(
+        "package.fluxfast-root-core",
+        "Packages",
+        "fail",
+        "@fluxfast/core is not resolvable from the project root for generated FluxFast imports.",
+        {
+          fix: nextVersion
+            ? `npm install @fluxfast/core@~${nextVersion.major}.${nextVersion.minor}.0`
+            : "npm install @fluxfast/core",
+        }
+      )
+    );
+  } else if (
+    nextVersion &&
+    rootCoreVersion &&
+    !sameFluxFastReleaseLine(nextVersion, rootCoreVersion)
+  ) {
+    diagnostics.push(
+      diagnostic(
+        "package.fluxfast-pair",
+        "Packages",
+        "fail",
+        `Incompatible FluxFast package versions: @fluxfast/next ${nextVersion.text} and root @fluxfast/core ${rootCoreVersion.text}.`,
+        {
+          fix:
+            `Install @fluxfast/core from the same release line as ` +
+            `@fluxfast/next ${nextVersion.text}.`,
+        }
+      )
+    );
+  } else if (nextVersion && rootCoreVersion) {
+    diagnostics.push(
+      diagnostic(
+        "package.fluxfast-pair",
+        "Packages",
+        "pass",
+        `Root FluxFast package versions are compatible (${nextVersion.text} / ${rootCoreVersion.text})`
+      )
+    );
+  }
+
+  const adapterCoreVersion = exactFluxFastVersion(
+    project.packages.fluxfastAdapterCoreVersion
+  );
+  if (
+    nextVersion &&
+    adapterCoreVersion &&
+    !sameFluxFastReleaseLine(nextVersion, adapterCoreVersion)
+  ) {
+    diagnostics.push(
+      diagnostic(
+        "package.fluxfast-adapter-core",
+        "Packages",
+        "fail",
+        `Incompatible adapter dependency: @fluxfast/next ${nextVersion.text} resolves @fluxfast/core ${adapterCoreVersion.text}.`,
+        {
+          fix: "Reinstall @fluxfast/next and its dependencies from the same release line.",
+        }
+      )
+    );
+  } else if (nextVersion && adapterCoreVersion) {
+    diagnostics.push(
+      diagnostic(
+        "package.fluxfast-adapter-core",
+        "Packages",
+        "pass",
+        `Adapter-resolved core is compatible (${nextVersion.text} / ${adapterCoreVersion.text})`
+      )
+    );
+  }
+
+  return diagnostics;
+}
+
 export function validateInitPrerequisites(
   project: FluxProjectInfo,
   options: ValidationOptions = {}
@@ -162,10 +282,11 @@ export function validateInitPrerequisites(
       "package.fluxfast-core",
       "@fluxfast/core",
       project.packages.fluxfastCore,
-      "the version installed by @fluxfast/next",
-      "npm install @fluxfast/next"
+      "the same release line as @fluxfast/next",
+      "npm install @fluxfast/core"
     )
   );
+  diagnostics.push(...validateFluxFastPackagePairs(project));
 
   diagnostics.push(
     project.hasAppRouter
@@ -321,7 +442,10 @@ function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
         "warning",
         unsupportedVersion
           ? `Schema manifest version is unsupported. ${message}`
-          : `Schema manifest is invalid. ${message}`
+          : `Schema manifest is invalid. ${message}`,
+        unsupportedVersion
+          ? { fix: "Upgrade @fluxfast/next before regenerating contracts" }
+          : {}
       )
     );
     return diagnostics;

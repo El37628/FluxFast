@@ -29,6 +29,8 @@ export interface FluxProjectPackages {
   reactDom: DetectedPackage;
   fluxfastCore: DetectedPackage;
   fluxfastNext: DetectedPackage;
+  /** Core version resolved by code executing from inside @fluxfast/next. */
+  fluxfastAdapterCoreVersion?: string;
 }
 
 /** A static, read-only description of a potential FluxFast Next.js project. */

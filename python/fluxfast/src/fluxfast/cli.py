@@ -68,6 +68,41 @@ class TypeGenerationError(RuntimeError):
     """Raised when full-stack type generation cannot be started."""
 
 
+_SCHEMA_V2_OLD_TOOLING_ERROR = (
+    'unsupported version "fluxfast-schema/2"; expected "fluxfast-schema/1"'
+)
+_SCHEMA_V2_OLD_TOOLING_TYPES_ERROR = (
+    "Invalid schema manifest at $.types: is not a supported field"
+)
+
+
+def _report_type_generation_output(
+    result: subprocess.CompletedProcess[str],
+    *,
+    schema_v2: bool,
+) -> None:
+    """Forward frontend output and add guidance for pre-schema/2 tooling."""
+
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    if stdout:
+        sys.stdout.write(stdout)
+    if stderr:
+        sys.stderr.write(stderr)
+    output = stdout + stderr
+    old_tooling_error = (
+        _SCHEMA_V2_OLD_TOOLING_ERROR in output
+        or _SCHEMA_V2_OLD_TOOLING_TYPES_ERROR in output
+    )
+    if result.returncode != 0 and schema_v2 and old_tooling_error:
+        print(
+            "FluxFast schema fluxfast-schema/2 requires JavaScript tooling\n"
+            "with schema/2 support.\n\n"
+            "Upgrade @fluxfast/next before regenerating contracts.",
+            file=sys.stderr,
+        )
+
+
 def _frontend_package_manager(frontend: Path) -> str:
     return detect_package_manager(frontend)
 
@@ -321,7 +356,19 @@ def run_types(
         schema_file = Path(directory) / "schema.generated.json"
         schema_file.write_text(manifest_text, encoding="utf8")
         command = _type_generation_command(frontend, schema_file, check=check)
-        result = subprocess.run(command, cwd=frontend, check=False)
+        result = subprocess.run(
+            command,
+            cwd=frontend,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        _report_type_generation_output(
+            result,
+            schema_v2='"schema":"fluxfast-schema/2"' in manifest_text,
+        )
     return int(result.returncode)
 
 

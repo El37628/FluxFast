@@ -6,6 +6,7 @@ import {
 } from "../generate";
 import { applyInitPlan } from "./apply";
 import {
+  validateFluxFastPackagePairs,
   validateFluxProject,
   type DiagnosticSection,
   type FluxDiagnostic,
@@ -290,6 +291,16 @@ function runGenerate(args: string[], io: CliIo): number {
     return 2;
   }
   const project = detectFluxProject(io.cwd);
+  const packageProblems = validateFluxFastPackagePairs(project, {
+    requireInstalledRootCore: true,
+  }).filter(item => item.status === "fail");
+  if (packageProblems.length > 0) {
+    for (const problem of packageProblems) {
+      io.stderr(`✗ ${problem.message}`);
+      if (problem.fix) io.stderr(`  ${problem.fix}`);
+    }
+    return 1;
+  }
   const options = {
     pagesDir: project.fluxPagesDir,
     outputFile: project.registryPath,
