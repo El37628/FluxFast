@@ -14,7 +14,7 @@ from fluxfast import (
     resource,
     scope,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI()
 flux = FluxFast(app)
@@ -95,6 +95,38 @@ class LiveIdentity(BaseModel):
     user: str = Field(min_length=1, max_length=80)
 
 
+class User(BaseModel):
+    """Application model reused outside Flux pages and resources."""
+
+    id: int
+    name: str
+    email: str
+
+
+class Address(BaseModel):
+    """Nested input used to prove generated validation issue paths."""
+
+    city: str = Field(min_length=2, max_length=80)
+    postcode: str = Field(min_length=3, max_length=12)
+
+
+class RegistrationInput(BaseModel):
+    """General validation contract shared by the browser form and server."""
+
+    name: str = Field(min_length=2, max_length=80)
+    email: str = Field(min_length=5, max_length=120)
+    address: Address
+
+    @field_validator("email")
+    @classmethod
+    def reject_registered_email(cls, value: str) -> str:
+        """Keep one authoritative server-only rule outside JSON Schema."""
+
+        if value.casefold() == "taken@example.com":
+            raise ValueError("Email is already registered")
+        return value
+
+
 APPLICATION = flux.define_resource("application", ApplicationDetails)
 ROOMS = flux.define_resource("rooms", list[Room])
 HOTEL = flux.define_resource("hotel", HotelDetails)
@@ -110,6 +142,8 @@ LIVE_PATCHED = flux.define_resource("live-patched", CounterValue)
 # This contract is consumed by the separate Redis-backed FastAPI fixture, but
 # remains in the shared manifest used to generate the one browser frontend.
 DISTRIBUTED_COUNTER = flux.define_resource("distributed-counter", CounterValue)
+flux.define_type("RegistrationInput", RegistrationInput, mode="validation")
+flux.define_type("User", User)
 
 
 def application_details() -> dict[str, str]:
@@ -331,6 +365,11 @@ async def add_room(payload: RoomInput):
     room = {"id": len(rooms) + 1, "name": payload.name}
     rooms.append(room)
     return mutation(patch={"rooms": append_item(room)})
+
+
+@flux.mutation("/registrations")
+async def register_user(payload: RegistrationInput):
+    return mutation()
 
 
 @flux.mutation("/rooms/finish")

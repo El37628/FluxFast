@@ -285,18 +285,13 @@ function assertTypedConsumerArtifacts() {
   const schema = JSON.parse(
     fs.readFileSync(path.join(generatedRoot, "schema.generated.json"), "utf8")
   );
-  const [producerMajor, producerMinor] = schema.producer
-    .split(".", 2)
-    .map(part => Number(part));
-  const expectedSchema = producerMajor > 0 || producerMinor >= 8
-    ? "fluxfast-schema/2"
-    : "fluxfast-schema/1";
-  assert.equal(schema.schema, expectedSchema);
-  if (expectedSchema === "fluxfast-schema/2") {
-    assert.deepEqual(schema.types, {});
-  } else {
-    assert.equal("types" in schema, false);
-  }
+  assert.equal(schema.schema, "fluxfast-schema/2");
+  assert.deepEqual(Object.keys(schema.types).sort(), [
+    "RegistrationInput",
+    "User",
+  ]);
+  assert.equal(schema.types.RegistrationInput.mode, "validation");
+  assert.equal(schema.types.User.mode, "serialization");
   assert.deepEqual(Object.keys(schema.resources).sort(), [
     "analytics",
     "live-counter",
@@ -315,6 +310,15 @@ function assertTypedConsumerArtifacts() {
     ),
     true
   );
+  assert.equal(
+    schema.mutations.some(
+      mutation =>
+        mutation.name === "register_user" &&
+        mutation.path === "/registrations" &&
+        mutation.method === "POST"
+    ),
+    true
+  );
 
   const types = fs.readFileSync(
     path.join(generatedRoot, "types.generated.ts"),
@@ -325,6 +329,16 @@ function assertTypedConsumerArtifacts() {
   assert.match(types, /interface FluxResourceMap/);
   assert.match(types, /interface IncrementBody/);
   assert.match(types, /amount: number/);
+  assert.match(types, /export interface RegistrationInput/);
+  assert.match(types, /address: Address/);
+  assert.match(types, /export interface User/);
+
+  const validators = fs.readFileSync(
+    path.join(generatedRoot, "validators.generated.ts"),
+    "utf8"
+  );
+  assert.match(validators, /export const RegistrationInputValidator/);
+  assert.match(validators, /createValidator<RegistrationInput>/);
 
   const mutations = fs.readFileSync(
     path.join(generatedRoot, "mutations.generated.ts"),
@@ -340,6 +354,18 @@ function assertTypedConsumerArtifacts() {
   assert.doesNotMatch(page, /use(?:Deferred)?Resource\s*</);
   assert.match(page, /resourceKeys\.analytics/);
   assert.match(page, /mutations\.increment/);
+  assert.match(page, /RegistrationInputValidator/);
+  assert.match(page, /UserCard/);
+
+  for (const modulePath of [
+    path.join(consumerRoot, "src", "components", "UserCard.tsx"),
+    path.join(consumerRoot, "src", "lib", "users.ts"),
+  ]) {
+    assert.match(
+      fs.readFileSync(modulePath, "utf8"),
+      /import type \{ User \} from "@\/\.fluxfast\/types\.generated";/
+    );
+  }
 }
 
 function verifyTypedSchemaDrift(isolatedPython) {
@@ -492,6 +518,20 @@ try {
     path.join(consumerRoot, "fixtures", homeFixture),
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx")
   );
+  if (runLiveConsumer || runProductionConsumer) {
+    const componentRoot = path.join(consumerRoot, "src", "components");
+    const libraryRoot = path.join(consumerRoot, "src", "lib");
+    fs.mkdirSync(componentRoot, { recursive: true });
+    fs.mkdirSync(libraryRoot, { recursive: true });
+    fs.copyFileSync(
+      path.join(consumerRoot, "fixtures", "general-user-card.tsx"),
+      path.join(componentRoot, "UserCard.tsx")
+    );
+    fs.copyFileSync(
+      path.join(consumerRoot, "fixtures", "general-users.ts"),
+      path.join(libraryRoot, "users.ts")
+    );
+  }
   if (runDistributedConsumer) {
     const detailsRoot = path.join(consumerRoot, "src", "flux-pages", "details");
     fs.mkdirSync(detailsRoot, { recursive: true });

@@ -11,7 +11,7 @@ from fluxfast import (
     resource,
     scope,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI()
 flux = FluxFast(app)
@@ -39,9 +39,41 @@ class IncrementInput(BaseModel):
     amount: int = Field(ge=1, le=10)
 
 
+class User(BaseModel):
+    """Application contract consumed by non-page TypeScript modules."""
+
+    id: int
+    name: str
+    email: str
+
+
+class Address(BaseModel):
+    """Nested reusable validation input."""
+
+    city: str = Field(min_length=2, max_length=80)
+    postcode: str = Field(min_length=3, max_length=12)
+
+
+class RegistrationInput(BaseModel):
+    """Client-validated form with one authoritative server-only rule."""
+
+    name: str = Field(min_length=2, max_length=80)
+    email: str = Field(min_length=5, max_length=120)
+    address: Address
+
+    @field_validator("email")
+    @classmethod
+    def reject_registered_email(cls, value: str) -> str:
+        if value.casefold() == "taken@example.com":
+            raise ValueError("Email is already registered")
+        return value
+
+
 ANALYTICS = flux.define_resource("analytics", Analytics)
 LIVE_COUNTER = flux.define_resource("live-counter", CounterValue)
 LIVE_REPORT = flux.define_resource("live-report", CounterValue)
+flux.define_type("RegistrationInput", RegistrationInput, mode="validation")
+flux.define_type("User", User)
 
 
 async def load_analytics() -> dict[str, int]:
@@ -96,3 +128,8 @@ async def increment(body: IncrementInput):
             invalidate_resource("live-report", scope=scope.public()),
         ]
     )
+
+
+@flux.mutation("/registrations")
+async def register_user(body: RegistrationInput):
+    return mutation()
