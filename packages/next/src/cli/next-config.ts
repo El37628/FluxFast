@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { InitOperation } from "./init";
-import type { FluxProjectInfo, NextConfigFormat } from "./types";
+import type { InitOperation } from "./init.js";
+import type { FluxProjectInfo, NextConfigFormat } from "./types.js";
 
 export interface NextConfigTransform {
   status: "modified" | "unchanged" | "manual";

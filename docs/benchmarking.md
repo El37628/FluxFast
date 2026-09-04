@@ -47,6 +47,18 @@ Run only the offline schema and TypeScript toolchain benchmark with:
 pnpm benchmark:codegen
 ```
 
+Run the core validation-plan runtime and production bundle scenarios with:
+
+```bash
+pnpm benchmark:validation
+pnpm benchmark:bundle
+```
+
+The bundle scenario performs three real Next.js production builds. It uses a
+temporary project inside the repository boundary because Turbopack rejects
+package symlinks that leave its detected filesystem root. The temporary build
+trees are removed whether the benchmark passes or fails.
+
 Run only the production supervisor benchmark with:
 
 ```bash
@@ -154,24 +166,31 @@ should not be compared as if they used the same storage metric.
 ## Schema Code Generation Scenario
 
 The code-generation benchmark builds real FastAPI and FluxFast applications,
-exports their Pydantic serialization schemas, and consumes the manifests with
-the built `@fluxfast/next` package. It covers six fixed workloads:
+exports their Pydantic schemas, and consumes the manifests with the built
+`@fluxfast/next` package. It covers ten fixed workloads:
 
-| Workload | Resources | Page routes | JSON mutations | Purpose |
-| --- | ---: | ---: | ---: | --- |
-| `resources-10` | 10 | 0 | 0 | Small typed baseline |
-| `resources-100` | 100 | 0 | 0 | Medium resource scaling |
-| `resources-500` | 500 | 0 | 0 | Large resource scaling |
-| `large-nested` | 10 | 0 | 0 | 24 repeated nested model levels |
-| `many-routes` | 10 | 500 | 0 | Route-helper scaling |
-| `many-mutations` | 10 | 0 | 500 | Mutation-helper scaling |
+| Workload | Explicit contracts | Resources | Page routes | JSON mutations | Purpose |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `contracts-10` | 10 | 0 | 0 | 0 | Small schema/2 baseline |
+| `contracts-100` | 100 | 0 | 0 | 0 | Medium contract scaling |
+| `contracts-500` | 500 | 0 | 0 | 0 | Large contract scaling |
+| `contracts-1000` | 1,000 | 0 | 0 | 0 | Manifest-boundary scaling |
+| `resources-10` | 0 | 10 | 0 | 0 | Small typed resource baseline |
+| `resources-100` | 0 | 100 | 0 | 0 | Medium resource scaling |
+| `resources-500` | 0 | 500 | 0 | 0 | Large resource scaling |
+| `large-nested` | 0 | 10 | 0 | 0 | 24 repeated nested model levels |
+| `many-routes` | 0 | 10 | 500 | 0 | Route-helper scaling |
+| `many-mutations` | 0 | 10 | 0 | 500 | Mutation-helper scaling |
 
-For each workload it measures Python schema export, Node manifest parsing,
-TypeScript generation, `fluxfast doctor`, and `fluxfast generate --check`.
+For each workload it measures Python manifest generation, Node manifest
+parsing, type compilation, validator compilation, a real TypeScript compiler
+pass over every generated contract artifact, `fluxfast doctor`, and
+`fluxfast generate --check`.
 Python export records the first export separately and then measures repeated
 exports of the same application. Every Node stage gets one untimed warm-up
-before the measured samples. Direct parsing and generation isolate codegen CPU;
-the CLI measurements also include project detection, file reads, and artifact
+before the measured samples. Direct parsing and generation isolate codegen
+CPU. The TypeScript number includes starting a fresh `tsc` process, while the
+CLI measurements include project detection, file reads, and artifact
 comparison.
 
 Timing output is observational and has no pass/fail threshold. Correctness
@@ -187,24 +206,117 @@ The controlled reference table below records medians from five measured
 samples. It is a baseline for comparing the same workload, not a latency
 guarantee and not a release gate.
 
-On 2026-09-01, Linux WSL2 x86_64 with Python 3.13.14 and Node 24.19.0
+On 2026-09-03, Linux WSL2 x86_64 with Python 3.13.14 and Node 24.19.0
 produced:
 
-| Workload | Manifest | First Python export | Python export | Node parse | TypeScript generation | Doctor | Generate check |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10 resources | 5.2 KiB | 6.111 ms | 4.134 ms | 0.230 ms | 0.817 ms | 2.966 ms | 1.605 ms |
-| 100 resources | 50.9 KiB | 40.900 ms | 39.586 ms | 1.506 ms | 5.971 ms | 13.183 ms | 7.522 ms |
-| 500 resources | 253.6 KiB | 210.104 ms | 200.440 ms | 7.076 ms | 22.541 ms | 53.968 ms | 28.435 ms |
-| Large nested schema | 81.0 KiB | 105.220 ms | 107.456 ms | 2.072 ms | 9.260 ms | 23.461 ms | 10.857 ms |
-| 500 routes | 147.7 KiB | 325.666 ms | 334.061 ms | 3.656 ms | 12.934 ms | 25.526 ms | 19.521 ms |
-| 500 mutations | 255.1 KiB | 274.170 ms | 275.546 ms | 5.599 ms | 16.422 ms | 29.975 ms | 21.653 ms |
+| Workload | Manifest | Python export | Parse | Types | Validators | `tsc` | Doctor | Generate check |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10 contracts | 2.7 KiB | 3.233 ms | 0.201 ms | 0.498 ms | 0.674 ms | 138.785 ms | 3.558 ms | 2.259 ms |
+| 100 contracts | 25.8 KiB | 37.437 ms | 1.345 ms | 2.286 ms | 2.653 ms | 140.026 ms | 18.223 ms | 8.817 ms |
+| 500 contracts | 128.1 KiB | 159.528 ms | 5.622 ms | 9.937 ms | 13.545 ms | 224.690 ms | 58.274 ms | 36.334 ms |
+| 1,000 contracts | 256.0 KiB | 322.587 ms | 15.095 ms | 18.460 ms | 21.522 ms | 360.761 ms | 113.706 ms | 70.048 ms |
+| 10 resources | 5.2 KiB | 6.855 ms | 0.315 ms | 0.712 ms | 0.939 ms | 138.304 ms | 5.374 ms | 2.818 ms |
+| 100 resources | 50.9 KiB | 63.467 ms | 2.791 ms | 5.261 ms | 7.551 ms | 173.523 ms | 35.875 ms | 21.312 ms |
+| 500 resources | 253.6 KiB | 319.637 ms | 15.912 ms | 26.914 ms | 40.623 ms | 398.485 ms | 182.084 ms | 105.861 ms |
+| Large nested schema | 81.0 KiB | 159.057 ms | 4.043 ms | 10.922 ms | 10.966 ms | 202.814 ms | 63.898 ms | 36.873 ms |
+| 500 routes | 147.7 KiB | 465.437 ms | 9.616 ms | 8.865 ms | 9.356 ms | 164.565 ms | 81.941 ms | 50.714 ms |
+| 500 mutations | 255.1 KiB | 375.660 ms | 13.179 ms | 24.782 ms | 30.225 ms | 379.850 ms | 146.112 ms | 97.525 ms |
 
 All correctness checks passed. The largest observed costs were Python-side
 FastAPI/Pydantic route and mutation schema extraction; direct Node parsing and
 generation remained a smaller portion of the measured toolchain. `doctor` and
 `generate --check` intentionally trade additional project and filesystem work
 for end-to-end validation. Run the benchmark on the target development machine
-before making local performance decisions.
+before making local performance decisions. The table reports medians from five
+samples; the benchmark output also retains first-export and p95 values.
+
+## Validation-Plan Runtime Scenario
+
+The runtime benchmark constructs framework-neutral validators directly from
+representative core validation plans, then
+measures valid and invalid values for a 24-level nested object, a 10,000-object
+array, and a 16-node recursive contract. The recursive plan uses the same local
+JSON Pointer reference form emitted by the schema compiler. This isolates the
+evaluator hot path; the separate code-generation benchmark measures compilation.
+Each measured sample performs 25 validations after one untimed correctness
+warm-up. The large-array plans use an explicit 500,000-operation budget; all
+other limits remain at their production defaults.
+
+On the same host on 2026-09-04, five samples produced:
+
+| Workload | Median per validation | p95 per validation |
+| --- | ---: | ---: |
+| Nested object, valid | 0.068 ms | 0.235 ms |
+| Nested object, invalid leaf | 0.055 ms | 0.080 ms |
+| 10,000 objects, valid | 13.020 ms | 14.221 ms |
+| 10,000 objects, invalid tail | 13.191 ms | 13.899 ms |
+| Recursive value, valid | 0.046 ms | 0.123 ms |
+| Recursive value, invalid tail | 0.042 ms | 0.050 ms |
+
+Correctness is the gate: valid inputs must be accepted, while invalid leaf and
+tail values must report their exact nested paths. Timings have no threshold.
+Validation is synchronous and bounded, so a valid large collection necessarily
+traverses every item.
+
+## Production Bundle Scenario
+
+The bundle benchmark generates 100 distinct contracts and makes three clean
+Next.js production builds. Every page retains the same ordinary imports from
+`@fluxfast/core` and `@fluxfast/next`; only generated-validator usage differs:
+none, one, or a realistic set of ten. Unique field markers prove exactly which
+static validation plans survive tree-shaking. Separate validation-runtime
+string markers prove that ordinary FluxFast usage does not retain the runtime
+when no validator is imported; byte totals alone cannot prove either property.
+
+On the same host on 2026-09-04 with Next.js 16.3.3:
+
+| Consumer | `/` first-load JS | All client chunks | Delta from no import | Validator chunks | Retained plans | Runtime markers |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| No validator import | 448.6 KiB | 558.6 KiB | 0 B | 0 B | 0 | 0 |
+| One validator | 473.2 KiB | 583.2 KiB | +24.6 KiB | 30.6 KiB | 1 | 2 |
+| Ten validators | 474.6 KiB | 584.5 KiB | +25.9 KiB | 32.0 KiB | 10 | 2 |
+
+Before the purity fix, inspecting a production page chunk showed every
+generated `createValidator(...)` initializer retained when only one validator
+was imported. A subsequent audit also found that the CommonJS-only package
+entry retained the validation runtime for ordinary Core and Next imports.
+FluxFast now publishes a tree-shakeable ESM import condition while preserving
+the CommonJS `require()` condition. Generated calls carry a bundler-recognized
+purity annotation, and the two marker gates prove both that unused plans
+disappear and that the runtime is opt-in. The observed first-validator cost is
+about 24.6 KiB of first-load JavaScript; additional plans add incremental bytes.
+Aggregate `.next` totals also contain framework chunks, so they are comparison
+data rather than package-size guarantees.
+
+## v0.7 Runtime Regression Comparison
+
+The v0.8 work adds code generation and opt-in validators; it must not make
+validators run on resource responses. A same-machine comparison used the exact
+same current benchmark harness against the `v0.7.0` Python source and this
+branch. It used ten fresh applications for navigation, five deferred samples,
+ten live-update samples, and five Redis payload samples with 32 warm HTTP
+requests per worker count.
+
+| Existing hot path | v0.7.0 | v0.8 implementation | Change |
+| --- | ---: | ---: | ---: |
+| Initial dashboard | 5.72 ms | 6.22 ms | +8.7% |
+| Complete-props response | 2.37 ms | 2.34 ms | -1.3% |
+| Known-resource delta | 7.06 ms | 7.05 ms | -0.1% |
+| Blocking deferred control | 504.84 ms | 504.80 ms | -0.0% |
+| Deferred initial response | 13.34 ms | 13.06 ms | -2.1% |
+| Deferred follow-up | 504.03 ms | 503.90 ms | -0.0% |
+| Live publish to receive | 0.086 ms | 0.094 ms | +9.3% |
+| Live invalidation to refresh | 3.566 ms | 3.824 ms | +7.2% |
+| Redis cold fan-out, 1/2/4/8 workers | 57.481/57.357/60.190/62.251 ms | 57.568/57.227/59.229/63.628 ms | -1.6% to +2.2% |
+| Redis warm hit, 1/2/4/8 workers | 77.004/47.058/33.614/25.697 ms | 69.962/38.328/23.030/25.025 ms | equal or faster |
+
+All correctness checks and payload sizes matched. No existing route-level hot
+path showed a repeatable regression over 10%. Some sub-millisecond setup and
+individual cache-operation measurements moved by larger percentages between
+runs, but the v0.7-to-current diff does not modify the live or cache runtime
+implementations; those changes are measurement noise, not evidence that
+validators entered the response hot path. There are deliberately no hard
+millisecond CI gates.
 
 ## Deferred Resource Scenario
 

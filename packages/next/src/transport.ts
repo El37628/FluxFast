@@ -1,6 +1,6 @@
 /** Server-only runtime transport proxy for production FluxFast requests. */
 
-import { resolveFluxBackendUrl } from "./config";
+import { resolveFluxBackendUrl } from "./config.js";
 
 const HOP_BY_HOP_HEADERS = [
   "connection",

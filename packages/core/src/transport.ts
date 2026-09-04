@@ -6,16 +6,16 @@ import {
   PageEnvelope,
   PROTOCOL_MEDIA_TYPE,
   PROTOCOL_VERSION,
-} from "./protocol";
+} from "./protocol.js";
 import {
   MutationError,
   ProtocolError,
   TransportError,
   ValidationError,
   VersionMismatchError,
-} from "./errors";
-import { HEADER_CAPABILITIES, serializeCapabilities } from "./capabilities";
-import { assertClientId, HEADER_CLIENT_ID } from "./live/client-id";
+} from "./errors.js";
+import { HEADER_CAPABILITIES, serializeCapabilities } from "./capabilities.js";
+import { assertClientId, HEADER_CLIENT_ID } from "./live/client-id.js";
 
 const MAX_KNOWN_RESOURCES = 100;
 const MAX_KNOWN_BYTES = 16 * 1024;

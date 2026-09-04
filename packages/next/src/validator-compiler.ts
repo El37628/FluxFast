@@ -6,13 +6,13 @@ import {
   mutationBodyTypeName,
   pascalIdentifier,
   SchemaCompilationError
-} from "./schema-compiler";
+} from "./schema-compiler.js";
 import {
   type FluxFastMutationRouteSchema,
   type FluxFastSchemaManifest,
   type JsonSchema,
   validateFluxFastSchemaManifest
-} from "./schema-manifest";
+} from "./schema-manifest.js";
 
 type SchemaNode = JsonSchema | boolean;
 type PlanDocument = ValidationPlanDocument;
@@ -1385,7 +1385,7 @@ function renderValidatorSource(
       contract.name +
       "Validator: FluxValidator<" +
       contract.name +
-      "> = createValidator<" +
+      "> = /* @__PURE__ */ createValidator<" +
       contract.name +
       ">(\n" +
       plan +

@@ -1,7 +1,7 @@
 /** In-flight request deduplication and version-safe prefetch caching. */
 
-import { PageEnvelope } from "./protocol";
-import { FluxTransport } from "./transport";
+import { PageEnvelope } from "./protocol.js";
+import { FluxTransport } from "./transport.js";
 
 export interface PrefetchEntry {
   readonly envelope: PageEnvelope;

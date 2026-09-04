@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useMemo } from "react";
 import { createFetchTransport, FluxRouter, PageEnvelope } from "@fluxfast/core";
-import { ComponentRegistry } from "./resolver";
-import { FluxCacheConfig } from "./config";
+import { ComponentRegistry } from "./resolver.js";
+import { FluxCacheConfig } from "./config.js";
 
 export interface FluxContextValue {
   router: FluxRouter;

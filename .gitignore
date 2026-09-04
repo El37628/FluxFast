@@ -8,6 +8,7 @@ __pycache__/
 *.tsbuildinfo
 coverage/
 benchmark-results/
+.fluxfast-bundle-benchmark-*/
 playwright-report/
 test-results/
 tests/browser/frontend/.next/

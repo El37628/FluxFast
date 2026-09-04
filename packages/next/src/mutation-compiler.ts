@@ -3,13 +3,13 @@ import {
   type FluxFastRouteParameterSchema,
   type JsonSchema,
   validateFluxFastSchemaManifest
-} from "./schema-manifest";
+} from "./schema-manifest.js";
 import {
   compileInlineJsonSchemaType,
   mutationBodyTypeName,
   mutationOperationIdentifier,
   SchemaCompilationError
-} from "./schema-compiler";
+} from "./schema-compiler.js";
 
 interface TypedMutationRouteSchema extends FluxFastMutationRouteSchema {
   body: JsonSchema;

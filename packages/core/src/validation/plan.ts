@@ -1,10 +1,10 @@
-import { createValidationIssue, displayValidationKey } from "./issues";
+import { createValidationIssue, displayValidationKey } from "./issues.js";
 import {
   isSupportedValidationFormat,
   validationPatternError,
   validateValidationFormat
-} from "./formats";
-import type { ValidationFormat } from "./formats";
+} from "./formats.js";
+import type { ValidationFormat } from "./formats.js";
 import type {
   ValidationArrayPlan,
   ValidationIssue,
@@ -21,8 +21,8 @@ import type {
   ValidationOneOfPlan,
   ValidationUnionPlan,
   ValidationOptions
-} from "./types";
-import { isValidationPlanDocument } from "./types";
+} from "./types.js";
+import { isValidationPlanDocument } from "./types.js";
 
 export const DEFAULT_VALIDATION_MAX_DEPTH = 64;
 export const DEFAULT_VALIDATION_MAX_ISSUES = 100;

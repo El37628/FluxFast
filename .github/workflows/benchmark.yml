@@ -44,6 +44,10 @@ jobs:
           FLUXFAST_BENCHMARK_REDIS_URL: redis://127.0.0.1:6379/15
       - name: Benchmark schema code generation
         run: pnpm benchmark:codegen | tee benchmark-results/codegen.txt
+      - name: Benchmark validator runtime
+        run: pnpm benchmark:validation | tee benchmark-results/validation.txt
+      - name: Benchmark production bundle
+        run: pnpm benchmark:bundle | tee benchmark-results/bundle.txt
       - name: Benchmark production lifecycle
         run: >-
           PYTHONPATH=python/fluxfast/src:.

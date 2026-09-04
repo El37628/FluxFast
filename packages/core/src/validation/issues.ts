@@ -2,7 +2,7 @@ import type {
   ValidationIssue,
   ValidationPath,
   ValidationPathSegment
-} from "./types";
+} from "./types.js";
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 

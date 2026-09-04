@@ -8,8 +8,8 @@ import {
   ResourceErrorDetail,
   ResourcePatch,
   ResourceWireRecord,
-} from "./protocol";
-import { applyPatchToValue } from "./mutation";
+} from "./protocol.js";
+import { applyPatchToValue } from "./mutation.js";
 
 export interface ResourceRecord<T = unknown> {
   readonly key: string;

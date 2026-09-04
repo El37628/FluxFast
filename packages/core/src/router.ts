@@ -1,21 +1,21 @@
 /** Core navigation engine and coordinator. It has no UI-framework imports. */
 
-import { PageCache } from "./cache";
+import { PageCache } from "./cache.js";
 import {
   EventEmitter,
   FluxEventListener,
   FluxEventName,
   type ResourceLoadReason,
-} from "./events";
-import { TransportError } from "./errors";
-import { HistoryManager } from "./history";
-import { LiveManager, type LiveManagerDiagnostic } from "./live/manager";
-import type { LiveEvent } from "./live/protocol";
-import type { LiveTransport } from "./live/transport";
-import { MutationEnvelope, PageDescriptor, PageEnvelope } from "./protocol";
-import { PrefetchManager } from "./prefetch";
-import { PageStore, ResourceStore } from "./store";
-import { createFetchTransport, FluxTransport } from "./transport";
+} from "./events.js";
+import { TransportError } from "./errors.js";
+import { HistoryManager } from "./history.js";
+import { LiveManager, type LiveManagerDiagnostic } from "./live/manager.js";
+import type { LiveEvent } from "./live/protocol.js";
+import type { LiveTransport } from "./live/transport.js";
+import { MutationEnvelope, PageDescriptor, PageEnvelope } from "./protocol.js";
+import { PrefetchManager } from "./prefetch.js";
+import { PageStore, ResourceStore } from "./store.js";
+import { createFetchTransport, FluxTransport } from "./transport.js";
 
 export interface VisitOptions {
   replace?: boolean;

@@ -1,5 +1,5 @@
-import { PageDescriptor } from "./protocol";
-import { ResourceStore } from "./store";
+import { PageDescriptor } from "./protocol.js";
+import { ResourceStore } from "./store.js";
 
 export interface CachedPage {
   readonly url: string;

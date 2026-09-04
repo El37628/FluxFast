@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { generatePagesRegistry } from "../generate";
-import { changedOperations, type InitOperation, type InitPlan } from "./init";
+import { generatePagesRegistry } from "../generate.js";
+import { changedOperations, type InitOperation, type InitPlan } from "./init.js";
 
 export interface ApplyInitOptions {
   logRegistry?: boolean;

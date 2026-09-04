@@ -8,7 +8,7 @@ import {
   type FluxResourceKey,
   type FluxResourceValue,
 } from "@fluxfast/core";
-import { useFluxContext } from "./provider";
+import { useFluxContext } from "./provider.js";
 
 export function useRouter(): FluxRouter {
   return useFlux().router;

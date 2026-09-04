@@ -11,15 +11,15 @@ import {
   serializeCapabilities,
   TransportError,
 } from "@fluxfast/core";
-import { FluxNextConfig, resolveFluxBackendUrl } from "./config";
+import { FluxNextConfig, resolveFluxBackendUrl } from "./config.js";
 
-export { createFluxHealthHandler } from "./health";
-export type { FluxHealthHandlerOptions } from "./health";
-export { createFluxTransportHandler } from "./transport";
+export { createFluxHealthHandler } from "./health.js";
+export type { FluxHealthHandlerOptions } from "./health.js";
+export { createFluxTransportHandler } from "./transport.js";
 export type {
   FluxTransportHandlerOptions,
   FluxTransportRouteContext,
-} from "./transport";
+} from "./transport.js";
 
 export interface FetchInitialEnvelopeOptions {
   backendUrl: string;

@@ -20,21 +20,22 @@
     "registry": "https://registry.npmjs.org/"
   },
   "main": "./dist/index.js",
-  "module": "./dist/index.js",
+  "module": "./dist/esm/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "files": [
     "dist"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
+      "import": "./dist/esm/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.esm.json && node ../../scripts/write-esm-package.mjs dist/esm",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

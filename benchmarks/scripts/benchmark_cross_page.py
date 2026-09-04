@@ -1,5 +1,7 @@
 """Measure complete-props transfer against FluxFast cross-page deltas."""
 
+import argparse
+import statistics
 import time
 from dataclasses import dataclass
 
@@ -23,55 +25,105 @@ def measured_get(client: TestClient, path: str, headers: dict[str, str] | None =
     return response, Measurement(duration_ms, len(response.content))
 
 
-def run_benchmark() -> None:
-    app, loader_counts = create_benchmark_app()
-    client = TestClient(app)
+def median(values: list[Measurement], field: str) -> float:
+    return statistics.median(getattr(value, field) for value in values)
 
-    dashboard, initial = measured_get(
-        client,
-        "/dashboard",
-        {HEADER_FLUXFAST: "1"},
-    )
-    known = {
-        key: record["version"]
-        for key, record in dashboard.json()["resources"].items()
-    }
 
-    baseline, baseline_measurement = measured_get(client, "/baseline/rooms")
-    delta, delta_measurement = measured_get(
-        client,
-        "/rooms",
-        {
-            HEADER_FLUXFAST: "1",
-            HEADER_KNOWN: encode_known_header(known),
-        },
+def assert_stable_payload_bytes(
+    measurements: list[Measurement],
+    label: str,
+) -> None:
+    payload_sizes = {measurement.payload_bytes for measurement in measurements}
+    assert len(payload_sizes) == 1, (
+        f"{label} payload bytes changed across fresh samples: {sorted(payload_sizes)}"
     )
 
-    delta_resources = delta.json()["resources"]
-    shared = {"auth", "hotel", "permissions", "settings"}
-    assert shared.isdisjoint(delta_resources)
-    assert {"room-types", "rooms"}.issubset(delta_resources)
-    assert all(loader_counts[key] == 1 for key in shared)
 
-    bytes_saved = baseline_measurement.payload_bytes - delta_measurement.payload_bytes
-    reduction = bytes_saved / baseline_measurement.payload_bytes * 100
+def run_benchmark(samples: int = 5) -> None:
+    if samples <= 0:
+        raise ValueError("samples must be positive")
+
+    initial_measurements: list[Measurement] = []
+    baseline_measurements: list[Measurement] = []
+    delta_measurements: list[Measurement] = []
+    delta_resource_names: set[str] | None = None
+
+    for _ in range(samples):
+        app, loader_counts = create_benchmark_app()
+        with TestClient(app) as client:
+            dashboard, initial = measured_get(
+                client,
+                "/dashboard",
+                {HEADER_FLUXFAST: "1"},
+            )
+            known = {
+                key: record["version"]
+                for key, record in dashboard.json()["resources"].items()
+            }
+
+            baseline, baseline_measurement = measured_get(client, "/baseline/rooms")
+            delta, delta_measurement = measured_get(
+                client,
+                "/rooms",
+                {
+                    HEADER_FLUXFAST: "1",
+                    HEADER_KNOWN: encode_known_header(known),
+                },
+            )
+
+        delta_resources = set(delta.json()["resources"])
+        shared = {"auth", "hotel", "permissions", "settings"}
+        assert shared.isdisjoint(delta_resources)
+        assert {"room-types", "rooms"}.issubset(delta_resources)
+        assert all(loader_counts[key] == 1 for key in shared)
+        assert len(baseline.content) == baseline_measurement.payload_bytes
+        if delta_resource_names is None:
+            delta_resource_names = delta_resources
+        else:
+            assert delta_resource_names == delta_resources
+        initial_measurements.append(initial)
+        baseline_measurements.append(baseline_measurement)
+        delta_measurements.append(delta_measurement)
+
+    assert_stable_payload_bytes(initial_measurements, "initial dashboard")
+    assert_stable_payload_bytes(baseline_measurements, "complete props")
+    assert_stable_payload_bytes(delta_measurements, "resource delta")
+
+    initial_bytes = median(initial_measurements, "payload_bytes")
+    baseline_bytes = median(baseline_measurements, "payload_bytes")
+    delta_bytes = median(delta_measurements, "payload_bytes")
+    bytes_saved = baseline_bytes - delta_bytes
+    reduction = bytes_saved / baseline_bytes * 100
 
     print("FluxFast controlled cross-page benchmark")
-    print(f"initial dashboard: {initial.duration_ms:.2f} ms, {initial.payload_bytes} bytes")
+    print(f"workload: {samples} fresh-application samples; no timing thresholds")
+    print(
+        f"initial dashboard: {median(initial_measurements, 'duration_ms'):.2f} ms median, "
+        f"{initial_bytes:.0f} bytes median"
+    )
     print(
         "complete props: "
-        f"{baseline_measurement.duration_ms:.2f} ms, "
-        f"{baseline_measurement.payload_bytes} bytes"
+        f"{median(baseline_measurements, 'duration_ms'):.2f} ms median, "
+        f"{baseline_bytes:.0f} bytes median"
     )
     print(
         "resource delta: "
-        f"{delta_measurement.duration_ms:.2f} ms, "
-        f"{delta_measurement.payload_bytes} bytes"
+        f"{median(delta_measurements, 'duration_ms'):.2f} ms median, "
+        f"{delta_bytes:.0f} bytes median"
     )
-    print(f"payload reduction: {reduction:.1f}% ({bytes_saved} bytes)")
-    print(f"delta resources: {', '.join(sorted(delta_resources))}")
-    print(f"baseline response bytes verified: {len(baseline.content)}")
+    print(f"payload reduction: {reduction:.1f}% ({bytes_saved:.0f} bytes)")
+    print(f"delta resources: {', '.join(sorted(delta_resource_names or set()))}")
+    print(
+        "correctness: PASS — every fresh app omitted all four known shared resources; "
+        "shared loaders ran once; response byte counts remained stable"
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--samples", type=int, default=5)
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    run_benchmark()
+    run_benchmark(parse_args().samples)

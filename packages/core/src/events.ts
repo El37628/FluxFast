@@ -2,8 +2,8 @@
  * Framework-neutral event emitter for FluxFast runtime events.
  */
 
-import type { ResourceErrorDetail } from "./protocol";
-import type { LiveEvent, LiveResyncReason } from "./live/protocol";
+import type { ResourceErrorDetail } from "./protocol.js";
+import type { LiveEvent, LiveResyncReason } from "./live/protocol.js";
 
 export type ResourceLoadReason =
   | "deferred"
