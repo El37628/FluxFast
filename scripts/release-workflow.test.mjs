@@ -91,3 +91,17 @@ test("v0.8 compatibility gates use the adjacent v0.7 release", () => {
   );
   assert.doesNotMatch(publishedSmoke, /0\.6\.0/);
 });
+
+test("audit steps ignore upstream registry outages in CI", () => {
+  const security = readWorkflow("security.yml");
+  assert.match(
+    security,
+    /pnpm audit --audit-level high --ignore-registry-errors/
+  );
+
+  const release = readWorkflow("release.yml");
+  assert.match(
+    release,
+    /pnpm audit --audit-level high --ignore-registry-errors/
+  );
+});
