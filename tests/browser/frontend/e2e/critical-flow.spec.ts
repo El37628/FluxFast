@@ -111,6 +111,7 @@ test("reuses a general type and validates a nested form before the server", asyn
   });
 
   await page.goto("/rooms");
+  await expect(page.getByTestId("rooms-page")).toHaveAttribute("data-hydrated", "true");
   await expect(page.getByRole("article", { name: "Featured user" })).toContainText(
     "Ada Lovelace",
   );

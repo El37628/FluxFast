@@ -55,28 +55,34 @@ Redis adds no browser capability or wire field. A shared warm entry can be read
 through any worker. Simultaneous cold misses may still execute several loaders;
 FluxFast deliberately does not add a distributed loader lease.
 
-Typed resource contracts add a developer-tooling path without changing either
-runtime protocol:
+Application and resource contracts add a developer-tooling path without
+changing the runtime browser protocol:
 
 ```text
-FastAPI-owned ResourceContract + registered page/mutation metadata
+FastAPI-owned TypeContract, ResourceContract, and mutation metadata
           ↓ offline export; application handlers are not executed
-fluxfast-schema/1 manifest + deterministic fingerprint
-          ↓ validated Node compilation
-generated resource types, keys, routes, mutations, and page registry
-          ↓ TypeScript module augmentation
-@fluxfast/core FluxResourceMap → adapter hook inference
+fluxfast-schema/2 manifest + deterministic fingerprint
+          ↓ validated Node compilation via Unified Type Graph
+generated types, reusable mutation bodies, routes, validators, and page registry
+          ↓ framework-neutral core
+@fluxfast/core FluxResourceMap & native validation runtime (zero dependencies)
 ```
 
-The Python application remains the source of truth. On a typed resource cache
-miss, Pydantic validates and serializes the loader value before versioning and
-caching; the exported schema describes that same JSON wire representation.
-The manifest is a build-time artifact, not a production endpoint. It is
-versioned independently from both the `fluxfast/1` browser envelope and the
-internal Redis cache encoding, so typed generation requires no browser
-capability or runtime schema delivery. See [typed resource contracts and code
-generation](type-safety.md) and
-[ADR-0006](decisions/0006-typed-resource-contracts.md).
+The Python application remains the authoritative source of truth. On a typed
+resource cache miss, Pydantic validates and serializes the loader value before
+versioning and caching; the exported schema describes that same JSON wire
+representation. For mutations and form inputs, Pydantic's validation mode defines
+the input contract, compiled into both TypeScript interfaces and native client-side
+validators.
+
+The manifest is a build-time artifact, not a production endpoint. It is versioned
+as `fluxfast-schema/2` independently from both the `fluxfast/1` browser envelope and
+the internal Redis cache encoding. Client validation provides instant browser UX and
+zero-network invalid form blocking, while FastAPI remains the authoritative runtime
+boundary. See [typed contracts and code generation](type-safety.md), [General
+Application Contracts](contracts.md), [Native Client Validation](validation.md),
+[ADR-0006](decisions/0006-typed-resource-contracts.md), and
+[ADR-0008](decisions/0008-general-contracts-and-native-validation.md).
 
 ## Blocking and deferred resource flow
 

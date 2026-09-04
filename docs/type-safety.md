@@ -1,24 +1,27 @@
-# Typed Resource Contracts and Code Generation
+# Typed Contracts and Code Generation
 
-FluxFast can derive frontend types from explicit contracts owned by the
-authoritative FastAPI application. A contract describes the JSON value emitted
-on the wire; it does not inspect a loader, execute application code, or make the
-frontend a second source of truth.
+FluxFast derives frontend types and native validators from explicit contracts
+owned by the authoritative FastAPI application. Contracts describe the JSON values
+crossing the wire or participating in frontend state; they do not inspect loaders,
+execute application code, or make the frontend a second source of truth.
 
 ```text
-Pydantic type on FastAPI
+Pydantic model on FastAPI
         ↓
-ResourceContract
+ResourceContract or TypeContract
         ↓
-runtime validation and serialization
+server validation and serialization
         ↓
-fluxfast-schema/1 developer manifest
+fluxfast-schema/2 developer manifest
         ↓
-generated TypeScript contracts
+Unified Type Graph & Validator Compiler
+        ↓
+generated TypeScript contracts & native validators
 ```
 
 This tooling does not change the `fluxfast/1` browser protocol and does not
-serve a schema endpoint in production.
+serve a schema endpoint in production. For in-depth guides, see [General
+Application Contracts](contracts.md) and [Native Client Validation](validation.md).
 
 ## Declare the server contract
 
@@ -72,6 +75,30 @@ resource("legacy-summary", load_summary)
 
 That resource is untyped and is omitted from generated resource contracts.
 Typed and untyped declarations can coexist while an application migrates.
+
+## Declare general application contracts
+
+Applications also have models that are not tied to a specific resource loader—such
+as form inputs, domain entities, mutation bodies, or state objects. Declare them
+directly on `FluxFast` with `define_type()`:
+
+```python
+class CreateUserInput(BaseModel):
+    name: str
+    email: str
+
+CREATE_USER_INPUT = flux.define_type(
+    "CreateUserInput",
+    CreateUserInput,
+    mode="validation",
+)
+```
+
+`define_type()` supports `mode="serialization"` (the default, representing server
+output) and `mode="validation"` (representing server input). Unlike resource
+contracts, general types do not define loaders or URL paths, but compile directly
+into the frontend's generated type graph and native validators. See [General
+Application Contracts](contracts.md) for details.
 
 ## Validation uses the serialized wire type
 
@@ -134,10 +161,11 @@ project uses `.fluxfast/`:
 
 | File | Contents |
 | --- | --- |
-| `schema.generated.json` | Deterministic `fluxfast-schema/1` developer manifest and fingerprint. |
-| `types.generated.ts` | Models, resource aliases, `resourceKeys`, and `FluxResourceMap` augmentation. |
+| `schema.generated.json` | Deterministic `fluxfast-schema/2` developer manifest and fingerprint. |
+| `types.generated.ts` | Models, general application contracts, reusable mutation bodies, `resourceKeys`, and `FluxResourceMap` augmentation. |
+| `validators.generated.ts` | Native framework-neutral client validators for types, resources, and mutation bodies. |
 | `routes.generated.ts` | Typed and safely encoded FastAPI page URL builders. |
-| `mutations.generated.ts` | Typed JSON mutation helpers using the existing `FluxRouter`. |
+| `mutations.generated.ts` | Typed JSON mutation helpers consuming reusable body contracts. |
 | `pages.generated.ts` | Allowlisted lazy FluxFast page-component registry. |
 
 Generated files are framework-owned. Do not edit them manually or run a
@@ -253,8 +281,46 @@ await mutations.addRoom(router, {
 
 The generated helper fixes the server-declared HTTP method, validates its
 TypeScript input, safely encodes path and query values, and returns the existing
-`MutationEnvelope`. Generation covers JSON bodies only; multipart, streaming,
-and arbitrary REST clients remain application responsibilities.
+`MutationEnvelope`. Mutation bodies also export reusable named TypeScript interfaces
+(e.g., `AddRoomBody` in `types.generated.ts`) and matching runtime validators
+(e.g., `AddRoomBodyValidator` in `validators.generated.ts`). Generation covers JSON
+bodies only; multipart, streaming, and arbitrary REST clients remain application
+responsibilities.
+
+## Native client validation
+
+FluxFast generates native runtime validators for all registered type contracts,
+resource models, and mutation bodies in `@/.fluxfast/validators.generated.ts`.
+Validators are powered by `@fluxfast/core` without requiring Zod, Valibot, or any
+external schema library.
+
+```tsx
+import type { AddRoomBody } from "@/.fluxfast/types.generated";
+import { AddRoomBodyValidator } from "@/.fluxfast/validators.generated";
+import { useForm } from "@fluxfast/next";
+
+export function AddRoomForm() {
+  const form = useForm<AddRoomBody>(
+    { number: "" },
+    { validator: AddRoomBodyValidator }
+  );
+
+  return (
+    <form onSubmit={form.submit("/hotels/42/rooms")}>
+      <input
+        value={form.data.number}
+        onChange={e => form.setData("number", e.target.value)}
+      />
+      {form.errors.number && <span>{form.errors.number}</span>}
+      <button type="submit" disabled={form.processing}>Add Room</button>
+    </form>
+  );
+}
+```
+
+Pre-submit validation prevents network submission if client constraints fail. See
+[Native Client Validation](validation.md) for full details on validator APIs,
+refinements, and error formatting.
 
 ## Detect schema drift in CI
 
@@ -310,9 +376,12 @@ across workers.
 
 For the complete runtime behavior, see [Deferred Resources](deferred-resources.md),
 [Live Resources](live-resources.md), [Distributed Resource
-Coherence](distributed-cache.md), and [Mutations and Forms](mutations.md). The
-architectural decision and rejected alternatives are recorded in
-[ADR-0006](decisions/0006-typed-resource-contracts.md).
+Coherence](distributed-cache.md), [Mutations and Forms](mutations.md), [General
+Application Contracts](contracts.md), [Native Client Validation](validation.md),
+and the [Migration Guide](migration.md).
+The architectural decisions and rejected alternatives are recorded in
+[ADR-0006](decisions/0006-typed-resource-contracts.md) and
+[ADR-0008](decisions/0008-general-contracts-and-native-validation.md).
 
 ## Compatibility and security boundaries
 
@@ -321,15 +390,18 @@ architectural decision and rejected alternatives are recorded in
   clients because no browser wire field changed.
 - New JavaScript packages continue serving an older Python application and can
   generate the page registry without a schema manifest.
-- `fluxfast-schema/1` is versioned independently from package versions and the
-  `fluxfast/1` browser protocol.
+- `fluxfast-schema/2` is versioned independently from package versions and the
+  `fluxfast/1` browser protocol. Tooling maintains backwards compatibility with
+  `fluxfast-schema/1`.
 - Manifests contain developer metadata, never loader values, scopes, user or
   tenant identities, cache keys, credentials, cookies, or authorization
   headers.
 - Node validates manifest structure, bounded names, references, and output
   paths before generating code. Every output remains inside the detected
   `.fluxfast` directory.
+- Client validation is an opt-in UX convenience; FastAPI and Pydantic remain the
+  authoritative runtime validation boundary.
 
 FluxFast intentionally does not infer contracts from loader annotations, parse
 application ASTs, sample runtime responses, generate Python from TypeScript, or
-perform browser-side runtime schema validation.
+transpile arbitrary Python validators into JavaScript.

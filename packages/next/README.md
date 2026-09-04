@@ -48,8 +48,40 @@ browser-facing port. Browser transport stays same-origin, so no public backend
 port or development CORS configuration is required. The supervisor detects
 npm, pnpm, Yarn, or Bun from the consuming frontend.
 
+## Contract & Validator Generation
+
+When the FastAPI application defines typed resources, general contracts, or
+JSON mutations, generate frontend artifacts with the Next.js CLI:
+
+```bash
+npx fluxfast generate
+# or use the full-stack helper from Python:
+fluxfast types backend.app.main:app --frontend frontend
+```
+
+This compiles:
+- `types.generated.ts`: TypeScript contracts for resources, general application
+  models, and reusable mutation request bodies.
+- `validators.generated.ts`: Tree-shakeable native runtime validators powered by
+  `@fluxfast/core` with zero third-party dependencies.
+- `routes.generated.ts`: Safely encoded, typed FastAPI page URL builders.
+- `mutations.generated.ts`: Typed mutation helpers consuming reusable body contracts.
+- `pages.generated.ts`: Component registry allowlisting discovered page components.
+
+Pass generated validators to `useForm` for instant client-side validation and
+zero-network invalid submissions:
+
+```tsx
+import { useForm } from "@fluxfast/next";
+import { CreateUserInputValidator } from "@/.fluxfast/validators.generated";
+
+const form = useForm(initialData, { validator: CreateUserInputValidator });
+```
+
 The package supports Next.js `>=16.3.0 <17.0.0`, React 19, and Node.js 22 and
 24. See the complete [Next.js adapter guide](https://github.com/El37628/FluxFast/blob/main/docs/nextjs-adapter.md),
+[general application contracts](https://github.com/El37628/FluxFast/blob/main/docs/contracts.md),
+[native client validation](https://github.com/El37628/FluxFast/blob/main/docs/validation.md),
 [caching guide](https://github.com/El37628/FluxFast/blob/main/docs/caching.md),
 and [mutation guide](https://github.com/El37628/FluxFast/blob/main/docs/mutations.md).
 

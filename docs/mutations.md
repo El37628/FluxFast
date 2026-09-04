@@ -56,10 +56,20 @@ await mutations.addRoom(router, {
 The helper encodes path and query values, fixes the server-declared method, and
 returns the normal `MutationEnvelope`; invalidation, patches, redirects, form
 errors, and live propagation therefore keep the behavior described below.
-Only mutations with JSON body schemas generate helpers. Multipart uploads,
-streams, and non-JSON endpoints continue to use application-owned clients. See
-[typed resource contracts and code generation](type-safety.md) for naming,
-generation, and drift checks.
+
+Each mutation body also generates:
+1. A reusable TypeScript interface in `@/.fluxfast/types.generated.ts` (e.g.,
+   `AddRoomBody`), which can be imported directly into forms, components, and
+   state stores.
+2. A matching native runtime validator in `@/.fluxfast/validators.generated.ts`
+   (e.g., `AddRoomBodyValidator`), powered by `@fluxfast/core` with zero third-party
+   dependencies.
+
+Only mutations with JSON body schemas generate helpers and reusable body types.
+Multipart uploads, streams, and non-JSON endpoints continue to use application-owned
+clients. See [typed resource contracts and code generation](type-safety.md) and
+[General Application Contracts](contracts.md) for naming, generation, and drift
+checks.
 
 ## Live propagation to other clients
 
@@ -155,10 +165,24 @@ Internal or external redirects take precedence over resource-only mutation
 revalidation. The destination visit is responsible for applying its own page
 resource graph.
 
-`useForm(initialData)` exposes `data`, `errors`, `processing`, success flags,
-`setData`, `reset`, `clearErrors`, and `submit`. FluxFast error envelopes and
-standard FastAPI 422 detail arrays map normal field names into `form.errors`.
-Non-validation failures are not swallowed.
+`useForm(initialData, options?)` manages form state, validation, and submissions:
+
+- **Options:** Pass `{ validator: MyValidator }` using a generated native validator
+  from `@/.fluxfast/validators.generated`.
+- **State:** Exposes `data`, `errors` (top-level string map), `issues` (structured
+  `readonly ValidationIssue[]`), `errorMap` (path-string to message map),
+  `processing`, `wasSuccessful`, and `recentlySuccessful`.
+- **Actions:** `setData(key, value)`, `setData(updates)`, `setError(key, msg)`,
+  `clearErrors(...keys)`, `reset(...keys)`, and `validate()`.
+- **Pre-submit validation:** `form.submit(url, options)` automatically validates
+  the form before dispatching a mutation. If validation fails, no network request
+  is sent, and `errors`, `issues`, and `errorMap` update immediately.
+- **Server validation:** Standard FastAPI 422 detail arrays and FluxFast error
+  envelopes map seamlessly into `form.errors` and `form.errorMap`. Non-validation
+  failures are not swallowed.
+
+See [Native Client Validation](validation.md) for full form validation examples and
+refinement patterns.
 
 Internal redirects use `router.visit`. External redirects use a full browser
 navigation. Applications are responsible for authentication, authorization,

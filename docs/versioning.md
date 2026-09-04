@@ -63,18 +63,25 @@ and security behavior are implemented and documented. See
 
 ## Developer schema and generated files
 
-Typed resource tooling uses the independent `fluxfast-schema/1` developer
-manifest. Its version is not the package version, the `fluxfast/1` browser
+Contract generation uses the independent developer manifest specification.
+FluxFast 0.6 introduced `fluxfast-schema/1` for typed resources; FluxFast 0.8
+introduces `fluxfast-schema/2` to support explicitly registered general
+application contracts (`types`) and reusable mutation request bodies.
+
+The manifest version is not the package version, the `fluxfast/1` browser
 protocol, or the Redis cache schema. A breaking manifest-format change requires
 a new schema identifier even when the package change is otherwise a normal
 minor release.
 
-Resource contracts, schema export, and generated TypeScript add no browser
-capability or runtime envelope field. Compatibility therefore remains
-directional and additive:
+Compatibility remains directional and additive:
 
+- `@fluxfast/next` 0.8 understands both `fluxfast-schema/2` and legacy
+  `fluxfast-schema/1` manifests, preserving compatibility for existing projects;
+- if legacy JavaScript tooling encounters a `fluxfast-schema/2` manifest, it
+  fails with an actionable diagnostic advising a package upgrade rather than
+  emitting corrupted files;
 - a current typed Python server can serve an older JavaScript client through
-  the unchanged browser protocol;
+  the unchanged `fluxfast/1` browser protocol;
 - current JavaScript packages can serve an older Python application and still
   generate the existing page registry when no manifest exists;
 - string-key resources and explicit frontend hook generics remain supported;
@@ -83,9 +90,11 @@ directional and additive:
   rather than treated as a stable cross-version API by themselves.
 
 Stable releases continue synchronizing all three package versions, and the
-release gates test both adjacent mixed-package directions. See [typed resource
-contracts and code generation](type-safety.md) for the build-time workflow and
-[the release guide](releasing.md) for clean-consumer requirements.
+release gates test both adjacent mixed-package directions (`0.8`/`0.7` and
+`0.7`/`0.8`). See [typed contracts and code generation](type-safety.md),
+[General Application Contracts](contracts.md), the [Migration
+Guide](migration.md), and [the release guide](releasing.md) for clean-consumer
+requirements.
 
 ## Production runtime compatibility
 
@@ -114,8 +123,8 @@ production path. See [production deployment](production.md) and
 Add user-facing entries beneath `Unreleased`, then run:
 
 ```bash
-pnpm release:prepare 0.7.0
-pnpm release:check v0.7.0
+pnpm release:prepare 0.8.0
+pnpm release:check v0.8.0
 ```
 
 The preparation command synchronizes every package manifest, the Python runtime
