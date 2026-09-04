@@ -25,7 +25,10 @@ export default function RoomsPage() {
   useEffect(() => setHydrated(true), []);
 
   return (
-    <main>
+    <main
+      data-testid="rooms-page"
+      data-hydrated={hydrated ? "true" : "false"}
+    >
       <p data-testid="application-name">{application.name}</p>
       <h1>Rooms</h1>
       <ul aria-label="Room list">

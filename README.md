@@ -57,20 +57,80 @@ export default function HomePage() {
 }
 ```
 
-When the backend declares typed resources, routes, or JSON mutations, export
-their schema and generate the matching frontend contracts with one command:
+When the backend declares typed resources, general contracts, routes, or JSON
+mutations, export their schema and generate the matching frontend contracts and
+validators with one command:
 
 ```bash
 fluxfast types backend.main:app --frontend frontend
 ```
 
 The command uses the frontend's installed `@fluxfast/next` CLI, detects its
-layout, and updates the manifest, resource types, route builders, mutation
-helpers, and page registry together. Use the read-only form in CI:
+layout, and updates the manifest, resource types, general application types,
+native runtime validators, route builders, mutation helpers, and page registry
+together. Use the read-only form in CI:
 
 ```bash
 fluxfast types backend.main:app --frontend frontend --check
 ```
+
+## General Contracts & Native Validation
+
+FluxFast 0.8 allows defining server-owned contracts reusable throughout frontend
+components, forms, utilities, and state stores, backed by a dependency-free
+native validation engine:
+
+```python
+from pydantic import BaseModel, EmailStr
+from fluxfast import FluxFast
+
+class RegistrationInput(BaseModel):
+    name: str
+    email: EmailStr
+
+flux.define_type("RegistrationInput", RegistrationInput, mode="validation")
+```
+
+After running `fluxfast types`, consume both the generated TypeScript interface
+and the native runtime validator in your frontend without installing Zod or any
+other validation package:
+
+```tsx
+"use client";
+
+import type { RegistrationInput } from "@/.fluxfast/types.generated";
+import { RegistrationInputValidator } from "@/.fluxfast/validators.generated";
+import { useForm } from "@fluxfast/next";
+
+export function RegisterPage() {
+  const form = useForm<RegistrationInput>(
+    { name: "", email: "" },
+    { validator: RegistrationInputValidator }
+  );
+
+  return (
+    <form onSubmit={form.submit("/api/register")}>
+      <input
+        value={form.data.name}
+        onChange={e => form.setData("name", e.target.value)}
+      />
+      {form.errors.name && <span>{form.errors.name}</span>}
+
+      <input
+        value={form.data.email}
+        onChange={e => form.setData("email", e.target.value)}
+      />
+      {form.errors.email && <span>{form.errors.email}</span>}
+
+      <button type="submit" disabled={form.processing}>Register</button>
+    </form>
+  );
+}
+```
+
+Pre-submit validation runs synchronously, preventing invalid submissions before
+any network request is dispatched. See [General Application
+Contracts](docs/contracts.md) and [Native Client Validation](docs/validation.md).
 
 Start FastAPI and Next.js with one public browser origin:
 
@@ -245,12 +305,14 @@ guidance.
 
 ## Packages
 
-- `python/fluxfast`: FastAPI routes, resource engine, process-local and Redis
-  scoped server caches, live coordination, and mutation helpers.
+- `python/fluxfast`: FastAPI routes, resource engine, type and resource contract
+  registries, process-local and Redis scoped server caches, live coordination,
+  and mutation helpers.
 - `packages/core`: framework-neutral browser runtime with no React or Next.js
-  imports.
-- `packages/next`: Next.js 16 App Router adapter, onboarding CLI, and registry
-  generator.
+  imports, providing the resource store, router, and dependency-free native
+  validation engine.
+- `packages/next`: Next.js 16 App Router adapter, onboarding CLI, form hooks,
+  and contract/registry generator.
 
 ## Development
 
@@ -268,12 +330,14 @@ Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
 [caching](docs/caching.md), [distributed resource
 coherence](docs/distributed-cache.md), [deferred
 resources](docs/deferred-resources.md), [Live Resources](docs/live-resources.md),
-[typed resource contracts](docs/type-safety.md), [Next.js
-integration](docs/nextjs-adapter.md), [production deployment](docs/production.md),
-[containers](docs/containers.md), and [mutations](docs/mutations.md) before
-extending a wire, schema, cache, or deployment boundary. The [compatibility and
-versioning policy](docs/versioning.md) lists supported runtimes and the
-deprecation policy. Maintainers can find the registry and tag procedure in the
-[release guide](docs/releasing.md).
+[typed contracts](docs/type-safety.md), [general application
+contracts](docs/contracts.md), [native client validation](docs/validation.md),
+[Next.js integration](docs/nextjs-adapter.md), [production
+deployment](docs/production.md), [containers](docs/containers.md), and
+[mutations](docs/mutations.md) before extending a wire, schema, cache, or
+deployment boundary. The [compatibility and versioning
+policy](docs/versioning.md) lists supported runtimes and the deprecation
+policy. Maintainers can find the registry and tag procedure in the [release
+guide](docs/releasing.md).
 
 FluxFast is not an Inertia wrapper and does not implement the Inertia protocol.

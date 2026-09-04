@@ -5,6 +5,77 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+### Added
+
+- Server-owned general application contracts through `FluxFast.define_type()`,
+  supporting both serialization and validation modes independent of resource
+  loaders or page routes.
+- The `fluxfast-schema/2` developer manifest specification featuring explicit
+  application `types`, reusable mutation input schemas, and deterministic
+  SHA-256 fingerprinting.
+- Reusable TypeScript interfaces for mutation request bodies (e.g.,
+  `CreateRoomBody`) generated into `types.generated.ts` and consumed by typed
+  mutation helpers.
+- Unified Type Graph compiler that globally tracks and deduplicates schema
+  definitions, resolves referenced `$defs`, detects name collisions, and gives
+  explicit contract names precedence over inferred model titles.
+- Framework-neutral, zero-dependency runtime validation engine in
+  `@fluxfast/core` exposing `FluxValidator<T>`, `ValidationResult<T>`,
+  `ValidationIssue`, and `formatValidationPath`.
+- Code generation of `@/.fluxfast/validators.generated.ts` containing pure,
+  tree-shakeable validators for registered type contracts, resources, and
+  mutation bodies.
+- Synchronous validator composition via `refineValidator()`, allowing
+  application-specific checks after schema validation succeeds without mutating
+  values.
+- Pre-submit form validation in `@fluxfast/next`'s `useForm` hook with the
+  `validator` option, exposing synchronous `validate()`, structured `issues`,
+  and canonical `errorMap` dictionaries while preventing network requests for
+  locally invalid submissions.
+- CLI drift detection (`fluxfast types --check`, `fluxfast generate --check`)
+  and expanded `fluxfast doctor` diagnostics for schema/2 manifests, contract
+  naming collisions, and validator compilation warnings.
+- Controlled code-generation, runtime, validation-plan, and bundle-size
+  benchmark gates with tree-shakeable ESM/CJS exports.
+- Dedicated architectural decision record (`ADR-0008`) and guides for [General
+  Application Contracts](docs/contracts.md) and [Native Client
+  Validation](docs/validation.md).
+
+### Changed
+
+- The code generator now compiles all contracts through a unified schema graph
+  while preserving existing imports from `@/.fluxfast/types.generated`
+  (`resourceKeys`, `FluxResourceMap`).
+- `@fluxfast/next` 0.8 CLI seamlessly consumes both `fluxfast-schema/2` and
+  legacy `fluxfast-schema/1` manifests without modifying generated files.
+- Dual ESM and CommonJS exports for `@fluxfast/core` and `@fluxfast/next` allow
+  tree-shaking of unused validation plans in modern bundlers while preserving
+  compatibility with Next.js server imports.
+- Release compatibility gates now test adjacent `0.8` and `0.7` mixed-package
+  directions across both Python and JavaScript runtimes.
+
+### Fixed
+
+- Unsupported schema keywords now produce explicit compilation diagnostics
+  instead of being silently dropped.
+- Recursive JSON pointer references in validation plans now resolve cleanly
+  without triggering infinite loops or maximum call stack errors.
+- Server import compatibility for `@fluxfast/next/server` under Next.js module
+  resolution without explicit extensions.
+
+### Security
+
+- Native validator evaluation enforces defensive resource bounds (`maxDepth`,
+  `maxOperations`, `maxIssues`, `maxProperties`) to protect against CPU and
+  memory starvation from hostile inputs.
+- Evaluator includes strict prototype pollution protection, safely ignoring
+  `__proto__`, `constructor`, and `prototype` keys during object validation.
+- Cyclic and hostile JavaScript objects are safely detected and rejected without
+  unhandled exceptions.
+- Client validation remains strictly a UX enhancement; FastAPI and Pydantic
+  remain the authoritative validation boundary for all security and business
+  invariants.
+
 ## [0.7.0] - 2026-09-02
 
 ### Added
