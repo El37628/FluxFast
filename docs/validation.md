@@ -355,3 +355,12 @@ export function RegistrationForm() {
    by the server are merged into `form.errors` and `form.errorMap` automatically.
 5. **Selective error clearing:** Calling `form.clearErrors("email")` clears errors
    for that field while preserving other validation feedback.
+
+---
+
+## Related documentation
+
+- [General Application Contracts](contracts.md)
+- [Typed Contracts and Code Generation](type-safety.md)
+- [Migration Guide](migration.md)
+- [ADR-0008: General application contracts and native client validation](decisions/0008-general-contracts-and-native-validation.md)

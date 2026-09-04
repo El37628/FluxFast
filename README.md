@@ -332,6 +332,7 @@ coherence](docs/distributed-cache.md), [deferred
 resources](docs/deferred-resources.md), [Live Resources](docs/live-resources.md),
 [typed contracts](docs/type-safety.md), [general application
 contracts](docs/contracts.md), [native client validation](docs/validation.md),
+[migration guide](docs/migration.md),
 [Next.js integration](docs/nextjs-adapter.md), [production
 deployment](docs/production.md), [containers](docs/containers.md), and
 [mutations](docs/mutations.md) before extending a wire, schema, cache, or

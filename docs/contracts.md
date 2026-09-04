@@ -259,4 +259,13 @@ the stale artifacts without modifying files.
 The `@fluxfast/next` 0.8 CLI seamlessly reads both `fluxfast-schema/1` and
 `fluxfast-schema/2` manifests. When reading a schema/1 manifest, general application
 types are omitted, and existing resource models and page routes continue to compile
-without issue.
+without issue. See the [Migration Guide](migration.md) for upgrading from 0.7.
+
+---
+
+## Related documentation
+
+- [Native Client Validation](validation.md)
+- [Typed Contracts and Code Generation](type-safety.md)
+- [Migration Guide](migration.md)
+- [ADR-0008: General application contracts and native client validation](decisions/0008-general-contracts-and-native-validation.md)

@@ -115,7 +115,8 @@ npx fluxfast doctor
 npm run build
 ```
 
-This writes the backend manifest, generated resource models and key constants,
+This writes the backend manifest, generated resource models, general application
+contracts, reusable mutation request bodies, native runtime validators, key constants,
 typed route and mutation helpers, and the page registry into the layout's
 `.fluxfast` directory. To fail CI on either backend-contract or frontend-page
 drift without modifying files, run from the parent directory:
@@ -143,9 +144,10 @@ plan still applies.
 Every generated artifact is deterministic. Regenerate after changing contracts,
 registered FastAPI page or mutation signatures, or frontend pages;
 `withFluxFast()` also refreshes the page registry when Next loads the config.
-Do not edit `.fluxfast` output manually. See [typed resource contracts and code
-generation](type-safety.md) for the lower-level schema-export workflow and
-generated frontend APIs.
+Do not edit `.fluxfast` output manually. See [typed contracts and code
+generation](type-safety.md), [General Application Contracts](contracts.md),
+[Native Client Validation](validation.md), and the [Migration Guide](migration.md)
+for the lower-level schema-export workflow and generated frontend APIs.
 
 ## Common failures
 

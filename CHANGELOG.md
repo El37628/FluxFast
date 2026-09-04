@@ -37,8 +37,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   naming collisions, and validator compilation warnings.
 - Controlled code-generation, runtime, validation-plan, and bundle-size
   benchmark gates with tree-shakeable ESM/CJS exports.
-- Dedicated architectural decision record (`ADR-0008`) and guides for [General
-  Application Contracts](docs/contracts.md) and [Native Client
+- Dedicated architectural decision record (`ADR-0008`), [Migration
+  Guide](docs/migration.md), [Release Notes](docs/releases/v0.8.0.md), and guides
+  for [General Application Contracts](docs/contracts.md) and [Native Client
   Validation](docs/validation.md).
 
 ### Changed

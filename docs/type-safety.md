@@ -377,7 +377,8 @@ across workers.
 For the complete runtime behavior, see [Deferred Resources](deferred-resources.md),
 [Live Resources](live-resources.md), [Distributed Resource
 Coherence](distributed-cache.md), [Mutations and Forms](mutations.md), [General
-Application Contracts](contracts.md), and [Native Client Validation](validation.md).
+Application Contracts](contracts.md), [Native Client Validation](validation.md),
+and the [Migration Guide](migration.md).
 The architectural decisions and rejected alternatives are recorded in
 [ADR-0006](decisions/0006-typed-resource-contracts.md) and
 [ADR-0008](decisions/0008-general-contracts-and-native-validation.md).
