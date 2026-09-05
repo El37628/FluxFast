@@ -12,13 +12,11 @@ export function formatValidationPath(path: ValidationPath): string {
   let result = "";
   for (const [index, segment] of path.entries()) {
     if (typeof segment === "number") {
-      result += index === 0 ? String(segment) : `.${segment}`;
-    } else if (IDENTIFIER.test(segment)) {
+      result += `[${segment}]`;
+    } else if (IDENTIFIER.test(segment) && !(index === 0 && segment === "$")) {
       result += index === 0 ? segment : `.${segment}`;
     } else {
-      result += index === 0
-        ? `[${JSON.stringify(segment)}]`
-        : `[${JSON.stringify(segment)}]`;
+      result += `[${JSON.stringify(segment)}]`;
     }
   }
   return result;
