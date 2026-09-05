@@ -2,10 +2,19 @@
 
 import json
 import re
+from collections import deque
+from collections.abc import (
+    Mapping,
+    MutableMapping,
+    MutableSequence,
+    Sequence,
+)
+from collections.abc import Set as AbstractSet
+from enum import Enum
 from types import UnionType
 from typing import Annotated, Literal, Union, get_args, get_origin
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$]*$")
 _TRANSPORT_PREFIXES = frozenset({"body", "query", "path", "header", "cookie"})
@@ -46,6 +55,12 @@ def _field_names(name: str, field: object) -> tuple[str, ...]:
         candidate = getattr(field, attribute, None)
         if type(candidate) is str and candidate not in candidates:
             candidates.append(candidate)
+        elif isinstance(candidate, AliasChoices):
+            candidates.extend(
+                choice
+                for choice in candidate.choices
+                if type(choice) is str and choice not in candidates
+            )
     return tuple(candidates)
 
 
@@ -54,6 +69,10 @@ def _field_output_name(name: str, field: object) -> str:
         candidate = getattr(field, attribute, None)
         if type(candidate) is str:
             return candidate
+        if isinstance(candidate, AliasChoices):
+            first = candidate.choices[0] if candidate.choices else None
+            if type(first) is str:
+                return first
     return name
 
 
@@ -74,7 +93,7 @@ def _union_label_candidates(
     labels: list[object] = []
     for item in metadata:
         tag = getattr(item, "tag", None)
-        if type(tag) in (str, int) and tag not in labels:
+        if _normalize_union_label(tag) is not None and tag not in labels:
             labels.append(tag)
 
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
@@ -85,7 +104,7 @@ def _union_label_candidates(
                 field_annotation, _ = _unwrap_annotated(_field_annotation(field))
                 if get_origin(field_annotation) is Literal:
                     for value in get_args(field_annotation):
-                        if type(value) in (str, int) and value not in labels:
+                        if _normalize_union_label(value) is not None and value not in labels:
                             labels.append(value)
         if annotation.__name__ not in labels:
             labels.append(annotation.__name__)
@@ -96,7 +115,24 @@ def _union_label_candidates(
 
 
 def _same_location_segment(left: object, right: object) -> bool:
-    return type(left) is type(right) and type(left) in (str, int) and left == right
+    normalized_left = _normalize_union_label(left)
+    normalized_right = _normalize_union_label(right)
+    return (
+        normalized_left is not None
+        and normalized_right is not None
+        and type(normalized_left) is type(normalized_right)
+        and normalized_left == normalized_right
+    )
+
+
+def _normalize_union_label(value: object) -> str | int | None:
+    if isinstance(value, Enum):
+        value = value.value
+    if type(value) is bool:
+        return int(value)
+    if type(value) in (str, int):
+        return value
+    return None
 
 
 def _resolve_annotation_path(
@@ -165,7 +201,15 @@ def _resolve_annotation_path(
             return [_field_output_name(name, field), *tail]
         return None
 
-    if origin in (list, set, frozenset):
+    if origin in (
+        list,
+        set,
+        frozenset,
+        deque,
+        Sequence,
+        MutableSequence,
+        AbstractSet,
+    ):
         segment = segments[0]
         if type(segment) is not int:
             return None
@@ -192,11 +236,13 @@ def _resolve_annotation_path(
         tail = resolved if resolved is not None else list(remaining)
         return [segment, *tail]
 
-    if origin is dict:
+    if origin in (dict, Mapping, MutableMapping):
         segment = segments[0]
         if type(segment) not in (str, int):
             return None
         remaining = segments[1:]
+        if remaining == ["[key]"] or remaining == ("[key]",):
+            return [segment]
         arguments = get_args(annotation)
         value_annotation = arguments[1] if len(arguments) == 2 else None
         resolved = _resolve_annotation_path(value_annotation, remaining)

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections import deque
+from collections.abc import Mapping, Sequence
+from enum import Enum
 from typing import Annotated, Literal, Self
 
 import pytest
@@ -9,6 +12,7 @@ from fastapi import Body, Cookie, Depends, FastAPI, Header, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -125,6 +129,67 @@ class GroupedQuery(BaseModel):
     choice: int | bool
 
 
+class AbstractCollectionsPayload(BaseModel):
+    sequence: Sequence[Leaf | int]
+    mapping: Mapping[str, Leaf | int]
+    queue: deque[Leaf | int]
+
+
+class Kind(str, Enum):
+    a = "a"
+    b = "b"
+
+
+class EnumBranchA(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    kind: Literal[Kind.a]
+    value: int = Field(alias="aValue")
+
+
+class EnumBranchB(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    kind: Literal[Kind.b]
+    value: int = Field(alias="bValue")
+
+
+class EnumUnionPayload(BaseModel):
+    branch: Annotated[EnumBranchA | EnumBranchB, Field(discriminator="kind")]
+
+
+class TrueBranch(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    kind: Literal[True]
+    value: int = Field(alias="trueValue")
+
+
+class FalseBranch(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    kind: Literal[False]
+    value: int = Field(alias="falseValue")
+
+
+class BooleanUnionPayload(BaseModel):
+    branch: Annotated[TrueBranch | FalseBranch, Field(discriminator="kind")]
+
+
+class AliasChoicesChild(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    value: int = Field(validation_alias=AliasChoices("newValue", "legacyValue"))
+
+
+class AliasChoicesPayload(BaseModel):
+    child: AliasChoicesChild
+
+
+class MappingKeyPayload(BaseModel):
+    values: dict[int, str]
+
+
 def _validation_dependency(
     query_choice: Annotated[int | bool, Query(alias="q-choice")],
     header_choice: Annotated[int | bool, Header(alias="h-choice")],
@@ -204,6 +269,26 @@ def _validation_app(*, integrate_fluxfast: bool = True) -> FastAPI:
 
     @app.get("/grouped-query")
     async def validate_grouped_query(filters: Annotated[GroupedQuery, Query()]) -> None:
+        pass
+
+    @app.post("/abstract-collections")
+    async def validate_abstract_collections(payload: AbstractCollectionsPayload) -> None:
+        pass
+
+    @app.post("/enum-union")
+    async def validate_enum_union(payload: EnumUnionPayload) -> None:
+        pass
+
+    @app.post("/boolean-union")
+    async def validate_boolean_union(payload: BooleanUnionPayload) -> None:
+        pass
+
+    @app.post("/alias-choices")
+    async def validate_alias_choices(payload: AliasChoicesPayload) -> None:
+        pass
+
+    @app.post("/mapping-keys")
+    async def validate_mapping_keys(payload: MappingKeyPayload) -> None:
         pass
 
     return app
@@ -559,6 +644,80 @@ def test_grouped_model_union_location_omits_wrapper_and_branch() -> None:
     details = response.json()["error"]["details"]
     assert set(details) == {"choice"}
     assert len(details["choice"]) == 2
+
+
+def test_abstract_collection_union_labels_are_omitted() -> None:
+    response = TestClient(_validation_app()).post(
+        "/abstract-collections",
+        json={
+            "sequence": [{"value": "invalid"}],
+            "mapping": {"entry": {"value": "invalid"}},
+            "queue": [{"value": "invalid"}],
+        },
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {
+        "sequence[0].value",
+        "sequence[0]",
+        "mapping.entry.value",
+        "mapping.entry",
+        "queue[0].value",
+        "queue[0]",
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "payload", "expected"),
+    [
+        (
+            "/enum-union",
+            {"branch": {"kind": "b", "bValue": "invalid"}},
+            "branch.bValue",
+        ),
+        (
+            "/boolean-union",
+            {"branch": {"kind": False, "falseValue": "invalid"}},
+            "branch.falseValue",
+        ),
+    ],
+)
+def test_enum_and_boolean_union_labels_select_the_declared_branch(
+    path: str,
+    payload: dict[str, object],
+    expected: str,
+) -> None:
+    response = TestClient(_validation_app()).post(
+        path,
+        json=payload,
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {expected}
+
+
+def test_alias_choices_use_the_primary_validation_schema_name() -> None:
+    response = TestClient(_validation_app()).post(
+        "/alias-choices",
+        json={"child": {"legacyValue": "invalid"}},
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {"child.newValue"}
+
+
+def test_mapping_key_marker_is_not_exposed_as_a_field_segment() -> None:
+    response = TestClient(_validation_app()).post(
+        "/mapping-keys",
+        json={"values": {"bad": "value"}},
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {"values.bad"}
 
 
 def test_fluxfast_handler_uses_stable_fallback_for_model_error() -> None:
