@@ -5,10 +5,17 @@ from __future__ import annotations
 from typing import Annotated, Literal, Self
 
 import pytest
-from fastapi import Body, Cookie, FastAPI, Header
+from fastapi import Body, Cookie, Depends, FastAPI, Header, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    field_validator,
+    model_validator,
+)
 
 from fluxfast import FluxFast
 from fluxfast._validation_locations import _normalize_validation_location
@@ -82,6 +89,50 @@ class AliasPayload(BaseModel):
     child: AliasChild = Field(alias="wireChild")
 
 
+class Leaf(BaseModel):
+    value: int
+
+
+class OptionalNestedPayload(BaseModel):
+    leaf: Leaf | None
+    leaves: list[Leaf] | None
+    mapping: dict[str, Leaf] | None
+
+
+class BranchA(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    kind: Literal["a"]
+    value: int = Field(alias="aValue")
+
+
+class BranchB(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    kind: Literal["b"]
+    value: int = Field(alias="bValue")
+
+
+class AliasedUnionPayload(BaseModel):
+    branch: Annotated[BranchA | BranchB, Field(discriminator="kind")]
+
+
+class RootCollection(RootModel[list[Leaf | int]]):
+    pass
+
+
+class GroupedQuery(BaseModel):
+    choice: int | bool
+
+
+def _validation_dependency(
+    query_choice: Annotated[int | bool, Query(alias="q-choice")],
+    header_choice: Annotated[int | bool, Header(alias="h-choice")],
+    cookie_choice: Annotated[int | bool, Cookie(alias="c-choice")],
+) -> None:
+    pass
+
+
 def _validation_app(*, integrate_fluxfast: bool = True) -> FastAPI:
     app = FastAPI()
     if integrate_fluxfast:
@@ -131,6 +182,28 @@ def _validation_app(*, integrate_fluxfast: bool = True) -> FastAPI:
 
     @app.post("/aliases")
     async def validate_aliases(payload: AliasPayload) -> None:
+        pass
+
+    @app.post("/optional-nested")
+    async def validate_optional_nested(payload: OptionalNestedPayload) -> None:
+        pass
+
+    @app.post("/aliased-union")
+    async def validate_aliased_union(payload: AliasedUnionPayload) -> None:
+        pass
+
+    @app.post("/root-model")
+    async def validate_root_model(payload: RootCollection) -> None:
+        pass
+
+    @app.get("/dependency-unions")
+    async def validate_dependency_unions(
+        dependency: Annotated[None, Depends(_validation_dependency)],
+    ) -> None:
+        pass
+
+    @app.get("/grouped-query")
+    async def validate_grouped_query(filters: Annotated[GroupedQuery, Query()]) -> None:
         pass
 
     return app
@@ -419,6 +492,73 @@ def test_validation_locations_resolve_wire_aliases_from_model_metadata() -> None
 
     assert response.status_code == 422
     assert set(response.json()["error"]["details"]) == {"wireChild.wireCount"}
+
+
+def test_nullable_containers_preserve_real_nested_segments() -> None:
+    response = TestClient(_validation_app()).post(
+        "/optional-nested",
+        json={
+            "leaf": {"value": "invalid"},
+            "leaves": [{"value": "invalid"}],
+            "mapping": {"entry": {"value": "invalid"}},
+        },
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {
+        "leaf.value",
+        "leaves[0].value",
+        "mapping.entry.value",
+    }
+
+
+def test_union_label_selects_the_branch_with_matching_aliases() -> None:
+    response = TestClient(_validation_app()).post(
+        "/aliased-union",
+        json={"branch": {"kind": "b", "bValue": "invalid"}},
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {"branch.bValue"}
+
+
+def test_root_model_paths_omit_root_and_union_labels() -> None:
+    response = TestClient(_validation_app()).post(
+        "/root-model",
+        json=[{"value": "invalid"}],
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {"[0]", "[0].value"}
+
+
+def test_dependency_owned_union_locations_use_declared_parameters() -> None:
+    client = TestClient(_validation_app())
+    client.cookies.set("c-choice", "invalid")
+    response = client.get(
+        "/dependency-unions?q-choice=invalid",
+        headers={HEADER_FLUXFAST: "1", "h-choice": "invalid"},
+    )
+
+    assert response.status_code == 422
+    details = response.json()["error"]["details"]
+    assert set(details) == {'["q-choice"]', '["h-choice"]', '["c-choice"]'}
+    assert all(len(messages) == 2 for messages in details.values())
+
+
+def test_grouped_model_union_location_omits_wrapper_and_branch() -> None:
+    response = TestClient(_validation_app()).get(
+        "/grouped-query?choice=invalid",
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    details = response.json()["error"]["details"]
+    assert set(details) == {"choice"}
+    assert len(details["choice"]) == 2
 
 
 def test_fluxfast_handler_uses_stable_fallback_for_model_error() -> None:

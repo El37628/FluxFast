@@ -3,7 +3,7 @@
 import json
 import re
 from types import UnionType
-from typing import Annotated, Union, get_args, get_origin
+from typing import Annotated, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -27,9 +27,11 @@ def _quote_segment(segment: str) -> str:
 
 
 def _field_annotation(field: object) -> object:
-    field_info = getattr(field, "field_info", None)
+    field_info = getattr(field, "field_info", field)
     annotation = getattr(field_info, "annotation", None)
     if annotation is not None:
+        if getattr(field_info, "discriminator", None) is not None:
+            return Annotated[annotation, field_info]
         return annotation
     for attribute in ("annotation", "outer_type_", "type_"):
         annotation = getattr(field, attribute, None)
@@ -55,27 +57,102 @@ def _field_output_name(name: str, field: object) -> str:
     return name
 
 
+def _unwrap_annotated(annotation: object) -> tuple[object, tuple[object, ...]]:
+    metadata: list[object] = []
+    while get_origin(annotation) is Annotated:
+        arguments = get_args(annotation)
+        annotation = arguments[0]
+        metadata.extend(arguments[1:])
+    return annotation, tuple(metadata)
+
+
+def _union_label_candidates(
+    annotation: object,
+    metadata: tuple[object, ...],
+    discriminator: str | None,
+) -> tuple[object, ...]:
+    labels: list[object] = []
+    for item in metadata:
+        tag = getattr(item, "tag", None)
+        if type(tag) in (str, int) and tag not in labels:
+            labels.append(tag)
+
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        if discriminator is not None:
+            for name, field in annotation.model_fields.items():
+                if discriminator not in _field_names(name, field):
+                    continue
+                field_annotation, _ = _unwrap_annotated(_field_annotation(field))
+                if get_origin(field_annotation) is Literal:
+                    for value in get_args(field_annotation):
+                        if type(value) in (str, int) and value not in labels:
+                            labels.append(value)
+        if annotation.__name__ not in labels:
+            labels.append(annotation.__name__)
+    elif isinstance(annotation, type) and annotation.__name__ not in labels:
+        labels.append(annotation.__name__)
+
+    return tuple(labels)
+
+
+def _same_location_segment(left: object, right: object) -> bool:
+    return type(left) is type(right) and type(left) in (str, int) and left == right
+
+
 def _resolve_annotation_path(
     annotation: object,
     segments: tuple[object, ...] | list[object],
 ) -> list[object] | None:
     """Resolve Pydantic locations against declarations, omitting union labels."""
 
-    while get_origin(annotation) is Annotated:
-        annotation = get_args(annotation)[0]
+    annotation, metadata = _unwrap_annotated(annotation)
     if not segments:
         return []
 
     origin = get_origin(annotation)
     if origin in (Union, UnionType):
+        choices = [choice for choice in get_args(annotation) if choice is not type(None)]
+        if len(choices) == 1:
+            return _resolve_annotation_path(choices[0], segments)
+
+        discriminator = None
+        for item in metadata:
+            candidate = getattr(item, "discriminator", None)
+            if type(candidate) is str:
+                discriminator = candidate
+                break
+
+        label = segments[0]
         remaining = segments[1:]
-        for choice in get_args(annotation):
+        for choice in choices:
+            choice_annotation, choice_metadata = _unwrap_annotated(choice)
+            labels = _union_label_candidates(
+                choice_annotation,
+                choice_metadata,
+                discriminator,
+            )
+            if not any(_same_location_segment(label, candidate) for candidate in labels):
+                continue
             resolved = _resolve_annotation_path(choice, remaining)
-            if resolved is not None:
-                return resolved
+            return resolved if resolved is not None else list(remaining)
+
+        resolutions: list[list[object]] = []
+        for choice in choices:
+            resolved = _resolve_annotation_path(choice, remaining)
+            if resolved is not None and resolved not in resolutions:
+                resolutions.append(resolved)
+        if len(resolutions) == 1:
+            return resolutions[0]
         return list(remaining)
 
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        if getattr(annotation, "__pydantic_root_model__", False):
+            root_field = annotation.model_fields.get("root")
+            if root_field is None:
+                return None
+            resolved = _resolve_annotation_path(_field_annotation(root_field), segments)
+            return resolved if resolved is not None else list(segments)
+
         segment = segments[0]
         if type(segment) is not str:
             return None
@@ -142,7 +219,12 @@ def _resolve_route_path(
 
     group_name = _PARAMETER_GROUPS.get(prefix) if type(prefix) is str else None
     dependant = getattr(route, "dependant", None)
-    parameters = getattr(dependant, group_name, ()) if group_name else ()
+    parameters: list[object] = []
+    pending = [dependant] if dependant is not None else []
+    while pending:
+        current = pending.pop()
+        parameters.extend(getattr(current, group_name, ()) if group_name else ())
+        pending.extend(getattr(current, "dependencies", ()))
     if not segments or type(segments[0]) is not str:
         return None
     for field in parameters:
@@ -153,6 +235,14 @@ def _resolve_route_path(
         resolved = _resolve_annotation_path(_field_annotation(field), remaining)
         tail = resolved if resolved is not None else list(remaining)
         return [_field_output_name(name, field), *tail]
+
+    flattened_resolutions: list[list[object]] = []
+    for field in parameters:
+        resolved = _resolve_annotation_path(_field_annotation(field), segments)
+        if resolved is not None and resolved not in flattened_resolutions:
+            flattened_resolutions.append(resolved)
+    if len(flattened_resolutions) == 1:
+        return flattened_resolutions[0]
     return None
 
 
