@@ -497,6 +497,21 @@ def test_fluxfast_handler_omits_discriminated_union_branch_label() -> None:
     }
 
 
+def test_invalid_discriminator_message_does_not_reflect_submitted_value() -> None:
+    secret = "submitted-secret-discriminator-must-not-leak"
+    response = TestClient(_validation_app()).post(
+        "/discriminated-union",
+        json={"pet": {"kind": secret, "lives": 9}},
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == {
+        "pet": ["Invalid discriminator value"]
+    }
+    assert secret not in response.text
+
+
 def test_union_branch_label_cannot_collide_with_submitted_property() -> None:
     response = TestClient(_validation_app()).post(
         "/discriminated-union",

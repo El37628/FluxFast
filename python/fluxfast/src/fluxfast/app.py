@@ -30,6 +30,20 @@ from .schema_registry import SchemaRegistry
 
 T = TypeVar("T")
 
+_SAFE_VALIDATION_MESSAGES = {
+    # Pydantic interpolates the submitted discriminator value into this message.
+    "union_tag_invalid": "Invalid discriminator value",
+}
+
+
+def _validation_message(error: dict[str, Any]) -> str:
+    error_type = error.get("type")
+    if type(error_type) is str and error_type in _SAFE_VALIDATION_MESSAGES:
+        return _SAFE_VALIDATION_MESSAGES[error_type]
+
+    message = error.get("msg", "Invalid value")
+    return message if type(message) is str else "Invalid value"
+
 
 class FluxFast:
     """Main application integrator configuring FastAPI with FluxFast support."""
@@ -147,9 +161,7 @@ class FluxFast:
                     route=request.scope.get("route"),
                     error_type=error.get("type"),
                 )
-                msg = error.get("msg", "Invalid value")
-                if type(msg) is not str:
-                    msg = "Invalid value"
+                msg = _validation_message(error)
                 field_errors.setdefault(field_name, []).append(msg)
 
             envelope = ErrorEnvelope(
