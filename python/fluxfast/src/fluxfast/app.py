@@ -6,9 +6,11 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from ._validation_locations import _normalize_validation_location
 from .cache import MemoryResourceCache, ResourceCacheBackend
 from .contract import ContractMode, ResourceContract, TypeContract
 from .errors import FluxFastError, ProtocolError, ResourceError
@@ -27,6 +29,20 @@ from .router import FluxRouter
 from .schema_registry import SchemaRegistry
 
 T = TypeVar("T")
+
+_SAFE_VALIDATION_MESSAGES = {
+    # Pydantic interpolates the submitted discriminator value into this message.
+    "union_tag_invalid": "Invalid discriminator value",
+}
+
+
+def _validation_message(error: dict[str, Any]) -> str:
+    error_type = error.get("type")
+    if type(error_type) is str and error_type in _SAFE_VALIDATION_MESSAGES:
+        return _SAFE_VALIDATION_MESSAGES[error_type]
+
+    message = error.get("msg", "Invalid value")
+    return message if type(message) is str else "Invalid value"
 
 
 class FluxFast:
@@ -133,40 +149,37 @@ class FluxFast:
     def _setup_exception_handlers(self) -> None:
         @self.app.exception_handler(RequestValidationError)
         async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+            if not is_fluxfast_request(request):
+                return await request_validation_exception_handler(request, exc)
+
             # Map Pydantic validation errors to structured dictionary
             field_errors: dict[str, list[str]] = {}
             for error in exc.errors():
                 loc = error.get("loc", ())
-                # Extract field name (skip 'body', 'query', etc. if nested)
-                field_name = str(loc[-1]) if loc else "general"
-                msg = error.get("msg", "Invalid value")
-                if field_name not in field_errors:
-                    field_errors[field_name] = []
-                field_errors[field_name].append(msg)
-
-            if is_fluxfast_request(request):
-                envelope = ErrorEnvelope(
-                    protocol=PROTOCOL_VERSION,
-                    error=ErrorDetail(
-                        type="ValidationError",
-                        message="Request validation failed",
-                        details=field_errors,
-                    ),
+                field_name = _normalize_validation_location(
+                    loc,
+                    route=request.scope.get("route"),
+                    error_type=error.get("type"),
                 )
-                return JSONResponse(
-                    status_code=422,
-                    content=envelope.model_dump(mode="json"),
-                    media_type=PROTOCOL_MEDIA_TYPE,
-                    headers={
-                        HEADER_FLUXFAST: "1",
-                        HEADER_PROTOCOL: "1",
-                    },
-                )
+                msg = _validation_message(error)
+                field_errors.setdefault(field_name, []).append(msg)
 
-            # Fallback standard response for non-Flux requests
+            envelope = ErrorEnvelope(
+                protocol=PROTOCOL_VERSION,
+                error=ErrorDetail(
+                    type="ValidationError",
+                    message="Request validation failed",
+                    details=field_errors,
+                ),
+            )
             return JSONResponse(
                 status_code=422,
-                content={"detail": exc.errors()},
+                content=envelope.model_dump(mode="json"),
+                media_type=PROTOCOL_MEDIA_TYPE,
+                headers={
+                    HEADER_FLUXFAST: "1",
+                    HEADER_PROTOCOL: "1",
+                },
             )
 
         @self.app.exception_handler(FluxFastError)
