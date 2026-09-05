@@ -2,12 +2,21 @@
 
 import json
 import re
+from types import UnionType
+from typing import Annotated, Union, get_args, get_origin
+
+from pydantic import BaseModel
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$]*$")
 _TRANSPORT_PREFIXES = frozenset({"body", "query", "path", "header", "cookie"})
 _ROOT_LOCATION = "general"
 _SURROGATE = re.compile(r"[\ud800-\udfff]")
-_MISSING = object()
+_PARAMETER_GROUPS = {
+    "query": "query_params",
+    "path": "path_params",
+    "header": "header_params",
+    "cookie": "cookie_params",
+}
 
 
 def _quote_segment(segment: str) -> str:
@@ -17,44 +26,141 @@ def _quote_segment(segment: str) -> str:
     return _SURROGATE.sub(lambda match: f"\\u{ord(match.group()):04x}", quoted)
 
 
-def _body_path_segments(
+def _field_annotation(field: object) -> object:
+    field_info = getattr(field, "field_info", None)
+    annotation = getattr(field_info, "annotation", None)
+    if annotation is not None:
+        return annotation
+    for attribute in ("annotation", "outer_type_", "type_"):
+        annotation = getattr(field, attribute, None)
+        if annotation is not None:
+            return annotation
+    return None
+
+
+def _field_names(name: str, field: object) -> tuple[str, ...]:
+    candidates = [name]
+    for attribute in ("validation_alias", "alias"):
+        candidate = getattr(field, attribute, None)
+        if type(candidate) is str and candidate not in candidates:
+            candidates.append(candidate)
+    return tuple(candidates)
+
+
+def _field_output_name(name: str, field: object) -> str:
+    for attribute in ("validation_alias", "alias"):
+        candidate = getattr(field, attribute, None)
+        if type(candidate) is str:
+            return candidate
+    return name
+
+
+def _resolve_annotation_path(
+    annotation: object,
     segments: tuple[object, ...] | list[object],
-    body: object,
-    *,
-    error_type: object,
-    error_input: object,
-) -> list[object]:
-    """Remove Pydantic union-choice labels by following the submitted body."""
+) -> list[object] | None:
+    """Resolve Pydantic locations against declarations, omitting union labels."""
 
-    selected: list[object] = []
-    current = body
-    for index, segment in enumerate(segments):
-        last = index == len(segments) - 1
-        if type(current) is dict:
-            if type(segment) is str and segment in current:
-                selected.append(segment)
-                current = current[segment]
-            elif last and (error_type == "missing" or error_input is not current):
-                selected.append(segment)
-                current = _MISSING
-            # An absent non-final segment, or a final segment identifying the
-            # current error input, is a Pydantic union-choice label.
-        elif type(current) is list and type(segment) is int:
-            selected.append(segment)
-            current = current[segment] if 0 <= segment < len(current) else _MISSING
-        elif current is _MISSING:
-            selected.append(segment)
-        # A segment below a submitted scalar is a Pydantic union-choice label.
+    while get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    if not segments:
+        return []
 
-    return selected
+    origin = get_origin(annotation)
+    if origin in (Union, UnionType):
+        remaining = segments[1:]
+        for choice in get_args(annotation):
+            resolved = _resolve_annotation_path(choice, remaining)
+            if resolved is not None:
+                return resolved
+        return list(remaining)
+
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        segment = segments[0]
+        if type(segment) is not str:
+            return None
+        for name, field in annotation.model_fields.items():
+            if segment not in _field_names(name, field):
+                continue
+            remaining = segments[1:]
+            resolved = _resolve_annotation_path(_field_annotation(field), remaining)
+            tail = resolved if resolved is not None else list(remaining)
+            return [_field_output_name(name, field), *tail]
+        return None
+
+    if origin in (list, set, frozenset):
+        segment = segments[0]
+        if type(segment) is not int:
+            return None
+        remaining = segments[1:]
+        item_annotation = get_args(annotation)[0] if get_args(annotation) else None
+        resolved = _resolve_annotation_path(item_annotation, remaining)
+        tail = resolved if resolved is not None else list(remaining)
+        return [segment, *tail]
+
+    if origin is tuple:
+        segment = segments[0]
+        if type(segment) is not int:
+            return None
+        remaining = segments[1:]
+        arguments = get_args(annotation)
+        item_annotation = (
+            arguments[0]
+            if len(arguments) == 2 and arguments[1] is Ellipsis
+            else arguments[segment]
+            if 0 <= segment < len(arguments)
+            else None
+        )
+        resolved = _resolve_annotation_path(item_annotation, remaining)
+        tail = resolved if resolved is not None else list(remaining)
+        return [segment, *tail]
+
+    if origin is dict:
+        segment = segments[0]
+        if type(segment) not in (str, int):
+            return None
+        remaining = segments[1:]
+        arguments = get_args(annotation)
+        value_annotation = arguments[1] if len(arguments) == 2 else None
+        resolved = _resolve_annotation_path(value_annotation, remaining)
+        tail = resolved if resolved is not None else list(remaining)
+        return [segment, *tail]
+
+    return None
+
+
+def _resolve_route_path(
+    prefix: object,
+    segments: tuple[object, ...] | list[object],
+    route: object,
+) -> list[object] | None:
+    if prefix == "body":
+        body_field = getattr(route, "body_field", None)
+        if body_field is None:
+            return None
+        return _resolve_annotation_path(_field_annotation(body_field), segments)
+
+    group_name = _PARAMETER_GROUPS.get(prefix) if type(prefix) is str else None
+    dependant = getattr(route, "dependant", None)
+    parameters = getattr(dependant, group_name, ()) if group_name else ()
+    if not segments or type(segments[0]) is not str:
+        return None
+    for field in parameters:
+        name = getattr(field, "name", None)
+        if type(name) is not str or segments[0] not in _field_names(name, field):
+            continue
+        remaining = segments[1:]
+        resolved = _resolve_annotation_path(_field_annotation(field), remaining)
+        tail = resolved if resolved is not None else list(remaining)
+        return [_field_output_name(name, field), *tail]
+    return None
 
 
 def _normalize_validation_location(
     location: object,
     *,
-    body: object = _MISSING,
+    route: object = None,
     error_type: object = None,
-    error_input: object = _MISSING,
 ) -> str:
     """Render a FastAPI location as the canonical frontend field identity."""
 
@@ -66,13 +172,10 @@ def _normalize_validation_location(
     first = location[0]
     start = 1 if type(first) is str and first in _TRANSPORT_PREFIXES else 0
     segments = location[start:]
-    if first == "body" and type(body) in (dict, list):
-        segments = _body_path_segments(
-            segments,
-            body,
-            error_type=error_type,
-            error_input=error_input,
-        )
+    if route is not None:
+        resolved = _resolve_route_path(first, segments, route)
+        if resolved is not None:
+            segments = resolved
     if not segments:
         return _ROOT_LOCATION
 

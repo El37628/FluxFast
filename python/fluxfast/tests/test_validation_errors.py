@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Annotated, Literal, Self
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Body, Cookie, FastAPI, Header
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from fluxfast import FluxFast
 from fluxfast._validation_locations import _normalize_validation_location
@@ -70,6 +70,18 @@ class OrdinaryUnionPayload(BaseModel):
     choice: int | bool
 
 
+class AliasChild(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    count: int = Field(alias="wireCount")
+
+
+class AliasPayload(BaseModel):
+    model_config = ConfigDict(loc_by_alias=False)
+
+    child: AliasChild = Field(alias="wireChild")
+
+
 def _validation_app(*, integrate_fluxfast: bool = True) -> FastAPI:
     app = FastAPI()
     if integrate_fluxfast:
@@ -95,6 +107,30 @@ def _validation_app(*, integrate_fluxfast: bool = True) -> FastAPI:
 
     @app.post("/ordinary-union")
     async def validate_ordinary_union(payload: OrdinaryUnionPayload) -> None:
+        pass
+
+    @app.post("/root-union")
+    async def validate_root_union(payload: Annotated[int | bool, Body()]) -> None:
+        pass
+
+    @app.get("/query-union")
+    async def validate_query_union(choice: int | bool) -> None:
+        pass
+
+    @app.get("/header-union")
+    async def validate_header_union(
+        choice: Annotated[int | bool, Header(alias="x-choice")],
+    ) -> None:
+        pass
+
+    @app.get("/cookie-union")
+    async def validate_cookie_union(
+        choice: Annotated[int | bool, Cookie()],
+    ) -> None:
+        pass
+
+    @app.post("/aliases")
+    async def validate_aliases(payload: AliasPayload) -> None:
         pass
 
     return app
@@ -303,6 +339,23 @@ def test_fluxfast_handler_omits_discriminated_union_branch_label() -> None:
     }
 
 
+def test_union_branch_label_cannot_collide_with_submitted_property() -> None:
+    response = TestClient(_validation_app()).post(
+        "/discriminated-union",
+        json={
+            "pet": {
+                "kind": "cat",
+                "lives": 13,
+                "cat": {"lives": 9},
+            }
+        },
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {"pet.lives"}
+
+
 def test_fluxfast_handler_coalesces_ordinary_union_branch_errors() -> None:
     response = TestClient(_validation_app()).post(
         "/ordinary-union",
@@ -314,6 +367,58 @@ def test_fluxfast_handler_coalesces_ordinary_union_branch_errors() -> None:
     details = response.json()["error"]["details"]
     assert set(details) == {"choice"}
     assert len(details["choice"]) == 2
+
+
+def test_fluxfast_handler_omits_root_union_branch_labels() -> None:
+    response = TestClient(_validation_app()).post(
+        "/root-union",
+        json="not-a-number-or-boolean",
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    details = response.json()["error"]["details"]
+    assert set(details) == {"general"}
+    assert len(details["general"]) == 2
+
+
+def test_fluxfast_handler_omits_non_body_union_branch_labels() -> None:
+    client = TestClient(_validation_app())
+    client.cookies.set("choice", "nope")
+    responses = [
+        (client.get("/query-union?choice=nope", headers={HEADER_FLUXFAST: "1"}), "choice"),
+        (
+            client.get(
+                "/header-union",
+                headers={HEADER_FLUXFAST: "1", "x-choice": "nope"},
+            ),
+            '["x-choice"]',
+        ),
+        (
+            client.get(
+                "/cookie-union",
+                headers={HEADER_FLUXFAST: "1"},
+            ),
+            "choice",
+        ),
+    ]
+
+    for response, expected_key in responses:
+        assert response.status_code == 422
+        details = response.json()["error"]["details"]
+        assert set(details) == {expected_key}
+        assert len(details[expected_key]) == 2
+
+
+def test_validation_locations_resolve_wire_aliases_from_model_metadata() -> None:
+    response = TestClient(_validation_app()).post(
+        "/aliases",
+        json={"wireChild": {"wireCount": "not-an-integer"}},
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {"wireChild.wireCount"}
 
 
 def test_fluxfast_handler_uses_stable_fallback_for_model_error() -> None:

@@ -144,9 +144,8 @@ class FluxFast:
                 loc = error.get("loc", ())
                 field_name = _normalize_validation_location(
                     loc,
-                    body=exc.body,
+                    route=request.scope.get("route"),
                     error_type=error.get("type"),
-                    error_input=error.get("input"),
                 )
                 msg = error.get("msg", "Invalid value")
                 if type(msg) is not str:
