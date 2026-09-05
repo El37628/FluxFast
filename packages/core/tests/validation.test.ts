@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   DEFAULT_VALIDATION_MAX_OPERATIONS,
   ValidationError,
+  createValidationIssue,
   createValidator,
   formatValidationPath,
   refineValidator,
@@ -762,10 +763,40 @@ describe("FluxFast validation runtime", () => {
     });
   });
 
-  it("formats nested paths for error displays", () => {
-    expect(formatValidationPath([])).toBe("$");
-    expect(formatValidationPath(["address", "city"])).toBe("address.city");
-    expect(formatValidationPath(["rooms", 0, "rate"])).toBe("rooms.0.rate");
-    expect(formatValidationPath(["unsafe key"])).toBe('["unsafe key"]');
+  it.each([
+    { path: [], formatted: "$" },
+    { path: ["field"], formatted: "field" },
+    { path: ["address", "city"], formatted: "address.city" },
+    { path: ["rooms", 0], formatted: "rooms[0]" },
+    { path: ["rooms", 0, "rate"], formatted: "rooms[0].rate" },
+    {
+      path: ["users", 0, "contacts", 1, "email"],
+      formatted: "users[0].contacts[1].email"
+    },
+    { path: ["matrix", 0, 1], formatted: "matrix[0][1]" },
+    { path: ["0"], formatted: '["0"]' },
+    { path: [0], formatted: "[0]" },
+    { path: ["$"], formatted: '["$"]' },
+    { path: ["$", "value"], formatted: '["$"].value' },
+    { path: ["field", "$"], formatted: "field.$" },
+    { path: ["unsafe key"], formatted: '["unsafe key"]' },
+    { path: ["a.b"], formatted: '["a.b"]' },
+    { path: ["a[b]"], formatted: '["a[b]"]' },
+    { path: ["constructor"], formatted: "constructor" },
+    { path: ["__proto__"], formatted: "__proto__" }
+  ])("formats $path as $formatted", ({ path, formatted }) => {
+    expect(formatValidationPath(path)).toBe(formatted);
+  });
+
+  it("formats issues without changing their structured paths", () => {
+    const issue = createValidationIssue(
+      ["rooms", 0, "rate"],
+      "minimum",
+      "Must be greater than zero"
+    );
+
+    expect(formatValidationPath(issue.path)).toBe("rooms[0].rate");
+    expect(issue.path).toEqual(["rooms", 0, "rate"]);
+    expect(typeof issue.path[1]).toBe("number");
   });
 });
