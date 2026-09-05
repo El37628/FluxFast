@@ -142,7 +142,12 @@ class FluxFast:
             field_errors: dict[str, list[str]] = {}
             for error in exc.errors():
                 loc = error.get("loc", ())
-                field_name = _normalize_validation_location(loc)
+                field_name = _normalize_validation_location(
+                    loc,
+                    body=exc.body,
+                    error_type=error.get("type"),
+                    error_input=error.get("input"),
+                )
                 msg = error.get("msg", "Invalid value")
                 if type(msg) is not str:
                     msg = "Invalid value"

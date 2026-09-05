@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Annotated, Literal, Self
 
 import pytest
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from fluxfast import FluxFast
 from fluxfast._validation_locations import _normalize_validation_location
@@ -45,6 +45,31 @@ class InvalidWindow(BaseModel):
         return self
 
 
+class Cat(BaseModel):
+    kind: Literal["cat"]
+    lives: int
+
+    @field_validator("lives")
+    @classmethod
+    def validate_lives(cls, value: int) -> int:
+        if value == 13:
+            raise ValueError("Thirteen lives is not supported")
+        return value
+
+
+class Dog(BaseModel):
+    kind: Literal["dog"]
+    bark_volume: int
+
+
+class DiscriminatedUnionPayload(BaseModel):
+    pet: Annotated[Cat | Dog, Field(discriminator="kind")]
+
+
+class OrdinaryUnionPayload(BaseModel):
+    choice: int | bool
+
+
 def _validation_app(*, integrate_fluxfast: bool = True) -> FastAPI:
     app = FastAPI()
     if integrate_fluxfast:
@@ -60,6 +85,16 @@ def _validation_app(*, integrate_fluxfast: bool = True) -> FastAPI:
 
     @app.post("/window")
     async def validate_window(payload: InvalidWindow) -> None:
+        pass
+
+    @app.post("/discriminated-union")
+    async def validate_discriminated_union(
+        payload: DiscriminatedUnionPayload,
+    ) -> None:
+        pass
+
+    @app.post("/ordinary-union")
+    async def validate_ordinary_union(payload: OrdinaryUnionPayload) -> None:
         pass
 
     return app
@@ -255,6 +290,32 @@ def test_fluxfast_handler_preserves_multiple_messages_at_one_path() -> None:
     }
 
 
+def test_fluxfast_handler_omits_discriminated_union_branch_label() -> None:
+    response = TestClient(_validation_app()).post(
+        "/discriminated-union",
+        json={"pet": {"kind": "cat", "lives": 13}},
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == {
+        "pet.lives": ["Value error, Thirteen lives is not supported"]
+    }
+
+
+def test_fluxfast_handler_coalesces_ordinary_union_branch_errors() -> None:
+    response = TestClient(_validation_app()).post(
+        "/ordinary-union",
+        json={"choice": "not-a-number-or-boolean"},
+        headers={HEADER_FLUXFAST: "1"},
+    )
+
+    assert response.status_code == 422
+    details = response.json()["error"]["details"]
+    assert set(details) == {"choice"}
+    assert len(details["choice"]) == 2
+
+
 def test_fluxfast_handler_uses_stable_fallback_for_model_error() -> None:
     response = TestClient(_validation_app()).post(
         "/window",
@@ -266,6 +327,17 @@ def test_fluxfast_handler_uses_stable_fallback_for_model_error() -> None:
     details = response.json()["error"]["details"]
     assert set(details) == {"general"}
     assert "end must be greater than start" in details["general"][0]
+
+
+def test_fluxfast_handler_maps_malformed_json_offset_to_general() -> None:
+    response = TestClient(_validation_app()).post(
+        "/window",
+        content=b'{"start": 1,',
+        headers={HEADER_FLUXFAST: "1", "Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert set(response.json()["error"]["details"]) == {"general"}
 
 
 def test_fluxfast_handler_keeps_hostile_locations_as_plain_json_keys() -> None:
