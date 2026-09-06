@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -28,6 +28,7 @@ describe("Pages Registry Generator", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -58,6 +59,27 @@ describe("Pages Registry Generator", () => {
     expect(content).toContain("FluxApplication");
     expect(content).not.toContain("index.test");
     expect(content).not.toContain("_private");
+  });
+
+  it("keeps the existing artifact and removes its temporary file when replacement fails", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const outputFile = path.join(tmpDir, "src/.fluxfast/pages.generated.ts");
+    fs.mkdirSync(path.dirname(outputFile), { recursive: true });
+    fs.writeFileSync(outputFile, "existing registry", "utf8");
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("simulated rename failure"), {
+        code: "EACCES"
+      });
+    });
+
+    expect(() =>
+      generatePagesRegistry({ pagesDir, outputFile, log: false })
+    ).toThrow("simulated rename failure");
+
+    expect(fs.readFileSync(outputFile, "utf8")).toBe("existing registry");
+    expect(fs.readdirSync(path.dirname(outputFile))).toEqual([
+      "pages.generated.ts"
+    ]);
   });
 
   it("rejects page paths that are unsafe to emit into generated source", () => {

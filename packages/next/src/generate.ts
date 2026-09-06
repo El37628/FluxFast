@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { compileFluxFastMutations } from "./mutation-compiler.js";
@@ -66,6 +67,44 @@ const PAGE_EXTENSION = /\.(tsx|jsx)$/;
 const IGNORED_PAGE = /\.(test|spec|stories)\.(tsx|jsx)$/;
 const SAFE_PAGE_FILE =
   /^[A-Za-z0-9_.@()\[\]-]+(?:\/[A-Za-z0-9_.@()\[\]-]+)*\.(?:tsx|jsx)$/;
+
+function writeGeneratedArtifact(pathname: string, content: string): void {
+  // Keep the temporary file beside its destination so the final rename stays
+  // on one filesystem. Only the temporary name is random; output is unchanged.
+  const temporaryPath = path.join(
+    path.dirname(pathname),
+    `.${path.basename(pathname)}.${process.pid}.${randomUUID()}.tmp`
+  );
+  let descriptor: number | undefined;
+  let temporaryFileCreated = false;
+
+  try {
+    descriptor = fs.openSync(temporaryPath, "wx");
+    temporaryFileCreated = true;
+    fs.writeFileSync(descriptor, content, "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fs.renameSync(temporaryPath, pathname);
+    temporaryFileCreated = false;
+  } catch (error) {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Preserve the original generation failure.
+      }
+    }
+    if (temporaryFileCreated) {
+      try {
+        fs.unlinkSync(temporaryPath);
+      } catch {
+        // A concurrent cleanup or filesystem failure must not mask the cause.
+      }
+    }
+    throw error;
+  }
+}
 
 function isWithin(root: string, target: string): boolean {
   const relative = path.relative(root, target);
@@ -253,7 +292,7 @@ export function generatePagesRegistry(options: GenerateOptions = {}): void {
   fs.mkdirSync(snapshot.pagesDir, { recursive: true });
   fs.mkdirSync(path.dirname(snapshot.outputFile), { recursive: true });
 
-  fs.writeFileSync(snapshot.outputFile, snapshot.content, "utf8");
+  writeGeneratedArtifact(snapshot.outputFile, snapshot.content);
   if (options.log !== false) {
     console.log(
       `[fluxfast] Generated component registry with ${snapshot.files.length} pages at ${snapshot.outputFile}`
@@ -362,11 +401,11 @@ export function generateFluxFastProject(
   fs.mkdirSync(snapshot.pagesDir, { recursive: true });
   if (snapshot.schemaContent !== undefined && snapshot.schemaFile) {
     fs.mkdirSync(path.dirname(snapshot.schemaFile), { recursive: true });
-    fs.writeFileSync(snapshot.schemaFile, snapshot.schemaContent, "utf8");
+    writeGeneratedArtifact(snapshot.schemaFile, snapshot.schemaContent);
   }
   for (const artifact of snapshot.artifacts) {
     fs.mkdirSync(path.dirname(artifact.path), { recursive: true });
-    fs.writeFileSync(artifact.path, artifact.content, "utf8");
+    writeGeneratedArtifact(artifact.path, artifact.content);
   }
 
   if (options.log !== false) {
