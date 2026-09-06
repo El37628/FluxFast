@@ -42,6 +42,36 @@ describe("Mutation Patch Operators", () => {
     expect(res).toEqual([{ id: 1 }, { id: 2 }]);
   });
 
+  it("keeps the frozen item selector and non-array fallback semantics", () => {
+    const rooms = [
+      { id: 101, floor: 1, status: "dirty" },
+      { id: "101", floor: 2, status: "dirty" },
+      { id: 102, floor: 2, status: "dirty" },
+    ];
+
+    expect(applyPatchToValue(rooms, {
+      op: "replace-item",
+      id: "101",
+      value: { id: 101, status: "clean" },
+    })).toEqual([
+      { id: 101, status: "clean" },
+      { id: 101, status: "clean" },
+      { id: 102, floor: 2, status: "dirty" },
+    ]);
+    expect(applyPatchToValue(rooms, {
+      op: "remove-item",
+      match: { floor: 2, status: "dirty" },
+    })).toEqual([{ id: 101, floor: 1, status: "dirty" }]);
+    expect(applyPatchToValue("not-an-array", {
+      op: "append-item",
+      value: { id: 1 },
+    })).toEqual([{ id: 1 }]);
+    expect(applyPatchToValue("not-an-object", {
+      op: "merge-object",
+      value: { ready: true },
+    })).toEqual({ ready: true });
+  });
+
   it("applies patches through ResourceStore.patch()", () => {
     const store = new ResourceStore();
     store.set({
@@ -62,4 +92,3 @@ describe("Mutation Patch Operators", () => {
     expect(updated).toEqual([{ id: 101, status: "occupied" }]);
   });
 });
-

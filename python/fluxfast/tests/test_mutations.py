@@ -107,6 +107,12 @@ def test_mutation_rejects_unknown_or_incomplete_patch_operations():
         mutation(patches={"rooms": {"op": "execute-code"}})
     with pytest.raises(ValueError, match="requires an id"):
         mutation(patches={"rooms": {"op": "remove-item"}})
+    with pytest.raises(ValueError, match="object value"):
+        mutation(patches={"rooms": {"op": "merge-object", "value": 1}})
+    with pytest.raises(ValueError, match="string or integer"):
+        mutation(patches={"rooms": {"op": "remove-item", "id": {}}})
+    with pytest.raises(ValueError, match="match.*object"):
+        mutation(patches={"rooms": {"op": "remove-item", "match": []}})
 
 
 def test_mutation_response_omits_unset_optional_wire_fields():

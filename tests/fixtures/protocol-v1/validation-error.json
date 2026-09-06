@@ -1,0 +1,12 @@
+{
+  "protocol": "fluxfast/1",
+  "error": {
+    "type": "ValidationError",
+    "message": "Request validation failed",
+    "details": {
+      "email": [
+        "Invalid email"
+      ]
+    }
+  }
+}

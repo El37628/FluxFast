@@ -1,0 +1,27 @@
+{
+  "protocol": "fluxfast/1",
+  "page": {
+    "component": "dashboard/index",
+    "url": "/dashboard",
+    "meta": {}
+  },
+  "resourceKeys": [
+    "summary",
+    "activity"
+  ],
+  "resources": {
+    "summary": {
+      "version": "summary-v1",
+      "value": {
+        "revenue": 120000
+      }
+    }
+  },
+  "deferred": [
+    "activity"
+  ],
+  "live": [
+    "summary",
+    "activity"
+  ]
+}

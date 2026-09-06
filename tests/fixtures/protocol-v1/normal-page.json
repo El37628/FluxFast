@@ -1,0 +1,22 @@
+{
+  "protocol": "fluxfast/1",
+  "page": {
+    "component": "rooms/index",
+    "url": "/rooms?status=available",
+    "meta": {
+      "title": "Rooms"
+    }
+  },
+  "resources": {
+    "rooms": {
+      "version": "rooms-v1",
+      "value": [
+        {
+          "id": 101,
+          "status": "available"
+        }
+      ]
+    }
+  },
+  "appVersion": "2026.09.06"
+}

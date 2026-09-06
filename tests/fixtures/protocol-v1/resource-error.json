@@ -1,0 +1,8 @@
+{
+  "protocol": "fluxfast/1",
+  "error": {
+    "type": "ResourceError",
+    "message": "A resource could not be resolved",
+    "details": null
+  }
+}

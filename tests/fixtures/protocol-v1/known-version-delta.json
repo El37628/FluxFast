@@ -1,0 +1,20 @@
+{
+  "protocol": "fluxfast/1",
+  "page": {
+    "component": "rooms/index",
+    "url": "/rooms",
+    "meta": {}
+  },
+  "resourceKeys": [
+    "rooms",
+    "summary"
+  ],
+  "resources": {
+    "summary": {
+      "version": "summary-v2",
+      "value": {
+        "available": 4
+      }
+    }
+  }
+}

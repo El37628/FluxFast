@@ -120,6 +120,9 @@ export function assertPageEnvelope(data: unknown): asserts data is PageEnvelope 
       }
     }
   }
+  if (data.appVersion !== undefined && typeof data.appVersion !== "string") {
+    throw new ProtocolError("Invalid PageEnvelope: appVersion must be a string");
+  }
 }
 
 export function assertMutationEnvelope(data: unknown): asserts data is MutationEnvelope {
@@ -132,11 +135,45 @@ export function assertMutationEnvelope(data: unknown): asserts data is MutationE
   if (!isObject(data.mutation)) {
     throw new MutationError("Invalid MutationEnvelope: mutation payload is missing");
   }
-  if (data.mutation.invalidate !== undefined && !Array.isArray(data.mutation.invalidate)) {
-    throw new MutationError("Invalid MutationEnvelope: invalidate must be an array");
+  if (
+    data.mutation.invalidate !== undefined &&
+    (!Array.isArray(data.mutation.invalidate) ||
+      data.mutation.invalidate.some(key => typeof key !== "string"))
+  ) {
+    throw new MutationError(
+      "Invalid MutationEnvelope: invalidate must be an array of strings"
+    );
   }
   if (data.mutation.patches !== undefined && !isObject(data.mutation.patches)) {
     throw new MutationError("Invalid MutationEnvelope: patches must be an object");
+  }
+  if (
+    data.mutation.redirect !== undefined &&
+    (typeof data.mutation.redirect !== "string" ||
+      !data.mutation.redirect.startsWith("/") ||
+      data.mutation.redirect.startsWith("//"))
+  ) {
+    throw new MutationError(
+      "Invalid MutationEnvelope: redirect must be origin-relative"
+    );
+  }
+  if (data.mutation.externalRedirect !== undefined) {
+    let external: URL;
+    try {
+      external = new URL(String(data.mutation.externalRedirect));
+    } catch {
+      throw new MutationError(
+        "Invalid MutationEnvelope: externalRedirect must be an absolute HTTP(S) URL"
+      );
+    }
+    if (
+      typeof data.mutation.externalRedirect !== "string" ||
+      !["http:", "https:"].includes(external.protocol)
+    ) {
+      throw new MutationError(
+        "Invalid MutationEnvelope: externalRedirect must be an absolute HTTP(S) URL"
+      );
+    }
   }
   const allowedOps = new Set([
     "replace-resource",
@@ -153,13 +190,22 @@ export function assertMutationEnvelope(data: unknown): asserts data is MutationE
       if (!isObject(patch) || typeof patch.op !== "string" || !allowedOps.has(patch.op)) {
         throw new MutationError(`Invalid mutation patch operation for '${key}'`);
       }
-      const hasIdentity = "id" in patch || (
+      const hasId =
+        typeof patch.id === "string" || typeof patch.id === "number";
+      if ("id" in patch && !hasId) {
+        throw new MutationError(`Invalid mutation patch id for '${key}'`);
+      }
+      if ("match" in patch && !isObject(patch.match)) {
+        throw new MutationError(`Invalid mutation patch match for '${key}'`);
+      }
+      const hasIdentity = hasId || (
         isObject(patch.match) && Object.keys(patch.match).length > 0
       );
       if (
         (["replace-resource", "merge-object", "append-item"].includes(patch.op) && !("value" in patch)) ||
         (["replace-item", "remove-item"].includes(patch.op) && !hasIdentity) ||
-        (patch.op === "replace-item" && !("value" in patch))
+        (patch.op === "replace-item" && !("value" in patch)) ||
+        (patch.op === "merge-object" && !isObject(patch.value))
       ) {
         throw new MutationError(`Incomplete '${patch.op}' patch for '${key}'`);
       }
@@ -289,6 +335,7 @@ export class FetchTransport implements FluxTransport {
     const externalRedirect = response.headers.get("X-FluxFast-External-Redirect");
     if (externalRedirect && !data.mutation.externalRedirect) {
       data.mutation.externalRedirect = externalRedirect;
+      assertMutationEnvelope(data);
     }
     return data;
   }

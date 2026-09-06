@@ -1,0 +1,6 @@
+{
+  "protocol": "fluxfast/1",
+  "mutation": {
+    "redirect": "/rooms"
+  }
+}
