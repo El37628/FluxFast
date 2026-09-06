@@ -71,25 +71,28 @@ test("release publication waits for full production and container CI", () => {
   assert.match(githubRelease, /- verify-published-mixed-version/);
 });
 
-test("v0.8 compatibility gates use the adjacent v0.7 release", () => {
+test("v0.8.1 compatibility gates use the adjacent v0.8.0 release", () => {
   const branchSmoke = jobBlock(readWorkflow("release-smoke.yml"), "mixed-version-consumers");
-  assert.match(branchSmoke, /published v0\.7/);
+  assert.match(branchSmoke, /published v0\.8\.0/);
   assert.equal(
-    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.7\.0/g)?.length,
+    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.8\.0/g)?.length,
     2
   );
-  assert.doesNotMatch(branchSmoke, /0\.6\.0/);
+  assert.doesNotMatch(branchSmoke, /0\.7\.0/);
 
   const publishedSmoke = jobBlock(
     readWorkflow("release.yml"),
     "verify-published-mixed-version"
   );
-  assert.match(publishedSmoke, /Verify published 0\.8\/0\.7 package pairings/);
+  assert.match(
+    publishedSmoke,
+    /Verify published 0\.8\.1\/0\.8\.0 package pairings/
+  );
   assert.equal(
-    publishedSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.7\.0/g)?.length,
+    publishedSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.8\.0/g)?.length,
     2
   );
-  assert.doesNotMatch(publishedSmoke, /0\.6\.0/);
+  assert.doesNotMatch(publishedSmoke, /0\.7\.0/);
 });
 
 test("audit steps ignore upstream registry outages in CI", () => {

@@ -32,7 +32,7 @@ function identityFromUrl(url: string): DistributedIdentity {
   };
 }
 
-function verifySchemaOneImports(
+function verifySchemaTwoImports(
   counter: DistributedCounterResource,
   summary: DistributedSummaryResource
 ): GeneratedFluxResourceMap {
@@ -52,7 +52,7 @@ export default function HomePage() {
   const summary = useResource(resourceKeys.distributedSummary);
   const counter = useDeferredResource(resourceKeys.distributedCounter);
 
-  if (counter.data) verifySchemaOneImports(counter.data, summary);
+  if (counter.data) verifySchemaTwoImports(counter.data, summary);
 
   return (
     <main>

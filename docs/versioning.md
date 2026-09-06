@@ -90,8 +90,8 @@ Compatibility remains directional and additive:
   rather than treated as a stable cross-version API by themselves.
 
 Stable releases continue synchronizing all three package versions, and the
-release gates test both adjacent mixed-package directions (`0.8`/`0.7` and
-`0.7`/`0.8`). See [typed contracts and code generation](type-safety.md),
+release gates test both adjacent patch-package directions (`0.8.1`/`0.8.0` and
+`0.8.0`/`0.8.1`). See [typed contracts and code generation](type-safety.md),
 [General Application Contracts](contracts.md), the [Migration
 Guide](migration.md), and [the release guide](releasing.md) for clean-consumer
 requirements.
@@ -123,8 +123,8 @@ production path. See [production deployment](production.md) and
 Add user-facing entries beneath `Unreleased`, then run:
 
 ```bash
-pnpm release:prepare 0.8.0
-pnpm release:check v0.8.0
+pnpm release:prepare 0.8.1
+pnpm release:check v0.8.1
 ```
 
 The preparation command synchronizes every package manifest, the Python runtime
