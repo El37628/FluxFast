@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -267,6 +268,31 @@ def _is_next_process(process: ProcessSnapshot) -> bool:
     )
 
 
+def _observe_next_start(
+    processes: dict[int, ProcessSnapshot],
+    fastapi_ready_at: float | None,
+    next_start_at: float | None,
+    *,
+    clock: Callable[[], float] = time.perf_counter,
+) -> float | None:
+    """Record Next.js after the backend-ready causal boundary.
+
+    Process discovery and output capture run on different threads. Under load,
+    the loop timestamp can therefore predate a backend-ready marker that was
+    captured later in the same iteration, even though the supervisor starts
+    Next.js only after that marker. Clamp the observation to the known causal
+    boundary so instrumentation scheduling cannot invert the lifecycle.
+    """
+
+    if (
+        fastapi_ready_at is None
+        or next_start_at is not None
+        or not any(_is_next_process(process) for process in processes.values())
+    ):
+        return next_start_at
+    return max(fastapi_ready_at, clock())
+
+
 def _capture_descendants(
     root_pid: int,
     captured: dict[tuple[int, str], ProcessSnapshot],
@@ -458,12 +484,11 @@ def benchmark_once(workers: int, sample: int) -> LifecycleMeasurement:
             fastapi_ready_at = fastapi_ready_at or capture.marker_time(
                 "[fluxfast] FastAPI ready"
             )
-            if (
-                fastapi_ready_at is not None
-                and next_start_at is None
-                and any(_is_next_process(candidate) for candidate in current.values())
-            ):
-                next_start_at = now
+            next_start_at = _observe_next_start(
+                current,
+                fastapi_ready_at,
+                next_start_at,
+            )
             application_ready_at = capture.marker_time("[fluxfast] application ready")
             if now >= next_probe_at:
                 next_probe_at = now + 0.05
