@@ -109,6 +109,15 @@ class Address(BaseModel):
     city: str = Field(min_length=2, max_length=80)
     postcode: str = Field(min_length=3, max_length=12)
 
+    @field_validator("postcode")
+    @classmethod
+    def validate_service_area(cls, value: str) -> str:
+        """Keep this authoritative business rule out of generated JSON Schema."""
+
+        if value == "99999":
+            raise ValueError("Postcode is not serviceable")
+        return value
+
 
 class RegistrationInput(BaseModel):
     """General validation contract shared by the browser form and server."""

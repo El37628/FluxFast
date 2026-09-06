@@ -213,33 +213,130 @@ describe("useForm validation", () => {
     expect(form().errorMap).toEqual({});
   });
 
-  it("keeps authoritative server validation errors after local validation passes", async () => {
-    const validator = createValidator<{ email: string }>({
-      kind: "object",
-      properties: { email: { kind: "string", format: "email" } },
-      required: ["email"]
-    });
-    const { form, transport } = await mountForm(
-      { email: "ada@example.com" },
-      { validator }
-    );
-    transport.mutateMock.mockRejectedValue(
-      new ValidationError("Request validation failed", {
-        email: ["Email is already registered"]
-      })
-    );
-    const onError = vi.fn();
+  it.each([
+    ["email", "Email is already registered"],
+    ["address.postcode", "Postcode is not serviceable"],
+    ["addresses[0].postcode", "Postcode is not serviceable"]
+  ])(
+    "keeps authoritative server validation at the canonical %s path",
+    async (serverPath, serverMessage) => {
+      const validator = createValidator<{
+        email: string;
+        address: { postcode: string };
+        addresses: Array<{ postcode: string }>;
+      }>({
+        kind: "object",
+        properties: {
+          email: { kind: "string", format: "email" },
+          address: {
+            kind: "object",
+            properties: { postcode: { kind: "string", minLength: 3 } },
+            required: ["postcode"]
+          },
+          addresses: {
+            kind: "array",
+            items: {
+              kind: "object",
+              properties: { postcode: { kind: "string", minLength: 3 } },
+              required: ["postcode"]
+            }
+          }
+        },
+        required: ["email", "address", "addresses"]
+      });
+      const { form, transport } = await mountForm(
+        {
+          email: "ada@example.com",
+          address: { postcode: "99999" },
+          addresses: [{ postcode: "99999" }]
+        },
+        { validator }
+      );
+      let rejectRequest: ((reason?: unknown) => void) | undefined;
+      transport.mutateMock.mockImplementationOnce(() =>
+        new Promise<MutationEnvelope>((_resolve, reject) => {
+          rejectRequest = reject;
+        })
+      );
+      const onError = vi.fn();
+      let submission: Promise<void> | undefined;
 
-    await act(async () => {
-      await form().submit("/register", { onError })();
-    });
+      await act(async () => {
+        submission = form().submit("/register", { onError })();
+        await Promise.resolve();
+      });
 
-    expect(transport.mutateMock).toHaveBeenCalledOnce();
-    expect(form().issues).toEqual([]);
-    expect(form().errors).toEqual({ email: "Email is already registered" });
-    expect(form().errorMap).toEqual({ email: "Email is already registered" });
-    expect(onError).toHaveBeenCalledWith({ email: "Email is already registered" });
-  });
+      expect(rejectRequest).toBeDefined();
+      expect(form().processing).toBe(true);
+      expect(form().wasSuccessful).toBe(false);
+      expect(form().recentlySuccessful).toBe(false);
+
+      await act(async () => {
+        rejectRequest!(
+          new ValidationError("Request validation failed", {
+            [serverPath]: [serverMessage]
+          })
+        );
+        await submission!;
+      });
+
+      expect(transport.mutateMock).toHaveBeenCalledOnce();
+      expect(form().issues).toEqual([]);
+      expect(form().errors).toEqual({
+        [serverPath]: serverMessage
+      });
+      expect(form().errorMap).toEqual({
+        [serverPath]: serverMessage
+      });
+      expect(form().processing).toBe(false);
+      expect(form().wasSuccessful).toBe(false);
+      expect(form().recentlySuccessful).toBe(false);
+      expect(onError).toHaveBeenCalledWith({
+        [serverPath]: serverMessage
+      });
+
+      await act(async () => form().setError("email", "Manual email error"));
+      expect(form().errorMap).toEqual({
+        [serverPath]: serverMessage,
+        email: "Manual email error"
+      });
+
+      await act(async () => form().clearErrors("email"));
+      expect(form().errorMap).toEqual(
+        serverPath === "email" ? {} : { [serverPath]: serverMessage }
+      );
+
+      await act(async () => form().clearErrors());
+      expect(form().errors).toEqual({});
+      expect(form().errorMap).toEqual({});
+
+      let valid = false;
+      await act(async () => {
+        valid = form().validate();
+      });
+      expect(valid).toBe(true);
+
+      transport.mutateMock.mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        mutation: {}
+      });
+      const onSuccess = vi.fn();
+      await act(async () => {
+        await form().submit("/register", { onSuccess })();
+      });
+
+      expect(transport.mutateMock).toHaveBeenCalledTimes(2);
+      expect(onSuccess).toHaveBeenCalledOnce();
+      expect(form()).toMatchObject({
+        processing: false,
+        wasSuccessful: true,
+        recentlySuccessful: true,
+        errors: {},
+        issues: []
+      });
+      expect(form().errorMap).toEqual({});
+    }
+  );
 
   it("keeps manual errors additive and lets local issues take precedence", async () => {
     const validator = createValidator<{ name: string }>({

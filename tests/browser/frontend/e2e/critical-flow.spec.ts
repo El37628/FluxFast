@@ -100,7 +100,18 @@ test("navigates, validates, mutates, and redirects through one browser origin", 
 test("reuses a general type and validates a nested form before the server", async ({
   page,
 }) => {
+  const browserErrors: string[] = [];
+  const expectedValidationErrors: string[] = [];
   const registrationRequests: string[] = [];
+  page.on("pageerror", error => browserErrors.push(error.message));
+  page.on("console", message => {
+    if (message.type() !== "error") return;
+    if (message.text().includes("status of 422")) {
+      expectedValidationErrors.push(message.text());
+      return;
+    }
+    browserErrors.push(message.text());
+  });
   page.on("request", request => {
     if (
       request.method() === "POST" &&
@@ -127,21 +138,23 @@ test("reuses a general type and validates a nested form before the server", asyn
   expect(registrationRequests).toEqual([]);
 
   await registration.getByLabel("Registration name").fill("Ada Lovelace");
-  await registration.getByLabel("Registration email").fill("taken@example.com");
+  await registration.getByLabel("Registration email").fill("ada@example.com");
   await registration.getByLabel("Registration city").fill("Kuala Lumpur");
-  await registration.getByLabel("Registration postcode").fill("50000");
+  await registration.getByLabel("Registration postcode").fill("99999");
   await registration.getByRole("button", { name: "Register" }).click();
-  await expect(registration.getByRole("alert")).toContainText(
-    "Email is already registered",
+  await expect(page.getByTestId("registration-postcode-error")).toHaveText(
+    "Value error, Postcode is not serviceable",
   );
   expect(registrationRequests).toHaveLength(1);
 
-  await registration.getByLabel("Registration email").fill("ada@example.com");
+  await registration.getByLabel("Registration postcode").fill("50000");
   await registration.getByRole("button", { name: "Register" }).click();
   await expect(registration.getByRole("status")).toHaveText(
     "Registration accepted",
   );
   expect(registrationRequests).toHaveLength(2);
+  expect(expectedValidationErrors).toHaveLength(1);
+  expect(browserErrors).toEqual([]);
 });
 
 test("renders not-found after a mutation redirects to an unknown page", async ({

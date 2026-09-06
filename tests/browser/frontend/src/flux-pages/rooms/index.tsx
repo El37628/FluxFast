@@ -104,7 +104,9 @@ export default function RoomsPage() {
           })}
         />
         {registration.errorMap["address.postcode"] ? (
-          <p role="alert">{registration.errorMap["address.postcode"]}</p>
+          <p role="alert" data-testid="registration-postcode-error">
+            {registration.errorMap["address.postcode"]}
+          </p>
         ) : null}
 
         <button type="submit" disabled={registration.processing}>
