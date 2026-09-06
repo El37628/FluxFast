@@ -9,6 +9,35 @@ existing resource models, page URL routes, and generated type imports.
 
 ---
 
+## v0.8.0 to v0.8.1 validation paths
+
+FluxFast 0.8.1 corrects the formatted representation of numeric array indices.
+The structured validation path does not change:
+
+```ts
+["rooms", 0, "rate"]
+```
+
+Its formatted form changes from the v0.8.0 output:
+
+```text
+rooms.0.rate
+```
+
+to the canonical v0.8.1 output:
+
+```text
+rooms[0].rate
+```
+
+Applications using only top-level errors are unaffected. Applications that
+index nested entries directly must update
+`form.errorMap["rooms.0.rate"]` to
+`form.errorMap["rooms[0].rate"]`. FastAPI/Pydantic server failures now preserve
+their complete nested location and converge on the same `errorMap` key.
+
+---
+
 ## What's new in v0.8.0
 
 1. **General Application Contracts (`flux.define_type`):** Define authoritative
@@ -24,7 +53,7 @@ existing resource models, page URL routes, and generated type imports.
    zero-dependency validators powered by `@fluxfast/core`, replacing external
    libraries like Zod or Valibot for generated contracts.
 6. **Form Validation with `useForm`:** Pre-submit client validation prevents
-   invalid network requests and surfaces structured `issues` and dot-path
+   invalid network requests and surfaces structured `issues` and canonical
    `errorMap` mappings alongside server validation errors.
 7. **Tree-shakeable Bundles:** Applications that do not import validators pay
    zero runtime bundle overhead.
@@ -202,8 +231,9 @@ const form = useForm(
   - `form.issues`: Full structured `readonly ValidationIssue[]` array.
   - `form.errorMap`: Dot/bracket notation error mapping (e.g.,
     `form.errorMap["addresses[0].city"]`).
-- **Seamless server merging:** Server 422 errors merge into `form.errors` and
-  `form.errorMap` automatically.
+- **Authoritative server mapping:** Top-level server errors remain available in
+  `form.errors`; nested errors use canonical keys such as
+  `form.errorMap["addresses[0].city"]`.
 
 ### 7. Run `doctor` and check CI drift detection
 

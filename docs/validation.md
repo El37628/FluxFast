@@ -1,8 +1,8 @@
 # Native Client Validation
 
 FluxFast 0.8 provides a first-party, dependency-free runtime validation system.
-Validation plans are compiled directly from authoritative Python and Pydantic
-contracts into `@/.fluxfast/validators.generated.ts`.
+Supported validation plans are compiled directly from authoritative Python and
+Pydantic contracts into `@/.fluxfast/validators.generated.ts`.
 
 Developers do not need to install or maintain Zod, Valibot, Yup, Joi, or AJV
 for ordinary application validation.
@@ -93,6 +93,8 @@ Each `ValidationIssue` contains:
 
 Use `formatValidationPath(issue.path)` from `@fluxfast/core` to format path arrays
 into standard JavaScript dot/bracket notation (e.g., `users[0].contact.email`).
+Numeric array indices always use brackets; the underlying path remains structured
+as `readonly (string | number)[]`.
 
 ---
 
@@ -127,6 +129,7 @@ fluxfast types backend.main:app --frontend frontend
 ### 3. Use in your frontend
 
 ```ts
+import { formatValidationPath } from "@fluxfast/core";
 import type { RegistrationInput } from "@/.fluxfast/types.generated";
 import { RegistrationInputValidator } from "@/.fluxfast/validators.generated";
 
@@ -140,7 +143,7 @@ const result = RegistrationInputValidator.validate(input);
 
 if (!result.valid) {
   for (const issue of result.issues) {
-    console.error(issue.path.join("."), issue.message);
+    console.error(formatValidationPath(issue.path), issue.message);
   }
 } else {
   // result.value is strongly typed as RegistrationInput
@@ -155,12 +158,15 @@ if (!result.valid) {
 When `fluxfast types` or `fluxfast generate` runs, it outputs
 `@/.fluxfast/validators.generated.ts` containing:
 
-- **Type contract validators:** Any type declared with `flux.define_type()` produces
-  a matching `${Name}Validator`.
-- **Resource validators:** Declared typed resources produce matching resource
-  validators.
-- **Mutation body validators:** Mutations with JSON body schemas produce
+- **Type contract validators:** Supported types declared with `flux.define_type()`
+  produce matching `${Name}Validator` instances.
+- **Resource validators:** Supported typed resource schemas produce matching
+  resource validators.
+- **Mutation body validators:** Supported JSON mutation body schemas produce
   `${PascalCaseName}BodyValidator` instances.
+
+Contracts with unsupported validation semantics are listed in
+`validatorDiagnostics` and do not receive a weakened validator.
 
 ### Pure construction and tree-shaking
 
@@ -193,7 +199,6 @@ FluxFast compiles JSON Schema constraints emitted by Pydantic:
   - `date-time`, `date`, `time`
   - `uri`
   - `ipv4`, `ipv6`
-  - `hostname`
 
 ### Numbers & integers
 - `minimum`, `maximum`
@@ -209,7 +214,6 @@ FluxFast compiles JSON Schema constraints emitted by Pydantic:
 ### Arrays
 - `items` element validation
 - `minItems`, `maxItems`
-- `uniqueItems`
 
 ### Unions, literals, and enums
 - `anyOf` / `oneOf` unions
@@ -227,22 +231,51 @@ If a Pydantic contract produces schema keywords that the client evaluator cannot
 safely verify, the code generator emits an explicit diagnostic. Unsupported
 semantics are never silently dropped.
 
+TypeScript contract generation and native validator generation are independent.
+For example, a schema containing `uniqueItems` can still produce an accurate
+TypeScript array type, but its native validator is omitted because the runtime
+does not implement uniqueness semantics. Other supported contracts continue to
+receive validators.
+
+> FluxFast never silently drops a validation-affecting JSON Schema keyword. If
+> native validation cannot faithfully represent a contract, the validator is
+> omitted and generation reports a diagnostic.
+
 ---
 
 ## Runtime safety and denial-of-service prevention
 
-The validator evaluator includes defensive runtime protections:
+The validator evaluator includes defensive runtime protections. The exported
+`DEFAULT_VALIDATION_MAX_*` constants are the source of truth for these defaults:
 
-1. **Recursion depth limits:** Evaluator traversal is bounded (`maxDepth: 32` by
+1. **Recursion depth limits:** Evaluator traversal is bounded (`maxDepth: 64` by
    default) to protect against deep or self-referencing inputs.
-2. **Operation bounds:** Total evaluation steps are tracked (`maxOperations: 50,000`
+2. **Operation bounds:** Total evaluation steps are tracked (`maxOperations: 100,000`
    by default) to prevent CPU starvation from hostile combinatorial inputs.
 3. **Issue limits:** Traversal caps the number of collected issues (`maxIssues: 100`
    by default) to avoid unbounded memory allocation.
-4. **Prototype pollution immunity:** The evaluator safely ignores internal
+4. **Property limits:** Each object or collection is bounded by
+   `maxProperties: 10,000` by default.
+5. **Prototype pollution immunity:** The evaluator safely ignores internal
    JavaScript properties such as `__proto__`, `constructor`, and `prototype`.
-5. **Cycle detection:** Hostile cyclic JavaScript objects are detected without
+6. **Cycle detection:** Hostile cyclic JavaScript objects are detected without
    causing browser stack overflow errors.
+
+```ts
+import {
+  DEFAULT_VALIDATION_MAX_DEPTH,
+  DEFAULT_VALIDATION_MAX_ISSUES,
+  DEFAULT_VALIDATION_MAX_OPERATIONS,
+  DEFAULT_VALIDATION_MAX_PROPERTIES,
+} from "@fluxfast/core";
+
+export const validationDefaults = {
+  maxDepth: DEFAULT_VALIDATION_MAX_DEPTH,
+  maxIssues: DEFAULT_VALIDATION_MAX_ISSUES,
+  maxOperations: DEFAULT_VALIDATION_MAX_OPERATIONS,
+  maxProperties: DEFAULT_VALIDATION_MAX_PROPERTIES,
+} as const;
+```
 
 ---
 
@@ -281,6 +314,35 @@ FluxFast intentionally does not include an asynchronous refinement system or a
 heavy schema-builder DSL. Async checks (such as verifying email uniqueness in a
 database) belong on the FastAPI backend where authorization and transactions can be
 safely applied.
+
+## Client feedback and server authority
+
+Generated client validation is an early feedback layer. It never replaces the
+authoritative mutation boundary:
+
+```text
+Pydantic model (supported contract)
+     ↓
+generated client schema and validator
+     ↓
+fast browser validation
+     ↓
+request
+     ↓
+FastAPI and Pydantic
+     ↓
+authoritative validation
+     ↓
+nested server error
+     ↓
+useForm.errorMap
+```
+
+Native client validation improves UX and reduces avoidable requests. FastAPI and
+Pydantic remain authoritative for every submitted mutation. A Python-only rule
+can therefore accept the generated client structure but reject, for example,
+`address.postcode`; `useForm` exposes that response at
+`form.errorMap["address.postcode"]`.
 
 ---
 
@@ -351,8 +413,10 @@ export function RegistrationForm() {
    - `form.errorMap`: A frozen dictionary mapping formatted string paths to error
      messages (e.g., `form.errorMap["addresses[0].zip"]`).
 4. **Server validation coexistence:** If client-side validation passes, the request
-   proceeds to FastAPI. Any 422 validation errors or custom error envelopes returned
-   by the server are merged into `form.errors` and `form.errorMap` automatically.
+   proceeds to FastAPI. Any FluxFast validation envelope returned by the server
+   replaces stale client feedback. Top-level server failures remain available in
+   `form.errors`; use canonical `form.errorMap` keys such as `address.postcode` or
+   `addresses[0].postcode` for nested failures.
 5. **Selective error clearing:** Calling `form.clearErrors("email")` clears errors
    for that field while preserving other validation feedback.
 

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createValidator } from "@fluxfast/core";
+import { createValidator, VALIDATION_FORMATS } from "@fluxfast/core";
 import {
   compileFluxFastValidators,
   compileFluxFastValidatorsWithDiagnostics,
@@ -243,6 +243,23 @@ describe("FluxFast validator compiler", () => {
         ["tags"]
       ]);
     }
+  });
+
+  it("keeps compiler and runtime validation formats aligned", () => {
+    for (const format of VALIDATION_FORMATS) {
+      const plan = compileJsonSchemaToValidationPlan({
+        type: "string",
+        format
+      });
+      expect(() => createValidator(plan)).not.toThrow();
+    }
+
+    expect(() =>
+      compileJsonSchemaToValidationPlan({
+        type: "string",
+        format: "hostname"
+      })
+    ).toThrow(/unsupported validation format "hostname"/);
   });
 
   it("rejects unsupported validation keywords instead of dropping them", () => {

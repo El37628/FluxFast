@@ -132,6 +132,18 @@ Pre-submit validation runs synchronously, preventing invalid submissions before
 any network request is dispatched. See [General Application
 Contracts](docs/contracts.md) and [Native Client Validation](docs/validation.md).
 
+Generated TypeScript contracts and generated runtime validators are separate
+capabilities. A contract can still produce its TypeScript type when a
+validation-affecting JSON Schema keyword is unsupported; FluxFast omits only
+that contract's native validator and reports a diagnostic instead of silently
+weakening it.
+
+Native client validation improves UX and reduces avoidable requests. FastAPI
+and Pydantic remain authoritative for every submitted mutation. Authoritative
+nested failures use the same canonical paths as client issues, including
+`address.postcode` and `addresses[0].postcode`, and are available through
+`form.errorMap`.
+
 Start FastAPI and Next.js with one public browser origin:
 
 ```bash

@@ -5,6 +5,23 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve complete nested FastAPI/Pydantic validation locations when mapping
+  authoritative server errors into FluxFast form errors.
+- Resolve nested authoritative failures to canonical `useForm.errorMap` paths,
+  including object and array locations.
+- Correct native-validation documentation to match supported formats, unsupported
+  keyword behavior, and the evaluator's execution limits.
+
+### Changed
+
+- `formatValidationPath()` now uses bracket notation for numeric array indices,
+  such as `rooms[0].rate`, while structured validation paths remain unchanged.
+- Client/server validation regression coverage now includes a Python-only nested
+  rule, zero-request client failures, authoritative server failures, and corrected
+  resubmission.
+
 ## [0.8.0] - 2026-09-04
 
 ### Added

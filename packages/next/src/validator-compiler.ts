@@ -1,6 +1,7 @@
-import type {
-  ValidationPlan,
-  ValidationPlanDocument
+import {
+  VALIDATION_FORMATS,
+  type ValidationPlan,
+  type ValidationPlanDocument
 } from "@fluxfast/core";
 import {
   mutationBodyTypeName,
@@ -276,16 +277,7 @@ const MAX_SCHEMA_DEPTH = 64;
 const MAX_ROOT_CONTRACTS = 10_000;
 const MAX_SCHEMA_STRING_LENGTH = 65_536;
 
-const SUPPORTED_FORMATS = new Set([
-  "date",
-  "date-time",
-  "email",
-  "ipv4",
-  "ipv6",
-  "time",
-  "uri",
-  "uuid"
-]);
+const SUPPORTED_FORMATS = new Set<string>(VALIDATION_FORMATS);
 
 interface SchemaWorkItem {
   readonly schema: SchemaNode;
