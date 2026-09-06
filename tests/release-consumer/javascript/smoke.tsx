@@ -11,6 +11,10 @@ import {
   useResource,
   type FluxApplicationProps,
 } from "@fluxfast/next";
+import {
+  defineFluxConfig as defineClientFluxConfig,
+  type UseFormReturn,
+} from "@fluxfast/next/client";
 import { createFluxNextPage } from "@fluxfast/next/server";
 import { generatePagesRegistry } from "@fluxfast/next/generate";
 import { withFluxFast } from "@fluxfast/next/next-config";
@@ -40,6 +44,7 @@ const Application: React.ComponentType<FluxApplicationProps> = ({
 }) => React.createElement("main", null, initialEnvelope.page.component);
 
 const config = defineFluxConfig({ application: Application });
+const clientConfig = defineClientFluxConfig({ application: Application });
 const page = createFluxNextPage(config);
 const nextConfig = withFluxFast({}, {
   backendUrl: "http://127.0.0.1:8000",
@@ -57,6 +62,7 @@ const legacyRoom: LegacyRoom = { id: 1, name: "Schema one" };
 const legacyRooms: RoomsResource = [legacyRoom];
 const legacyResources: GeneratedFluxResourceMap = { rooms: legacyRooms };
 const legacyResourceKey: typeof resourceKeys.rooms = "rooms";
+type RegistrationForm = UseFormReturn<{ email: string }>;
 
 export function HealthPage() {
   const health = useResource<{ ok: boolean }>("health");
@@ -65,10 +71,12 @@ export function HealthPage() {
 
 void [
   page,
+  clientConfig,
   nextConfig,
   runtime,
   versions,
   generatePagesRegistry,
   legacyResources,
   legacyResourceKey,
+  null as RegistrationForm | null,
 ];
