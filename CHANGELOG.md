@@ -14,6 +14,14 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Classify and freeze all 156 `@fluxfast/core` root exports while retaining the
   existing barrel structure, with stronger checks for accidental exports,
   framework imports, and runtime dependencies.
+- Classify and freeze all five `@fluxfast/next` npm entry points, including
+  CommonJS, ESM, declaration, and blocked-deep-import consumer checks.
+
+### Changed
+
+- Expose the existing `useLiveStatus` hook and its status types from the
+  explicit `@fluxfast/next/client` entry point as a reviewed additive API
+  correction before the 1.0 freeze.
 
 ### Deprecated
 

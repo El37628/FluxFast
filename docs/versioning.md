@@ -40,7 +40,9 @@ describes the expected audience, not a weaker guarantee. The complete
 top-level Python inventory and the two compatibility-only deprecated exports
 are recorded in the [Python public API freeze](python-api.md). The complete
 framework-neutral JavaScript inventory is recorded in the
-[`@fluxfast/core` API freeze](core-api.md).
+[`@fluxfast/core` API freeze](core-api.md). The Next.js adapter's supported
+symbols and five public package paths are recorded in the
+[`@fluxfast/next` API freeze](next-api.md).
 
 ## Capability negotiation
 

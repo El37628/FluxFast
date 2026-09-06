@@ -13,6 +13,7 @@ import {
 } from "@fluxfast/next";
 import {
   defineFluxConfig as defineClientFluxConfig,
+  useLiveStatus,
   type UseFormReturn,
 } from "@fluxfast/next/client";
 import { createFluxNextPage } from "@fluxfast/next/server";
@@ -64,6 +65,9 @@ const legacyResources: GeneratedFluxResourceMap = { rooms: legacyRooms };
 const legacyResourceKey: typeof resourceKeys.rooms = "rooms";
 type RegistrationForm = UseFormReturn<{ email: string }>;
 
+// @ts-expect-error package internals are not public npm entry points
+type InternalNextProvider = typeof import("@fluxfast/next/dist/index.js").FluxProvider;
+
 export function HealthPage() {
   const health = useResource<{ ok: boolean }>("health");
   return <main>{health.ok ? "ready" : "unavailable"}</main>;
@@ -78,5 +82,7 @@ void [
   generatePagesRegistry,
   legacyResources,
   legacyResourceKey,
+  useLiveStatus,
+  null as InternalNextProvider | null,
   null as RegistrationForm | null,
 ];

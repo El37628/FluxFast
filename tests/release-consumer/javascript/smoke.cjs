@@ -18,6 +18,7 @@ async function main() {
   assert.equal(typeof core.createFluxRuntime, "function");
   assert.equal(typeof nextAdapter.defineFluxConfig, "function");
   assert.equal(typeof nextClient.useForm, "function");
+  assert.equal(typeof nextClient.useLiveStatus, "function");
   assert.equal(typeof nextGenerate.generateFluxFastProject, "function");
   assert.equal(typeof nextServer.createFluxNextPage, "function");
   assert.equal(typeof nextConfig.withFluxFast, "function");
@@ -39,6 +40,7 @@ async function main() {
   assert.equal(typeof coreEsm.createValidator, "function");
   assert.equal(typeof nextEsm.useForm, "function");
   assert.equal(typeof nextClientEsm.useForm, "function");
+  assert.equal(typeof nextClientEsm.useLiveStatus, "function");
   assert.equal(typeof nextServerEsm.createFluxNextPage, "function");
   assert.equal(typeof nextGenerateEsm.generateFluxFastProject, "function");
   assert.equal(typeof nextConfigEsm.withFluxFast, "function");
@@ -49,6 +51,14 @@ async function main() {
     ));
     assert.match(packageJson.exports["."].import, /^\.\/dist\/esm\//);
   }
+  assert.throws(
+    () => require("@fluxfast/next/dist/index.js"),
+    error => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
+  );
+  await assert.rejects(
+    import("@fluxfast/next/src/index.js"),
+    error => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
+  );
   assert.equal(fs.existsSync(path.join(installedRoot, ".bin", "fluxfast")), true);
   for (const packageName of ["core", "next"]) {
     const license = fs.readFileSync(
