@@ -11,6 +11,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   candidate, or deprecated API, with a CI-enforced inventory and targeted
   constructor, decorator, resource, scope, mutation, cache, and broker contract
   tests.
+- Classify and freeze all 156 `@fluxfast/core` root exports while retaining the
+  existing barrel structure, with stronger checks for accidental exports,
+  framework imports, and runtime dependencies.
 
 ### Deprecated
 
