@@ -5,6 +5,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-06
+
 ### Fixed
 
 - Preserve complete nested FastAPI/Pydantic validation locations when mapping
@@ -21,6 +23,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Client/server validation regression coverage now includes a Python-only nested
   rule, zero-request client failures, authoritative server failures, and corrected
   resubmission.
+- Generated artifacts now use per-file temporary writes and replacement renames,
+  preserving the previous complete file when replacement fails.
 
 ## [0.8.0] - 2026-09-04
 
@@ -338,7 +342,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.8.1...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
@@ -350,3 +354,4 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 [0.6.0]: https://github.com/El37628/FluxFast/releases/tag/v0.6.0
 [0.7.0]: https://github.com/El37628/FluxFast/releases/tag/v0.7.0
 [0.8.0]: https://github.com/El37628/FluxFast/releases/tag/v0.8.0
+[0.8.1]: https://github.com/El37628/FluxFast/releases/tag/v0.8.1

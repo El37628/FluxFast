@@ -24,7 +24,7 @@ const pairingName = process.env.FLUXFAST_PAIRING ?? "python-current";
 const pairing = resolvePublishedMixedPairing({
   pairing: pairingName,
   releaseVersion: process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion,
-  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.7.0"
+  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.8.0"
 });
 const expectedPythonVersion =
   process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "") ?? pairing.pythonVersion;
@@ -63,19 +63,6 @@ function runResult(command, args, cwd = repositoryRoot, extraEnvironment = {}) {
     cwd,
     env: cleanEnvironment(extraEnvironment),
     stdio: "inherit"
-  });
-}
-
-function runCaptured(
-  command,
-  args,
-  cwd = repositoryRoot,
-  extraEnvironment = {}
-) {
-  return spawnSync(command, args, {
-    cwd,
-    env: cleanEnvironment(extraEnvironment),
-    encoding: "utf8"
   });
 }
 
@@ -159,18 +146,6 @@ function assertTraditionalRegistryGeneration() {
   }
 }
 
-function generatedArtifactSnapshot() {
-  const generatedRoot = path.join(consumerRoot, "src", ".fluxfast");
-  return Object.fromEntries(
-    fs.readdirSync(generatedRoot)
-      .sort()
-      .map(file => [
-        file,
-        fs.readFileSync(path.join(generatedRoot, file), "base64")
-      ])
-  );
-}
-
 function typedGenerationArgs(appImport, { check = false } = {}) {
   const args = [
     "-m",
@@ -195,7 +170,7 @@ function schemaGenerationEnvironment() {
   };
 }
 
-function assertSchemaOneGeneration() {
+function assertSchemaTwoGeneration() {
   const generatedRoot = path.join(consumerRoot, "src", ".fluxfast");
   for (const file of [
     "schema.generated.json",
@@ -208,15 +183,16 @@ function assertSchemaOneGeneration() {
     assert.equal(
       fs.existsSync(path.join(generatedRoot, file)),
       true,
-      `${file} must be generated from the previous Python schema/1 producer`
+      `${file} must be generated from the selected Python schema/2 producer`
     );
   }
 
   const schema = JSON.parse(
     fs.readFileSync(path.join(generatedRoot, "schema.generated.json"), "utf8")
   );
-  assert.equal(schema.schema, "fluxfast-schema/1");
-  assert.equal("types" in schema, false);
+  assert.equal(schema.schema, "fluxfast-schema/2");
+  assert.equal(schema.producer, expectedPythonVersion);
+  assert.deepEqual(schema.types, {});
   assert.deepEqual(Object.keys(schema.resources).sort(), [
     "distributed-counter",
     "distributed-summary"
@@ -345,49 +321,19 @@ try {
     consumerRoot
   );
 
-  if (pairingName === "javascript-current") {
-    run(
-      python,
-      typedGenerationArgs("distributed_backend:app"),
-      consumerRoot,
-      schemaGenerationEnvironment()
-    );
-    assertSchemaOneGeneration();
-    run(
-      python,
-      typedGenerationArgs("distributed_backend:app", { check: true }),
-      consumerRoot,
-      schemaGenerationEnvironment()
-    );
-  } else {
-    const before = generatedArtifactSnapshot();
-    const mismatch = runCaptured(
-      python,
-      typedGenerationArgs("schema2_backend:app"),
-      consumerRoot,
-      { PYTHONPATH: "" }
-    );
-    if (mismatch.error) throw mismatch.error;
-    assert.notEqual(
-      mismatch.status,
-      0,
-      "schema/2 generation must fail with JavaScript 0.7"
-    );
-    const output = `${mismatch.stdout ?? ""}${mismatch.stderr ?? ""}`;
-    assert.match(
-      output,
-      /FluxFast schema fluxfast-schema\/2 requires JavaScript tooling\s+with schema\/2 support\./
-    );
-    assert.match(
-      output,
-      /Upgrade @fluxfast\/next before regenerating contracts\./
-    );
-    assert.deepEqual(
-      generatedArtifactSnapshot(),
-      before,
-      "a schema/2 tooling mismatch must not modify generated files"
-    );
-  }
+  run(
+    python,
+    typedGenerationArgs("distributed_backend:app"),
+    consumerRoot,
+    schemaGenerationEnvironment()
+  );
+  assertSchemaTwoGeneration();
+  run(
+    python,
+    typedGenerationArgs("distributed_backend:app", { check: true }),
+    consumerRoot,
+    schemaGenerationEnvironment()
+  );
 
   run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
   run(npmCommand, ["run", "typecheck"], consumerRoot);
