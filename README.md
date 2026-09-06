@@ -352,7 +352,9 @@ deployment boundary. The [compatibility and versioning
 policy](docs/versioning.md) lists supported runtimes and the deprecation
 policy; the [Python public API freeze](docs/python-api.md) classifies every
 official top-level export, and the [`@fluxfast/core` API
-freeze](docs/core-api.md) classifies the framework-neutral runtime. Maintainers
+freeze](docs/core-api.md) classifies the framework-neutral runtime. The
+[`@fluxfast/next` API freeze](docs/next-api.md) defines the supported adapter
+exports and package paths. Maintainers
 can find the registry and tag procedure in the [release guide](docs/releasing.md).
 
 FluxFast is not an Inertia wrapper and does not implement the Inertia protocol.

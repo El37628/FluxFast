@@ -16,7 +16,16 @@ const baselinePath = path.join(
   "public-api-v0.8.1.json"
 );
 
-test("keeps the v0.8.1 JavaScript public API baseline explicit", () => {
+test("keeps the reviewed v0.9 JavaScript public API candidate explicit", () => {
   const expected = JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+  expected.packages["@fluxfast/next"].entries["./client"].typeOnly.push(
+    "LiveConnectionStatus",
+    "LiveStatusSnapshot"
+  );
+  expected.packages["@fluxfast/next"].entries["./client"].typeOnly.sort();
+  expected.packages["@fluxfast/next"].entries["./client"].valueOnly.push(
+    "useLiveStatus"
+  );
+  expected.packages["@fluxfast/next"].entries["./client"].valueOnly.sort();
   assert.deepEqual(createPublicApiSnapshot(), { packages: expected.packages });
 });
