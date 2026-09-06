@@ -163,7 +163,7 @@ project uses `.fluxfast/`:
 | --- | --- |
 | `schema.generated.json` | Deterministic `fluxfast-schema/2` developer manifest and fingerprint. |
 | `types.generated.ts` | Models, general application contracts, reusable mutation bodies, `resourceKeys`, and `FluxResourceMap` augmentation. |
-| `validators.generated.ts` | Native framework-neutral client validators for types, resources, and mutation bodies. |
+| `validators.generated.ts` | Supported native framework-neutral client validators plus diagnostics for omitted contracts. |
 | `routes.generated.ts` | Typed and safely encoded FastAPI page URL builders. |
 | `mutations.generated.ts` | Typed JSON mutation helpers consuming reusable body contracts. |
 | `pages.generated.ts` | Allowlisted lazy FluxFast page-component registry. |
@@ -281,18 +281,25 @@ await mutations.addRoom(router, {
 
 The generated helper fixes the server-declared HTTP method, validates its
 TypeScript input, safely encodes path and query values, and returns the existing
-`MutationEnvelope`. Mutation bodies also export reusable named TypeScript interfaces
-(e.g., `AddRoomBody` in `types.generated.ts`) and matching runtime validators
-(e.g., `AddRoomBodyValidator` in `validators.generated.ts`). Generation covers JSON
-bodies only; multipart, streaming, and arbitrary REST clients remain application
-responsibilities.
+`MutationEnvelope`. Mutation bodies also export reusable named TypeScript
+interfaces (for example, `AddRoomBody` in `types.generated.ts`). When every
+validation-affecting schema keyword is supported, generation also emits the
+matching runtime validator (for example, `AddRoomBodyValidator` in
+`validators.generated.ts`). Generation covers JSON bodies only; multipart,
+streaming, and arbitrary REST clients remain application responsibilities.
 
 ## Native client validation
 
-FluxFast generates native runtime validators for all registered type contracts,
-resource models, and mutation bodies in `@/.fluxfast/validators.generated.ts`.
-Validators are powered by `@fluxfast/core` without requiring Zod, Valibot, or any
-external schema library.
+FluxFast generates native runtime validators for supported registered type
+contracts, resource models, and mutation bodies in
+`@/.fluxfast/validators.generated.ts`. Validators are powered by
+`@fluxfast/core` without requiring Zod, Valibot, or any external schema library.
+
+TypeScript output and validator output are deliberately independent. If a
+contract contains an unsupported validation keyword, its TypeScript type can
+still be generated while its validator is omitted with an explicit diagnostic.
+This fail-closed behavior prevents client validation from silently accepting a
+weaker contract.
 
 ```tsx
 import type { AddRoomBody } from "@/.fluxfast/types.generated";

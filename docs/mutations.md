@@ -178,8 +178,10 @@ resource graph.
   the form before dispatching a mutation. If validation fails, no network request
   is sent, and `errors`, `issues`, and `errorMap` update immediately.
 - **Server validation:** Standard FastAPI 422 detail arrays and FluxFast error
-  envelopes map seamlessly into `form.errors` and `form.errorMap`. Non-validation
-  failures are not swallowed.
+  envelopes replace stale client feedback after local validation passes. Top-level
+  failures remain available in `form.errors`; canonical nested paths such as
+  `address.postcode` and `addresses[0].postcode` are available in `form.errorMap`.
+  Non-validation failures are not swallowed.
 
 See [Native Client Validation](validation.md) for full form validation examples and
 refinement patterns.

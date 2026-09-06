@@ -180,6 +180,19 @@ All contracts participate in a global type graph compiler:
 4. **Referenced definitions (`$defs`):** Nested and recursive models referenced
    across schemas are resolved into cleanly scoped, named TypeScript declarations.
 
+### Type generation and validator generation are separate
+
+The unified type graph describes the JSON shape and can produce an accurate
+TypeScript contract even when the native runtime cannot faithfully enforce every
+validation keyword. In that case FluxFast keeps the generated type, omits the
+affected validator, and reports a compiler diagnostic. It never silently drops a
+validation rule to make a validator appear available.
+
+For example, `uniqueItems` affects runtime validation but not the TypeScript array
+shape. A contract using it can still appear in `types.generated.ts` while its entry
+is intentionally absent from `validators.generated.ts`. Supported contracts in the
+same manifest continue to generate normally.
+
 ---
 
 ## Using contracts in frontend code
