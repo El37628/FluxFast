@@ -3,7 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const core = require("@fluxfast/core");
 const nextAdapter = require("@fluxfast/next");
-const { withFluxFast } = require("@fluxfast/next/next-config");
+const nextClient = require("@fluxfast/next/client");
+const nextGenerate = require("@fluxfast/next/generate");
+const nextServer = require("@fluxfast/next/server");
+const nextConfig = require("@fluxfast/next/next-config");
 
 async function main() {
   const installedRoot = path.join(process.cwd(), "node_modules");
@@ -14,6 +17,10 @@ async function main() {
   assert.equal(nextEntry.startsWith(installedRoot), true);
   assert.equal(typeof core.createFluxRuntime, "function");
   assert.equal(typeof nextAdapter.defineFluxConfig, "function");
+  assert.equal(typeof nextClient.useForm, "function");
+  assert.equal(typeof nextGenerate.generateFluxFastProject, "function");
+  assert.equal(typeof nextServer.createFluxNextPage, "function");
+  assert.equal(typeof nextConfig.withFluxFast, "function");
   const [
     coreEsm,
     nextEsm,
@@ -56,7 +63,7 @@ async function main() {
   assert.deepEqual(store.getSnapshot("health"), { ok: true });
   assert.equal(typeof core.encodeKnownVersions(store.exportKnownVersions()), "string");
 
-  const config = withFluxFast({}, {
+  const config = nextConfig.withFluxFast({}, {
     backendUrl: "http://127.0.0.1:43123",
     generate: false,
   });

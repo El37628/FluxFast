@@ -9,7 +9,7 @@
   "scripts": {
     "build": "pnpm -r --if-present run build",
     "typecheck": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm -r --if-present run typecheck",
-    "test": "pnpm --filter @fluxfast/core run build && pnpm -r --if-present run test && pnpm test:release",
+    "test": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm -r --if-present run test && pnpm test:release",
     "test:e2e": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --dir tests/browser/frontend run test:e2e",
     "test:e2e:distributed": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --dir tests/browser/frontend run test:e2e:distributed",
     "test:e2e:distributed:production": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && node scripts/test-production-distributed-browser.mjs",
