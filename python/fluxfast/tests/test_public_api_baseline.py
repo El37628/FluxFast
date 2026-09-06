@@ -39,6 +39,23 @@ def _resolve_public_target(path: str) -> object:
     return target
 
 
+def _normalize_signature(rendered: str) -> str:
+    """Normalize runtime-equivalent annotation repr changes across Python."""
+
+    normalized = rendered.replace("typing.Any", "Any")
+    pep604 = "str | fluxfast.contract.ResourceContract[Any]"
+    for union_prefix in ("Union", "typing.Union"):
+        normalized = normalized.replace(
+            f"{union_prefix}[str, fluxfast.contract.ResourceContract[Any]]",
+            pep604,
+        )
+    return normalized
+
+
+def _stable_signature(target: object) -> str:
+    return _normalize_signature(str(inspect.signature(target)))
+
+
 def test_top_level_public_names_and_kinds_match_v081() -> None:
     """Every supported name remains importable from its public package path."""
 
@@ -61,7 +78,19 @@ def test_important_public_signatures_match_v081() -> None:
 
     expected = _baseline()["signatures"]
     actual = {
-        path: str(inspect.signature(_resolve_public_target(path)))
+        path: _stable_signature(_resolve_public_target(path))
         for path in expected
     }
     assert actual == expected
+
+
+def test_signature_snapshot_ignores_supported_python_repr_aliases() -> None:
+    old_repr = (
+        "(key: Union[str, fluxfast.contract.ResourceContract[typing.Any]]) "
+        "-> dict[str, typing.Any]"
+    )
+    new_repr = (
+        "(key: str | fluxfast.contract.ResourceContract[Any]) -> dict[str, Any]"
+    )
+
+    assert _normalize_signature(old_repr) == _normalize_signature(new_repr)
