@@ -33,6 +33,13 @@ Immediate removal remains possible for security vulnerabilities, behavior that
 was never part of the documented public API, or changes required to preserve
 protocol correctness.
 
+Starting with 0.9, exported APIs are classified as stable candidates,
+advanced stable candidates, deprecated, or internal. Stable and advanced
+stable candidates receive the same compatibility treatment; the distinction
+describes the expected audience, not a weaker guarantee. The complete
+top-level Python inventory and the two compatibility-only deprecated exports
+are recorded in the [Python public API freeze](python-api.md).
+
 ## Capability negotiation
 
 Capabilities negotiate optional additive behavior independently from package
