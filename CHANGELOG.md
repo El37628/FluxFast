@@ -5,6 +5,20 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+### Added
+
+- Classify every top-level Python export as a stable candidate, advanced stable
+  candidate, or deprecated API, with a CI-enforced inventory and targeted
+  constructor, decorator, resource, scope, mutation, cache, and broker contract
+  tests.
+
+### Deprecated
+
+- Mark the dormant `ValidationError` and `PageNotFoundError` compatibility
+  exports as deprecated. They remain importable through 1.0; applications
+  should use FastAPI's validation and 404 handling or the specific FluxFast
+  runtime error classes instead.
+
 ## [0.8.1] - 2026-09-06
 
 ### Fixed
