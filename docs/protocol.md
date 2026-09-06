@@ -4,6 +4,23 @@ The wire protocol version is `fluxfast/1`; its media type is
 `application/vnd.fluxfast+json`. It is versioned independently from Python and
 npm packages.
 
+FluxFast 0.9 treats this document and the shared fixtures in
+`tests/fixtures/protocol-v1` as the compatibility contract expected through
+1.0. This freeze does not create `fluxfast/2` and does not make the protocol
+version follow package versions.
+
+## Evolution rules
+
+A compatible `fluxfast/1` change may add optional ignorable metadata, a new
+capability-gated behavior, or a response diagnostic header only when older
+clients continue to behave correctly without understanding it. New capability
+names must have a safe no-capability fallback.
+
+Removing or renaming a field, changing requiredness or existing meaning,
+changing patch semantics, or requiring new client behavior is incompatible.
+Such a change requires a future `fluxfast/2`; it must not silently reinterpret
+`fluxfast/1`.
+
 ## Visit request
 
 ```http
@@ -38,6 +55,26 @@ rely on undeclared tokens.
 
 An explicitly unsupported `X-FluxFast-Protocol` receives a 409 protocol error.
 
+### Request header contract
+
+Header names are case-insensitive on HTTP. “No FluxFast limit” means the
+application does not impose another bound beyond the HTTP server or proxy's
+ordinary header limits.
+
+| Header | Required | Purpose and frozen invalid-input behavior | FluxFast limit |
+| --- | --- | --- | --- |
+| `Accept` | Optional for detection; sent by clients | The FluxFast media type identifies a FluxFast request for structured error handling even without `X-FluxFast`. Other values retain ordinary FastAPI error handling. Live clients send `text/event-stream`. | No FluxFast limit |
+| `X-FluxFast` | Optional for detection; sent by clients | The exact value `1` identifies a FluxFast request for structured error handling. Other values do not, unless `Accept` independently identifies it. | No FluxFast limit |
+| `X-FluxFast-Protocol` | Optional to the server; sent by clients | The value `1` names `fluxfast/1`. Any explicitly supplied other value produces HTTP 409 with an error envelope. | No FluxFast limit |
+| `X-FluxFast-Visit` | Sent on page visits and SSR requests | Opaque visit correlation value. The Python backend does not interpret it, so omission or any ordinary header value does not change page correctness. | No FluxFast limit |
+| `X-FluxFast-Known` | Optional | Base64url JSON object mapping resource keys to opaque versions. Invalid or oversized input is ignored and values are sent normally. | 100 entries; 16 KiB decoded JSON; 128 characters per key and version |
+| `X-FluxFast-Only` | Optional | Comma-separated page resource selection for refresh/deferred work. Invalid or empty entries are discarded; unknown keys never escape the route's authorized resource graph. No valid entries means no partial selection. | First 100 entries; 128 characters per accepted key |
+| `X-FluxFast-Capabilities` | Optional | Comma-separated additive features. Unknown or malformed tokens are ignored; a non-ASCII, oversized, or over-count header negotiates no capabilities. | 2,048 ASCII bytes; 32 tokens; 64 characters per token |
+| `X-FluxFast-Client-ID` | Optional for mutations and live streams | Opaque per-router identity used only to suppress the originating tab's echoed live event. Invalid values produce HTTP 409. | 64 printable ASCII characters |
+| `X-FluxFast-Live` | Required to request a live stream | The exact value `1` selects live handling. Other values retain normal page handling. | No FluxFast limit |
+| `X-FluxFast-Live-Keys` | Required when `X-FluxFast-Live: 1` | Comma-separated logical keys intersected with the reconstructed authorized page. Missing, malformed, or oversized input produces HTTP 409 rather than widening access. | 16 KiB; 100 keys; 128 characters per key |
+| `Content-Type` | Required when a mutation has a JSON body | Clients send `application/json`; malformed request bodies follow FastAPI validation/error handling. | No FluxFast limit |
+
 ## Page envelope
 
 ```json
@@ -55,9 +92,23 @@ An explicitly unsupported `X-FluxFast-Protocol` receives a 409 protocol error.
       "value": []
     }
   },
-  "deferred": ["analytics"]
+  "deferred": ["analytics"],
+  "appVersion": "2026.09.06"
 }
 ```
+
+The frozen page fields are:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `protocol` | Yes | Exact string `fluxfast/1`. |
+| `page` | Yes | Descriptor containing string `component` and `url`; optional `meta` is ignorable application metadata. |
+| `resources` | Yes | Map of logical keys to `{ version, value }`; versions are opaque strings. |
+| `resourceKeys` | No | Complete authorized logical resource graph when deferred behavior is negotiated, including sent, known, deferred, live, and failed keys. |
+| `deferred` | No | Keys still pending a resource-only follow-up. Omitted when none remain. |
+| `live` | No | Complete live subset when `live-resources` is negotiated. Empty or absent opens no stream. |
+| `resourceErrors` | No | Map of isolated sanitized `{ type, message, details? }` resource failures. |
+| `appVersion` | No | Opaque application/deployment version string. It is ignorable metadata and does not alter routing or resource semantics. |
 
 Resources already known at the same server-cached version are absent. Search
 parameters remain part of `page.url`. For clients that advertise the
@@ -161,6 +212,13 @@ response. `X-FluxFast-Deferred-Errors` counts isolated deferred loader failures
 returned in `resourceErrors`. Legacy/blocking responses report zero. The headers
 never expose cache scopes, tenant identifiers, or server cache keys.
 
+Other successful page responses include `X-FluxFast: 1`,
+`X-FluxFast-Protocol: 1`, `Server-Timing`, `X-FluxFast-Cache-Hits`,
+`X-FluxFast-Cache-Misses`, and `X-FluxFast-Resources-Sent`. These diagnostics
+are non-authoritative and ignorable; response-envelope content remains the
+source of client state. `X-FluxFast-Live-Resources` is the capability-gated
+count described above.
+
 ## Mutation envelope
 
 ```json
@@ -185,6 +243,28 @@ optional and absent fields are omitted rather than encoded as `null`.
 `externalRedirect` is an optional additive v1 field; the legacy
 `X-FluxFast-External-Redirect` response header is also accepted.
 
+The frozen mutation fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `patches` | Resource-key map of ordered patch lists. |
+| `invalidate` | Logical keys made stale after patches are applied. |
+| `redirect` | Origin-relative FluxFast visit; a 404 falls back to full browser navigation. |
+| `externalRedirect` | Absolute full-browser destination. It takes precedence over `redirect`. |
+
+Patch lists apply in order. `replace-resource` replaces the complete value.
+`merge-object` requires an object value and shallow-merges its properties, or
+uses that object when the current value is not an object. `replace-item`
+replaces every selected array item; `remove-item` removes every selected item.
+An `id` selector matches an exact ID or the same string representation, while
+a `match` selector requires strict equality for every named property.
+`append-item` appends to an array or starts a one-item array when the current
+value is not an array. Replacement/removal leaves non-array current values
+unchanged. `replace-resource`, `merge-object`, `replace-item`, and `append-item`
+require `value`; item replacement/removal requires a string/integer `id` or a
+non-empty `match` object. These names and meanings must not be reinterpreted
+within `fluxfast/1`.
+
 Patches apply first, invalidations second, then active invalidated resources are
 partially refreshed unless a redirect takes precedence.
 
@@ -204,6 +284,24 @@ partially refreshed unless a redirect takes precedence.
 Clients validate envelope shape and protocol before applying state. Breaking
 wire semantics require a new protocol version; optional additive fields may
 remain v1 after compatibility review.
+`error.type` and `error.message` are strings; `error.details` is optional,
+arbitrary sanitized metadata and may explicitly be `null`.
+
+## Compatibility fixtures
+
+The JSON files in [`tests/fixtures/protocol-v1`](../tests/fixtures/protocol-v1)
+are golden examples for normal pages, known-version deltas, partial loads,
+deferred pages and failures, live manifests, mutation patches and invalidation,
+both redirect forms, validation errors, and resource errors. Python Pydantic
+models must validate and round-trip them; the framework-neutral TypeScript
+consumer must validate or consume the same files. Fixture changes therefore
+receive protocol compatibility review rather than routine snapshot updates.
+
+The two frozen capability names are `deferred-resources` and `live-resources`.
+A new backend with an old client must retain blocking/non-live behavior when
+the capability header is absent. A new client with an old backend must remain
+correct when its unknown capability is ignored. No third capability is part of
+the v0.9 contract.
 
 ## Live Resources
 

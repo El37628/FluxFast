@@ -1,0 +1,42 @@
+{
+  "protocol": "fluxfast/1",
+  "mutation": {
+    "patches": {
+      "settings": [
+        {
+          "op": "replace-resource",
+          "value": {
+            "theme": "dark"
+          }
+        },
+        {
+          "op": "merge-object",
+          "value": {
+            "compact": true
+          }
+        }
+      ],
+      "rooms": [
+        {
+          "op": "replace-item",
+          "id": 101,
+          "value": {
+            "id": 101,
+            "status": "occupied"
+          }
+        },
+        {
+          "op": "remove-item",
+          "id": 102
+        },
+        {
+          "op": "append-item",
+          "value": {
+            "id": 103,
+            "status": "available"
+          }
+        }
+      ]
+    }
+  }
+}

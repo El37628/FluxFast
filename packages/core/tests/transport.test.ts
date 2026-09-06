@@ -124,6 +124,39 @@ describe("FetchTransport", () => {
     })).toThrowError(/requires|Incomplete/);
   });
 
+  it.each([
+    [{ invalidate: [null] }, "array of strings"],
+    [{ redirect: "https://example.com/rooms" }, "origin-relative"],
+    [{ redirect: "//example.com/rooms" }, "origin-relative"],
+    [{ externalRedirect: "/login" }, "absolute HTTP(S)"],
+    [{ externalRedirect: "javascript:alert(1)" }, "absolute HTTP(S)"],
+    [{ patches: { rooms: [{ op: "merge-object", value: 1 }] } }, "Incomplete"],
+    [{ patches: { rooms: [{ op: "remove-item", id: {} }] } }, "patch id"],
+    [{ patches: { rooms: [{ op: "remove-item", match: [] }] } }, "patch match"],
+  ])("rejects malformed mutation payload %#", (mutation, message) => {
+    expect(() => assertMutationEnvelope({
+      protocol: "fluxfast/1",
+      mutation,
+    })).toThrowError(message);
+  });
+
+  it("rejects an unsafe legacy external redirect header", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        protocol: "fluxfast/1",
+        mutation: {},
+      }), {
+        headers: {
+          "content-type": "application/json",
+          "X-FluxFast-External-Redirect": "javascript:alert(1)",
+        },
+      })
+    ));
+
+    await expect(new FetchTransport().mutate({ url: "/users", data: {} }))
+      .rejects.toThrowError(/absolute HTTP\(S\)/);
+  });
+
   it("maps standard FastAPI validation details", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
       new Response(JSON.stringify({

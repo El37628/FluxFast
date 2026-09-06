@@ -16,12 +16,18 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   framework imports, and runtime dependencies.
 - Classify and freeze all five `@fluxfast/next` npm entry points, including
   CommonJS, ESM, declaration, and blocked-deep-import consumer checks.
+- Freeze the `fluxfast/1` identity, envelopes, patch operations, request
+  headers, capabilities, and evolution rules with shared Python/TypeScript
+  golden compatibility fixtures.
 
 ### Changed
 
 - Expose the existing `useLiveStatus` hook and its status types from the
   explicit `@fluxfast/next/client` entry point as a reviewed additive API
   correction before the 1.0 freeze.
+- Preserve the existing optional `appVersion` page-envelope metadata in the
+  Python protocol model and reject non-string values in the TypeScript
+  consumer.
 
 ### Deprecated
 

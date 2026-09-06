@@ -32,13 +32,26 @@ def _validate_patch(key: str, patch: dict[str, Any]) -> None:
     operation = patch.get("op")
     if operation not in _PATCH_OPERATIONS:
         raise ValueError(f"unsupported mutation patch operation for '{key}': {operation!r}")
-    has_identity = "id" in patch or bool(patch.get("match"))
+    patch_id = patch.get("id")
+    has_id = (
+        "id" in patch
+        and not isinstance(patch_id, bool)
+        and isinstance(patch_id, (str, int))
+    )
+    if "id" in patch and not has_id:
+        raise ValueError(f"patch id for '{key}' must be a string or integer")
+    match = patch.get("match")
+    if "match" in patch and not isinstance(match, dict):
+        raise ValueError(f"patch match for '{key}' must be an object")
+    has_identity = has_id or (isinstance(match, dict) and bool(match))
     if operation in {"replace-resource", "merge-object", "append-item"} and "value" not in patch:
         raise ValueError(f"'{operation}' patch for '{key}' requires a value")
     if operation in {"replace-item", "remove-item"} and not has_identity:
         raise ValueError(f"'{operation}' patch for '{key}' requires an id or match")
     if operation == "replace-item" and "value" not in patch:
         raise ValueError(f"'replace-item' patch for '{key}' requires a value")
+    if operation == "merge-object" and not isinstance(patch.get("value"), dict):
+        raise ValueError(f"'merge-object' patch for '{key}' requires an object value")
 
 
 def replace_resource(value: Any) -> dict[str, Any]:

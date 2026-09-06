@@ -1,0 +1,9 @@
+{
+  "protocol": "fluxfast/1",
+  "mutation": {
+    "invalidate": [
+      "rooms",
+      "summary"
+    ]
+  }
+}

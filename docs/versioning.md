@@ -71,6 +71,8 @@ Capability names are public compatibility surface once shipped. Do not publish
 or depend on names for planned features until their request, response, fallback,
 and security behavior are implemented and documented. See
 [`protocol.md`](protocol.md) for the current token and field contract.
+The protocol specification also defines the frozen `fluxfast/1` headers,
+evolution rules, and shared cross-language compatibility fixtures.
 
 ## Developer schema and generated files
 

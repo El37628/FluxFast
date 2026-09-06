@@ -1,0 +1,24 @@
+{
+  "protocol": "fluxfast/1",
+  "page": {
+    "component": "rooms/index",
+    "url": "/rooms",
+    "meta": {}
+  },
+  "resourceKeys": [
+    "rooms",
+    "analytics"
+  ],
+  "resources": {
+    "rooms": {
+      "version": "rooms-v1",
+      "value": []
+    }
+  },
+  "resourceErrors": {
+    "analytics": {
+      "type": "ResourceError",
+      "message": "A deferred resource could not be resolved"
+    }
+  }
+}
