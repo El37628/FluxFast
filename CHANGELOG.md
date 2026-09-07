@@ -19,6 +19,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Freeze the `fluxfast/1` identity, envelopes, patch operations, request
   headers, capabilities, and evolution rules with shared Python/TypeScript
   golden compatibility fixtures.
+- Freeze the closed `fluxfast-schema/2` shape, producer modes, deterministic
+  fingerprint algorithm, and schema/1 reader compatibility with shared golden
+  fixtures and a generate/typecheck/build consumer gate.
 
 ### Changed
 

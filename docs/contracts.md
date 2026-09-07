@@ -227,7 +227,9 @@ Existing imports from `@/.fluxfast/types.generated` (such as `resourceKeys` and
 ## The `fluxfast-schema/2` manifest
 
 FluxFast 0.8 uses the `fluxfast-schema/2` specification for offline developer
-manifests.
+manifests. FluxFast 0.9 freezes its exact shape, producer modes, ordering, and
+fingerprint algorithm as the developer contract expected through 1.0; see the
+[developer schema specification](developer-schema.md).
 
 ### Manifest structure
 
@@ -256,7 +258,9 @@ manifests.
 
 The manifest includes a canonical SHA-256 fingerprint calculated over a sorted,
 deterministic representation of all types, resources, pages, and mutations. Any
-change to a contract alters the fingerprint.
+change to a contract alters the fingerprint. The producer version, machine
+paths, and timestamps are excluded; the complete canonicalization contract is
+defined in the [developer schema specification](developer-schema.md).
 
 In CI or pre-commit checks, verify that generated files are up to date:
 

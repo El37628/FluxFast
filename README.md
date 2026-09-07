@@ -339,6 +339,7 @@ pnpm benchmark
 ```
 
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
+[developer schema](docs/developer-schema.md),
 [caching](docs/caching.md), [distributed resource
 coherence](docs/distributed-cache.md), [deferred
 resources](docs/deferred-resources.md), [Live Resources](docs/live-resources.md),

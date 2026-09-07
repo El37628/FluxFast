@@ -1,0 +1,63 @@
+{
+  "schema": "fluxfast-schema/1",
+  "producer": "0.7.0",
+  "fingerprint": "ae9735b78e72e99c018aad1ba07dc98ab1e70da3170e2432799dd5fe8ded274c",
+  "resources": {
+    "rooms": {
+      "schema": {
+        "$defs": {
+          "LegacyRoom": {
+            "properties": {
+              "id": { "type": "integer" },
+              "name": { "type": "string" }
+            },
+            "required": ["id", "name"],
+            "title": "LegacyRoom",
+            "type": "object"
+          }
+        },
+        "items": {
+          "$ref": "#/$defs/LegacyRoom"
+        },
+        "type": "array"
+      }
+    }
+  },
+  "pages": [
+    {
+      "name": "hotel_rooms",
+      "path": "/hotels/{hotel_id}/rooms",
+      "parameters": [
+        {
+          "name": "hotel_id",
+          "location": "path",
+          "required": true,
+          "schema": { "type": "integer" }
+        }
+      ]
+    }
+  ],
+  "mutations": [
+    {
+      "name": "update_room",
+      "path": "/rooms/{room_id}",
+      "method": "PATCH",
+      "parameters": [
+        {
+          "name": "room_id",
+          "location": "path",
+          "required": true,
+          "schema": { "type": "integer" }
+        }
+      ],
+      "body": {
+        "properties": {
+          "name": { "minLength": 2, "type": "string" }
+        },
+        "required": ["name"],
+        "title": "UpdateRoomBody",
+        "type": "object"
+      }
+    }
+  ]
+}
