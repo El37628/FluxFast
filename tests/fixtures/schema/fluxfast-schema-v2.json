@@ -1,0 +1,138 @@
+{
+  "schema": "fluxfast-schema/2",
+  "producer": "0.9.0",
+  "fingerprint": "541a688a1f3aff53317ebdb67b10aa808479b70529f7d706b5bc9b96a2069a77",
+  "types": {
+    "CreateRoomInput": {
+      "mode": "validation",
+      "schema": {
+        "properties": {
+          "inputName": {
+            "minLength": 2,
+            "title": "Inputname",
+            "type": "string"
+          }
+        },
+        "required": ["inputName"],
+        "title": "CreateRoomInput",
+        "type": "object"
+      }
+    },
+    "User": {
+      "mode": "serialization",
+      "schema": {
+        "properties": {
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": ["id", "displayName"],
+        "title": "User",
+        "type": "object"
+      }
+    }
+  },
+  "resources": {
+    "rooms": {
+      "schema": {
+        "$defs": {
+          "Room": {
+            "properties": {
+              "id": {
+                "title": "Id",
+                "type": "integer"
+              },
+              "nightlyRate": {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "title": "Nightlyrate",
+                "type": "string"
+              }
+            },
+            "required": ["id", "nightlyRate"],
+            "title": "Room",
+            "type": "object"
+          }
+        },
+        "items": {
+          "$ref": "#/$defs/Room"
+        },
+        "type": "array"
+      }
+    }
+  },
+  "pages": [
+    {
+      "name": "hotel_rooms",
+      "path": "/hotels/{hotel_id}/rooms",
+      "parameters": [
+        {
+          "name": "hotel_id",
+          "location": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "minimumRate",
+          "location": "query",
+          "required": true,
+          "schema": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "type": "string"
+          }
+        }
+      ]
+    }
+  ],
+  "mutations": [
+    {
+      "name": "update_room",
+      "path": "/rooms/{room_id}",
+      "method": "PATCH",
+      "parameters": [
+        {
+          "name": "room_id",
+          "location": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "budget",
+          "location": "query",
+          "required": true,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      ],
+      "body": {
+        "properties": {
+          "inputName": {
+            "minLength": 2,
+            "title": "Inputname",
+            "type": "string"
+          }
+        },
+        "required": ["inputName"],
+        "title": "CreateRoomInput",
+        "type": "object"
+      }
+    }
+  ]
+}

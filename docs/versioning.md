@@ -86,6 +86,12 @@ protocol, or the Redis cache schema. A breaking manifest-format change requires
 a new schema identifier even when the package change is otherwise a normal
 minor release.
 
+FluxFast 0.9 treats schema/2 as a closed manifest shape expected through 1.0.
+Its fields, producer modes, ordering rules, and fingerprint algorithm are
+defined by the [developer schema specification](developer-schema.md). New
+manifest structure requires `fluxfast-schema/3`; schema/1 remains readable by
+current JavaScript tooling through 1.0.
+
 Compatibility remains directional and additive:
 
 - `@fluxfast/next` 0.8 understands both `fluxfast-schema/2` and legacy

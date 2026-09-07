@@ -59,6 +59,25 @@ export interface FluxFastSchemaManifest {
   mutations: FluxFastMutationRouteSchema[];
 }
 
+/** Internal runtime inventory used to keep the closed schema/2 shape auditable. */
+export const FLUXFAST_SCHEMA_V2_SHAPE = Object.freeze({
+  manifest: Object.freeze([
+    "schema",
+    "producer",
+    "fingerprint",
+    "types",
+    "resources",
+    "pages",
+    "mutations"
+  ]),
+  type: Object.freeze(["mode", "schema"]),
+  resource: Object.freeze(["schema"]),
+  page: Object.freeze(["name", "path", "parameters"]),
+  parameter: Object.freeze(["name", "location", "required", "schema"]),
+  mutationRequired: Object.freeze(["name", "path", "method", "parameters"]),
+  mutationOptional: Object.freeze(["body"])
+});
+
 /** A precise, user-facing error for an invalid schema manifest. */
 export class SchemaManifestValidationError extends TypeError {
   readonly path: string;
@@ -740,7 +759,7 @@ function validateParameter(
   budget: SchemaValueBudget
 ): asserts value is FluxFastRouteParameterSchema {
   assertRecord(value, path);
-  assertExactKeys(value, path, ["name", "location", "required", "schema"]);
+  assertExactKeys(value, path, FLUXFAST_SCHEMA_V2_SHAPE.parameter);
   assertMetadataName(value.name, `${path}.name`);
   if (value.location !== "path" && value.location !== "query") {
     fail(`${path}.location`, 'must be either "path" or "query"');
@@ -790,7 +809,7 @@ function validateResources(
     assertResourceKey(key, resourcePath);
     const entry = value[key];
     assertRecord(entry, resourcePath);
-    assertExactKeys(entry, resourcePath, ["schema"]);
+    assertExactKeys(entry, resourcePath, FLUXFAST_SCHEMA_V2_SHAPE.resource);
     assertJsonSchema(entry.schema, `${resourcePath}.schema`, budget);
   }
 }
@@ -806,7 +825,7 @@ function validateTypes(
     assertContractName(key, typePath);
     const entry = value[key];
     assertRecord(entry, typePath);
-    assertExactKeys(entry, typePath, ["mode", "schema"]);
+    assertExactKeys(entry, typePath, FLUXFAST_SCHEMA_V2_SHAPE.type);
     if (entry.mode !== "serialization" && entry.mode !== "validation") {
       fail(
         `${typePath}.mode`,
@@ -829,7 +848,7 @@ function validatePages(
     const pagePath = `${path}[${index}]`;
     const page = value[index];
     assertRecord(page, pagePath);
-    assertExactKeys(page, pagePath, ["name", "path", "parameters"]);
+    assertExactKeys(page, pagePath, FLUXFAST_SCHEMA_V2_SHAPE.page);
     assertMetadataName(page.name, `${pagePath}.name`);
     assertRoutePath(page.path, `${pagePath}.path`);
     validateParameters(page.parameters, `${pagePath}.parameters`, budget);
@@ -851,8 +870,8 @@ function validateMutations(
     assertExactKeys(
       mutation,
       mutationPath,
-      ["name", "path", "method", "parameters"],
-      ["body"]
+      FLUXFAST_SCHEMA_V2_SHAPE.mutationRequired,
+      FLUXFAST_SCHEMA_V2_SHAPE.mutationOptional
     );
     assertMetadataName(mutation.name, `${mutationPath}.name`);
     assertRoutePath(mutation.path, `${mutationPath}.path`);
@@ -881,14 +900,12 @@ export function validateFluxFastSchemaManifest(
 ): FluxFastSchemaManifest {
   const snapshot = createManifestSnapshot(value);
   assertRecord(snapshot, "$");
-  assertExactKeys(snapshot, "$", [
-    "schema",
-    "producer",
-    "fingerprint",
-    "resources",
-    "pages",
-    "mutations"
-  ], ["types"]);
+  assertExactKeys(
+    snapshot,
+    "$",
+    FLUXFAST_SCHEMA_V2_SHAPE.manifest.filter(field => field !== "types"),
+    ["types"]
+  );
 
   if (
     snapshot.schema !== FLUXFAST_SCHEMA_MANIFEST_V1 &&
