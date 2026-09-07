@@ -197,11 +197,16 @@ void [
   );
 
   const compilation = spawnSync(
-    path.resolve(__dirname, "../node_modules/typescript/bin/tsc"),
-    ["--project", configFile],
+    process.execPath,
+    [
+      path.resolve(__dirname, "../node_modules/typescript/lib/tsc.js"),
+      "--project",
+      configFile
+    ],
     { encoding: "utf8" }
   );
-  expect(`${compilation.stdout}${compilation.stderr}`).toBe("");
+  expect(compilation.error).toBeUndefined();
+  expect(`${compilation.stdout ?? ""}${compilation.stderr ?? ""}`).toBe("");
   expect(compilation.status).toBe(0);
 }
 
