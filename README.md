@@ -68,7 +68,9 @@ fluxfast types backend.main:app --frontend frontend
 The command uses the frontend's installed `@fluxfast/next` CLI, detects its
 layout, and updates the manifest, resource types, general application types,
 native runtime validators, route builders, mutation helpers, and page registry
-together. Use the read-only form in CI:
+together. Their filenames, public symbols, naming rules, and per-file
+replacement guarantees are documented in the [generated artifact
+contract](docs/generated-artifacts.md). Use the read-only form in CI:
 
 ```bash
 fluxfast types backend.main:app --frontend frontend --check

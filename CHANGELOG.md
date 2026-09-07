@@ -22,6 +22,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Freeze the closed `fluxfast-schema/2` shape, producer modes, deterministic
   fingerprint algorithm, and schema/1 reader compatibility with shared golden
   fixtures and a generate/typecheck/build consumer gate.
+- Freeze generated artifact filenames, semantic exports, and predictable naming
+  rules, with deterministic and per-file atomic replacement coverage on Linux
+  and Windows.
 
 ### Changed
 
