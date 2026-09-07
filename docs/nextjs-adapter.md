@@ -103,10 +103,10 @@ The detected `.fluxfast` directory contains:
 | `pages.generated.ts` | Allowlisted lazy page-component registry. |
 
 Do not edit these files manually. The complete declaration, generation,
-frontend usage, compatibility, and drift workflow is documented in [typed
-contracts and code generation](type-safety.md), [General Application
-Contracts](contracts.md), [Native Client Validation](validation.md), and the
-[Migration Guide](migration.md).
+frontend usage, compatibility, and drift workflow is documented in the
+[generated artifact contract](generated-artifacts.md), [typed contracts and
+code generation](type-safety.md), [General Application Contracts](contracts.md),
+[Native Client Validation](validation.md), and the [Migration Guide](migration.md).
 
 ## Development
 

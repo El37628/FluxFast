@@ -105,8 +105,11 @@ Compatibility remains directional and additive:
   generate the existing page registry when no manifest exists;
 - string-key resources and explicit frontend hook generics remain supported;
   and
-- generated files should be regenerated with the package versions under test
-  rather than treated as a stable cross-version API by themselves.
+- generated files should be regenerated with the package versions under test.
+  From 0.9, their filenames, public exported symbols, and semantic TypeScript
+  contracts are stable candidates through 1.0; cosmetic source formatting is
+  not. The complete boundary is defined by the [generated artifact
+  contract](generated-artifacts.md).
 
 Stable releases continue synchronizing all three package versions, and the
 release gates test both adjacent patch-package directions (`0.8.1`/`0.8.0` and
