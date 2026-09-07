@@ -20,6 +20,7 @@ const temporaryRoot = fs.mkdtempSync(
 );
 const generatedDir = path.join(temporaryRoot, "src/.fluxfast");
 const pagesDir = path.join(temporaryRoot, "src/flux-pages");
+const scopedModules = path.join(temporaryRoot, "node_modules/@fluxfast");
 const tsc = path.join(
   repositoryRoot,
   "node_modules/.bin",
@@ -27,10 +28,16 @@ const tsc = path.join(
 );
 
 try {
+  fs.mkdirSync(scopedModules, { recursive: true });
+  fs.symlinkSync(
+    path.join(repositoryRoot, "packages/core"),
+    path.join(scopedModules, "core"),
+    process.platform === "win32" ? "junction" : "dir"
+  );
   fs.mkdirSync(path.join(pagesDir, "health"), { recursive: true });
   fs.writeFileSync(
     path.join(pagesDir, "health/index.tsx"),
-    'export default function HealthPage() { return <main>ready</main>; }\n',
+    "export default function HealthPage() { return null; }\n",
     "utf8"
   );
 
