@@ -16,6 +16,7 @@ from fluxfast.cli import (
     TypeGenerationError,
     _frontend_command,
     _load_schema_app,
+    _parser,
     _type_generation_command,
     main,
     run_build,
@@ -49,6 +50,88 @@ def _schema_app() -> FastAPI:
 def _current_schema_version() -> str:
     major, minor, *_rest = (int(part) for part in __version__.split(".", 2))
     return "fluxfast-schema/2" if major > 0 or minor >= 8 else "fluxfast-schema/1"
+
+
+def test_python_cli_v0_9_surface_remains_available() -> None:
+    parser = _parser()
+    command_action = next(
+        action for action in parser._actions if action.dest == "command"
+    )
+    commands = command_action.choices
+    expected = {
+        "dev": {
+            "positionals": {"app"},
+            "options": {
+                "--frontend",
+                "--backend-host",
+                "--backend-port",
+                "--frontend-host",
+                "--frontend-port",
+                "--no-reload",
+                "--startup-timeout",
+            },
+        },
+        "build": {
+            "positionals": set(),
+            "options": {"--frontend", "--app"},
+        },
+        "start": {
+            "positionals": {"app"},
+            "options": {
+                "--frontend",
+                "--host",
+                "--port",
+                "--backend-host",
+                "--backend-port",
+                "--workers",
+                "--startup-timeout",
+                "--shutdown-timeout",
+            },
+        },
+        "doctor": {
+            "positionals": set(),
+            "options": {
+                "--production",
+                "--app",
+                "--frontend",
+                "--host",
+                "--port",
+                "--backend-host",
+                "--backend-port",
+                "--workers",
+                "--strict",
+            },
+        },
+        "schema": {
+            "positionals": {"app"},
+            "options": {"--output", "--check"},
+        },
+        "types": {
+            "positionals": {"app"},
+            "options": {"--frontend", "--check"},
+        },
+    }
+
+    assert set(expected).issubset(commands)
+    for command, contract in expected.items():
+        subparser = commands[command]
+        positionals = {
+            action.dest for action in subparser._actions if not action.option_strings
+        }
+        options = {
+            option
+            for action in subparser._actions
+            for option in action.option_strings
+        }
+        assert contract["positionals"].issubset(positionals)
+        assert contract["options"].issubset(options)
+
+    production_flag = next(
+        action
+        for action in commands["doctor"]._actions
+        if "--production" in action.option_strings
+    )
+    assert production_flag.required is True
 
 
 def test_frontend_command_detects_package_manager(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

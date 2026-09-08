@@ -145,7 +145,10 @@ and eviction policy at the infrastructure layer.
 ## Environment and secrets
 
 Use runtime environment variables for settings that differ between
-deployments. Typical non-secret values are:
+deployments. The [canonical FluxFast environment-variable
+inventory](production.md#canonical-environment-variable-inventory) defines
+which names are public, server-only, internal, reference-only, or deprecated.
+One typical non-secret production configuration is:
 
 ```env
 FLUXFAST_HOST=0.0.0.0

@@ -34,9 +34,11 @@ describe("FluxFast CLI", () => {
 
   it("prints help without a command", () => {
     expect(runCli([], io)).toBe(0);
-    expect(stdout.join("\n")).toContain("fluxfast init");
-    expect(stdout.join("\n")).toContain("--force");
-    expect(stdout.join("\n")).toContain("fluxfast generate");
+    const output = stdout.join("\n");
+    expect(output).toContain("fluxfast init [--dry-run] [--yes] [--force]");
+    expect(output).toContain("fluxfast init --check");
+    expect(output).toContain("fluxfast generate [--check] [--schema-file PATH]");
+    expect(output).toContain("fluxfast doctor");
   });
 
   it("uses exit code 2 for unknown commands and options", () => {

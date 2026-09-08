@@ -7,6 +7,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Freeze the one-public-port production topology, Python and Next CLI command
+  surfaces, environment-variable classifications, health/readiness lifecycle,
+  supervisor failure behavior, and Docker/Podman/Compose deployment contract.
 - Freeze live-resource authority, synchronization, recovery, lifecycle,
   transport, bounded delivery, and multi-worker deployment semantics.
 - Freeze capability-gated deferred-resource behavior across cache, follow-up,
