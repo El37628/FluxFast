@@ -24,6 +24,31 @@ const validationPatternCases = JSON.parse(
 ) as ValidationPatternCases;
 
 describe("FluxFast validation runtime", () => {
+  it("preserves input identity and exposes assertion issues without transforming data", () => {
+    const validator = createValidator<{ count: number }>({
+      kind: "object",
+      properties: { count: { kind: "integer", minimum: 1 } },
+      required: ["count"]
+    });
+    const input = { count: 2 };
+    const result = validator.validate(input);
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.value).toBe(input);
+    expect(validator.assert(input)).toBe(input);
+    expect(Object.isFrozen(input)).toBe(false);
+    expect(validator.is({ count: "2" })).toBe(false);
+
+    const invalid = { count: 0 };
+    const failure = validator.validate(invalid);
+    expect(failure.valid).toBe(false);
+    expect(failure).not.toHaveProperty("value");
+    let caught: unknown;
+    try { validator.assert(invalid); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(ValidationError);
+    expect(caught).toMatchObject({ name: "ValidationError", details: failure.issues });
+    expect(invalid).toEqual({ count: 0 });
+  });
+
   it("validates primitives and exposes the result, guard, and assertion APIs", () => {
     const validator = createValidator<number>({
       kind: "integer",

@@ -89,6 +89,75 @@ afterEach(async () => {
 });
 
 describe("useForm validation", () => {
+  it("merges updates, applies updater functions immediately, and resets only data", async () => {
+    const { form } = await mountForm({ name: "Initial", count: 1 });
+
+    await act(async () => {
+      form().setData("name", "Edited");
+      form().setData({ count: 2 });
+      form().setData(previous => ({ ...previous, count: previous.count + 1 }));
+      form().setError("name", "Keep this error");
+    });
+    expect(form().data).toEqual({ name: "Edited", count: 3 });
+
+    await act(async () => form().reset("name"));
+    expect(form().data).toEqual({ name: "Initial", count: 3 });
+    expect(form().errors).toEqual({ name: "Keep this error" });
+
+    await act(async () => form().reset());
+    expect(form().data).toEqual({ name: "Initial", count: 1 });
+    expect(form().errorMap).toEqual({ name: "Keep this error" });
+    await act(async () => form().clearErrors());
+    expect(form().errorMap).toEqual({});
+  });
+
+  it("expires recent success independently of persistent success and restarts its timer", async () => {
+    vi.useFakeTimers();
+    try {
+      const { form, transport } = await mountForm({ name: "Ada" });
+      transport.mutateMock.mockResolvedValue({ protocol: "fluxfast/1", mutation: {} });
+      await act(async () => { await form().submit("/save")(); });
+      expect(form().wasSuccessful).toBe(true);
+      expect(form().recentlySuccessful).toBe(true);
+
+      await act(async () => { vi.advanceTimersByTime(1500); });
+      await act(async () => { await form().submit("/save")(); });
+      await act(async () => { vi.advanceTimersByTime(500); });
+      expect(form().recentlySuccessful).toBe(true);
+      transport.mutateMock.mockRejectedValueOnce(
+        new ValidationError("Rejected", { name: ["Server rejection"] })
+      );
+      await act(async () => { await form().submit("/save")(); });
+      expect(form().wasSuccessful).toBe(false);
+      expect(form().recentlySuccessful).toBe(true);
+      expect(form().errors).toEqual({ name: "Server rejection" });
+      await act(async () => { vi.advanceTimersByTime(1499); });
+      expect(form().recentlySuccessful).toBe(true);
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(form().recentlySuccessful).toBe(false);
+      expect(form().wasSuccessful).toBe(false);
+      expect(form().processing).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("propagates non-validation failures and clears pending state", async () => {
+    const { form, transport } = await mountForm({ name: "Ada" });
+    const failure = new Error("Network unavailable");
+    transport.mutateMock.mockRejectedValueOnce(failure);
+    const onError = vi.fn();
+    const onSuccess = vi.fn();
+    await act(async () => {
+      await expect(form().submit("/save", { onError, onSuccess })()).rejects.toBe(failure);
+    });
+    expect(form().processing).toBe(false);
+    expect(form().wasSuccessful).toBe(false);
+    expect(form().errors).toEqual({});
+    expect(onError).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
   it("preserves submission behavior when no validator is configured", async () => {
     const { form, transport } = await mountForm({ name: "Garden Suite" });
     transport.mutateMock.mockResolvedValue({

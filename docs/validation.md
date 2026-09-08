@@ -88,7 +88,7 @@ Each `ValidationIssue` contains:
 | Property | Type | Description |
 | --- | --- | --- |
 | `path` | `readonly (string \| number)[]` | Array of keys or array indices indicating where the error occurred |
-| `code` | `string` | Canonical machine-readable error code (e.g., `invalid_type`, `string_too_short`) |
+| `code` | `string` | Machine-readable evaluator code (e.g., `type`, `minLength`) or application refinement code |
 | `message` | `string` | Human-readable error description |
 
 Use `formatValidationPath(issue.path)` from `@fluxfast/core` to format path arrays
@@ -256,8 +256,8 @@ The validator evaluator includes defensive runtime protections. The exported
    by default) to avoid unbounded memory allocation.
 4. **Property limits:** Each object or collection is bounded by
    `maxProperties: 10,000` by default.
-5. **Prototype pollution immunity:** The evaluator safely ignores internal
-   JavaScript properties such as `__proto__`, `constructor`, and `prototype`.
+5. **Prototype-safe properties:** Names such as `__proto__`, `constructor`, and
+   `prototype` are treated as data keys, not instructions to change prototypes.
 6. **Cycle detection:** Hostile cyclic JavaScript objects are detected without
    causing browser stack overflow errors.
 
@@ -421,6 +421,54 @@ export function RegistrationForm() {
    for that field while preserving other validation feedback.
 
 ---
+
+## v0.9 validation stability contract
+
+The existing v0.8.1 validation behavior is a 1.0 stable candidate. The freeze
+covers `FluxValidator<T>`, `ValidationResult`, `ValidationIssue`, Core's
+`ValidationError`, `refineValidator`, canonical paths, and `useForm`.
+
+`validate` returns a discriminated success/failure result; successful `value`
+and `assert` preserve the input's identity. Validation does not coerce strings
+to numbers, insert defaults, transform values, or freeze the caller's object.
+Failed results have issues and no `value`. `assert` throws Core's
+`ValidationError` with the issue array in `details`. Server transport errors use
+the same class with a canonical field-to-messages dictionary instead; these two
+details shapes must not be confused. Refinements run only after successful base
+validation and propagate programmer exceptions. They must not mutate input;
+FluxFast does not sandbox application callbacks.
+
+Structured paths retain numeric indices: `["rooms", 0, "rate"]` formats as
+`rooms[0].rate`. Unsafe property names use quoted bracket notation. Local root
+issues format as `$`; authoritative server model/root failures use `general`.
+FastAPI locations lose their request-source prefix (`body`, `query`, `path`,
+`header`, or `cookie`), while actual nested keys, array indices, and validation
+aliases are retained. Declared union branch labels and root-model wrappers are
+not form fields. Multiple server messages at one canonical path remain grouped;
+`useForm` displays the first message.
+
+The form state contract is:
+
+| Surface | Behavior |
+| --- | --- |
+| `data`, `setData` | Key and partial-object updates shallow-merge; updater functions return the next object and see preceding updates, including within one event. |
+| `reset` | Restores all or selected keys from initial values; does not clear errors or success state. Treat initial and nested values as immutable. |
+| `issues` | Structured client issues; server errors do not synthesize client issues. |
+| `errors`, `errorMap` | Client errors use the first message per top-level key / canonical path respectively. Server errors retain canonical keys in both. `errorMap` is frozen. |
+| `setError`, `clearErrors` | Manual errors are additive; client issues win collisions. Clearing a selected top-level key removes its client issues and the exact manual key, not every nested server key. No arguments clears all errors. |
+| `validate` | Checks current data and replaces client issues, without submitting or clearing manual/server errors; no validator means success. |
+| `submit`, `processing` | Clears previous feedback, blocks invalid client data, otherwise sends a mutation (POST by default). Processing covers the pending mutation and clears on settlement. Non-validation failures propagate. |
+| `wasSuccessful` | Reset when a submission starts; set on successful mutation. |
+| `recentlySuccessful` | True for two seconds after success; another success restarts the timer. A later failure does not erase the preceding recent-success window. |
+
+Client acceptance never overrides server rejection. Unsupported validation
+semantics continue to omit the affected validator with explicit diagnostics,
+while TypeScript contracts and supported validators can still be generated.
+This freeze does not add complete JSON Schema support or promise exact
+human-readable diagnostic wording.
+
+Contract coverage lives in Core's `validation.test.ts`, Next's `form.test.tsx`
+and `validator-compiler.test.ts`, and Python's `test_validation_errors.py`.
 
 ## Related documentation
 
