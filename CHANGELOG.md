@@ -7,6 +7,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Freeze live-resource authority, synchronization, recovery, lifecycle,
+  transport, bounded delivery, and multi-worker deployment semantics.
 - Freeze capability-gated deferred-resource behavior across cache, follow-up,
   retry, navigation, history, prefetch, mutation, live, and race scenarios.
 - Freeze resource identity, opaque versions, known-value omission, and scoped

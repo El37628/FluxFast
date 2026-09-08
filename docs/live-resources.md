@@ -1,9 +1,30 @@
 # Live Resources
 
 Live Resources keep an ordinary FluxFast resource synchronized after hydration.
-They do not introduce another frontend store or a special live hook. Declare
-`live=True` on the server and continue reading the value with `useResource()` or
-`useDeferredResource()`:
+They do not introduce another frontend store or a special live hook.
+
+## v0.9 stability contract
+
+Live-resource behavior from v0.8.1 is a 1.0 stable candidate:
+
+| Surface | Frozen behavior |
+| --- | --- |
+| Declaration and data API | `live=True` opts an existing resource into post-hydration synchronization. `useResource()` and `useDeferredResource()` remain the data hooks; `useLiveStatus()` is connection UI only. |
+| Subscription authority | The browser sends logical keys, while FastAPI reruns the page, accepts only declared live keys, and derives scope and opaque topics from server-owned identity. |
+| Delivery | Invalidation, patch, and resync signals converge through a canonical resource-only reload. Patches are optimistic hints and never replace revalidation. |
+| Origin suppression | The initiating client suppresses only its own echoed event; other authorized clients still converge. |
+| Lifecycle | Navigation and history update the active manifest; logout/`clear()` closes the stream and removes resource, page, and prefetch state. |
+| Recovery | Reconnect and uncertainty trigger resynchronization. Deferred, retry, mutation, and live races use generation ordering so older work cannot win. |
+| Resource bounds | Subscriber queues, event/key metadata, reconnect delay, heartbeat interval, and maximum connection age remain bounded. |
+| Distribution | Positive-TTL live resources across multiple workers or hosts require both shared `RedisResourceCache` and `RedisLiveBroker`. Process-local cache/broker combinations do not provide distributed coherence. |
+
+The default transport remains streaming `fetch()` with SSE for v0.9; FluxFast
+does not add a WebSocket path. The public guarantee is convergence and bounded
+recovery, not durable replay, exactly-once delivery, ordering between competing
+writers, or a promise that SSE can never change in a future compatible release.
+
+Declare `live=True` on the server and continue reading the value with
+`useResource()` or `useDeferredResource()`:
 
 ```python
 from fastapi import Depends
