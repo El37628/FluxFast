@@ -5,6 +5,36 @@ caches.
 
 ## Server resource cache
 
+### v0.9 stability contract
+
+Resource identity and mutation/cache semantics are 1.0 stable candidates:
+
+- The logical key names application data. Reuse also depends on the explicit
+  server-owned scope; a matching key alone does not authorize sharing.
+- Versions are opaque equality tokens, not timestamps or ordered counters.
+  Equal authoritative serialized values may reuse a version. Clients must not
+  interpret the digest algorithm or reject a replacement because its version
+  sorts before the previous token.
+- A known-version response may omit unchanged values. Omission is not deletion;
+  the browser retains its known value. Page manifests separately describe which
+  resources belong to a page.
+- TTL is the maximum permitted cache-reuse interval, not a promise that an entry
+  remains resident or a schedule for background refresh. Invalidation removes
+  the authoritative cached entry; the next read executes and caches the loader.
+- Mutation patches and invalidations are distinct. A patch changes client state,
+  not server cache. A plain string invalidation targets client state; use
+  `invalidate_resource(key, scope=...)` to delete the corresponding server entry.
+- Public, user, tenant, and custom scopes allow explicit reuse; request scope
+  (including an omitted scope) never enables cross-request reuse. Positive TTL
+  alone does not make a resource shareable.
+- `defer` controls when a capable client may request a resource; `live` declares
+  synchronization after hydration. Neither changes the logical key or removes
+  scope requirements. Their lifecycle details are documented below.
+
+These guarantees do not turn process-local caches into distributed caches.
+Logout and anonymous/authenticated transitions must clear browser state; user
+and tenant boundaries must remain explicit in the authoritative application.
+
 `MemoryResourceCache` is async-safe, monotonic-clock TTL aware, tag indexed,
 bounded to 10,000 entries by default, and LRU evicted. It is per process.
 
