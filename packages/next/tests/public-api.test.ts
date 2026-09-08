@@ -129,4 +129,15 @@ describe("v0.9 Next adapter public API", () => {
       }
     }
   });
+
+  it("keeps existing resource hooks as the live-resource data API", () => {
+    const publicNames = Object.values(expectedEntries()).flatMap(entry =>
+      entryNames(entry)
+    );
+
+    expect(publicNames).toContain("useResource");
+    expect(publicNames).toContain("useDeferredResource");
+    expect(publicNames).toContain("useLiveStatus");
+    expect(publicNames).not.toContain("useLiveResource");
+  });
 });

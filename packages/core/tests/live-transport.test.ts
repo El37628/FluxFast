@@ -43,7 +43,9 @@ describe("FetchSseLiveTransport", () => {
     ].join("");
     const chunks = [wire.slice(0, 17), wire.slice(17, 91), wire.slice(91)];
     const fetchMock = vi.fn().mockResolvedValue(responseFromChunks(chunks));
+    const webSocketMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("WebSocket", webSocketMock);
 
     const connection = new FetchSseLiveTransport("http://backend.test").connect({
       url: "/rooms?filter=open",
@@ -71,6 +73,7 @@ describe("FetchSseLiveTransport", () => {
         }),
       })
     );
+    expect(webSocketMock).not.toHaveBeenCalled();
   });
 
   it("cancels the reader and aborts fetch when closed", async () => {
