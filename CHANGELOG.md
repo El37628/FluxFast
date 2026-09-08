@@ -7,6 +7,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Freeze resource identity, opaque versions, known-value omission, and scoped
+  mutation/cache behavior with real request and client-router contract tests.
 - Freeze validator results, canonical validation paths, server authority, and
   form state semantics, with explicit reset and success-timer contract tests.
 - Classify every top-level Python export as a stable candidate, advanced stable

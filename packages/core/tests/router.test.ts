@@ -23,6 +23,53 @@ class MockTransport implements FluxTransport {
 }
 
 describe("FluxRouter Core", () => {
+  it("retains omitted known values and treats replacement versions as opaque tokens", async () => {
+    const transport = new MockTransport();
+    const original = { count: 1 };
+    const router = new FluxRouter({
+      transport,
+      deferHistory: true,
+      initialPage: { component: "dashboard/index", url: "/dashboard" },
+      initialResources: {
+        summary: { version: "opaque-Z9", value: original },
+      },
+    });
+    try {
+      transport.visitMock.mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: {},
+        resourceKeys: ["summary"],
+      });
+      await router.visit("/rooms");
+      expect(transport.visitMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        knownVersions: { summary: "opaque-Z9" },
+      }));
+      expect(router.resourceStore.getSnapshot("summary")).toEqual(original);
+
+      // Lexically smaller is still authoritative: versions are not counters.
+      transport.visitMock.mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: { summary: { version: "opaque-A1", value: { count: 2 } } },
+      });
+      await router.loadResources(["summary"], { reason: "refresh" });
+      expect(router.resourceStore.getSnapshot("summary")).toEqual({ count: 2 });
+      transport.visitMock.mockResolvedValueOnce({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: {},
+      });
+      await router.loadResources(["summary"], { reason: "refresh" });
+      expect(transport.visitMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        knownVersions: { summary: "opaque-A1" },
+      }));
+      expect(router.resourceStore.getSnapshot("summary")).toEqual({ count: 2 });
+    } finally {
+      router.destroy();
+    }
+  });
+
   it("navigates and updates page and resource stores", async () => {
     const transport = new MockTransport();
     transport.visitMock.mockResolvedValueOnce({
