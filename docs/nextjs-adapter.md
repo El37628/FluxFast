@@ -48,20 +48,26 @@ than risking user code. Resolve the route conflict and run `init` again.
 
 ## CLI commands
 
-| Command | Purpose |
-| --- | --- |
-| `npx fluxfast init` | Analyze, configure, and generate the frontend scaffold. |
-| `npx fluxfast init --dry-run` | Show the initialization plan without writes. |
-| `npx fluxfast init --check` | Return success only when configuration is complete. |
-| `npx fluxfast init --force` | Replace an invalid or customized FluxFast catch-all with the generated template. |
-| `npx fluxfast generate` | Regenerate the page registry and schema-backed TypeScript artifacts. |
-| `npx fluxfast generate --check` | Check every generated frontend artifact without writing. |
-| `npx fluxfast doctor` | Diagnose packages, layout, routes, config, pages, schema manifests, and registry freshness. |
+The v0.9 public CLI surface is:
+
+| Command | Supported options | Purpose |
+| --- | --- | --- |
+| `npx fluxfast init` | `--dry-run`, `--yes`, `--force` | Analyze, configure, and generate the frontend scaffold. `--dry-run` plans without writes; `--force` may replace invalid generated shell files; `--yes` remains accepted for non-interactive compatibility and is currently a no-op because initialization does not prompt. |
+| `npx fluxfast init` | `--check` (used alone) | Return success only when configuration is complete, without writes. |
+| `npx fluxfast generate` | `--check`, `--schema-file PATH` | Regenerate every frontend artifact, optionally from an explicit backend schema file. `--check` compares without writing and may be combined with `--schema-file`. |
+| `npx fluxfast doctor` | none | Diagnose packages, layout, routes, config, pages, schema manifests, and registry freshness without writes. |
 
 `init --check` and `doctor` are read-only and return a nonzero exit status when
 they find a blocking problem, which makes either command suitable for CI.
 `doctor` also prints registered component names, schema/2 diagnostics, contract
 naming collision warnings, and actionable repair commands.
+
+The CLI finds the nearest parent `package.json`, then detects TypeScript versus
+JavaScript and root versus `src/` layout. v0.9 has no public project-root,
+language, or layout override flags; run the command from within the intended
+project. Command names, the options above, their major semantics, success as
+exit `0`, and failure as nonzero are stable candidates through 1.0. Exact
+diagnostic wording is not frozen.
 
 ## Typed contract generation
 

@@ -22,6 +22,42 @@ standard topology needs neither a second public port nor CORS configuration.
 See [ADR-0007](decisions/0007-production-runtime.md) for the architectural
 decision.
 
+## v0.9 topology contract
+
+The supported application boundary is one FluxFast application, one public
+browser port, a public Next.js runtime, and a private FastAPI runtime. The two
+request paths intentionally differ:
+
+| Request | Stable path |
+| --- | --- |
+| Initial document / SSR | Browser → Next Server Component → server-side fetch to private FastAPI → rendered HTML |
+| Client navigation, mutation, deferred, or live request | Browser same-origin fetch with `X-FluxFast: 1` → header-gated Next rewrite/transport route → private FastAPI |
+
+Normal document requests are not sent through the header-gated client rewrite.
+The browser does not receive or configure the private backend port. Changing
+the standard topology to two public application services, requiring a browser
+backend URL, or requiring CORS would be a breaking production-contract change.
+
+## v0.9 Python CLI contract
+
+These command names, option names, positional inputs, and major default
+semantics are stable candidates through 1.0:
+
+| Command | Supported public inputs | Major semantics |
+| --- | --- | --- |
+| `fluxfast dev APP` | `--frontend`, `--backend-host`, `--backend-port`, `--frontend-host`, `--frontend-port`, `--no-reload`, `--startup-timeout` | Supervise reload-enabled FastAPI and the frontend behind one public development origin. |
+| `fluxfast build` | `--frontend`, `--app` | Validate generated artifacts, optionally validate the backend contract, then run the existing frontend build script. |
+| `fluxfast start APP` | `--frontend`, `--host`, `--port`, `--backend-host`, `--backend-port`, `--workers`, `--startup-timeout`, `--shutdown-timeout` | Start the prebuilt production artifact as one foreground supervised service. |
+| `fluxfast doctor --production` | `--app`, `--frontend`, `--host`, `--port`, `--backend-host`, `--backend-port`, `--workers`, `--strict` | Inspect production readiness without modifying the project; `--production` remains required. |
+| `fluxfast schema APP` | `--output`, `--check` | Export the deterministic backend schema, or compare an existing `--output` without writing; check mode requires that path. |
+| `fluxfast types APP` | `--frontend`, `--check` | Compose backend schema export with the locally installed Next CLI; check mode is read-only. |
+
+`APP` uses `module:attribute` syntax. A successful command exits `0`; usage,
+validation, drift, startup, or child-process failure exits nonzero. Human
+diagnostic sentences are not a compatibility surface. The deliberately
+documented `fluxfast start` status categories below remain available, but
+applications should not infer undocumented meanings from other nonzero values.
+
 ## Prepare and build
 
 Install the Python and frontend dependencies before building. The frontend must
@@ -103,6 +139,37 @@ safe for the single-origin topology:
 `FLUXFAST_APP` can supply the application import to `fluxfast doctor` when
 `--app` is omitted. `fluxfast start` deliberately requires its positional
 `MODULE:ATTRIBUTE` application import.
+
+### Canonical environment-variable inventory
+
+This is the v0.9 inventory for FluxFast-owned runtime and reference-deployment
+variables. Variables belonging to an application or deployment platform are
+outside this list.
+
+| Variable | Classification | Contract |
+| --- | --- | --- |
+| `FLUXFAST_HOST` | Public operator input | Public Next.js bind address for production commands. |
+| `FLUXFAST_PORT` | Public operator input | Preferred public Next.js port. |
+| `PORT` | Public compatibility input | Public-port fallback only when `FLUXFAST_PORT` and `--port` are absent. |
+| `FLUXFAST_BACKEND_HOST` | Public operator input | Private FastAPI bind address; loopback by default. |
+| `FLUXFAST_BACKEND_PORT` | Public operator input | Private FastAPI port. It is not exposed to the browser. |
+| `FLUXFAST_WORKERS` | Public operator input | Uvicorn worker count. |
+| `FLUXFAST_STARTUP_TIMEOUT` | Public operator input | Per-child production readiness deadline in seconds. |
+| `FLUXFAST_SHUTDOWN_TIMEOUT` | Public operator input | Shared graceful-shutdown deadline in seconds. |
+| `FLUXFAST_APP` | Public diagnostic input | Optional application import for `doctor --production`; it does not replace the positional `start` input. |
+| `FLUXFAST_BACKEND_URL` | Server-only adapter input | Private backend origin used by the Next server. `dev` and `start` inject it; only advanced manually supervised topologies should set it. |
+| `FLUXFAST_PRODUCTION_START` | Internal supervisor handshake | Prevents source generation during immutable production startup. Applications must not set or depend on it. |
+| `FLUXFAST_COMPOSE_PORT` | Reference Compose input | Host-side port interpolation for this repository's `compose.yaml`; it is not read by the FluxFast runtime. |
+| `FLUXFAST_STANDALONE` | Reference image-build input | Enables standalone Next.js output in this repository's `Dockerfile`; it is not a runtime setting or adapter API. |
+| `NEXT_PUBLIC_FLUXFAST_BACKEND_URL` | Deprecated and unsupported | Removed from supervised child environments. Do not expose a backend origin to browser bundles. |
+
+`NODE_ENV` is a Node.js variable that FluxFast sets to `production` for the
+supervised frontend; it is not FluxFast-owned configuration. `REDIS_URL` in the
+reference application is application input: FluxFast never switches cache or
+broker implementations merely because it exists. Variables beginning with
+`FLUXFAST_TEST_`, `FLUXFAST_E2E_`, `FLUXFAST_BENCHMARK_`, or
+`FLUXFAST_ARTIFACT_` are repository test/build controls, not supported
+application configuration.
 
 Keep the backend on loopback unless a deliberately non-standard topology needs
 external access. `fluxfast doctor --production` warns when it is not loopback.
