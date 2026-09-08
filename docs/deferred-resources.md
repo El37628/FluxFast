@@ -4,6 +4,29 @@ Deferred resources let a FluxFast page return its renderable shell before
 secondary resource loaders finish. They are an additive `fluxfast/1` feature,
 negotiated with the `deferred-resources` capability.
 
+## v0.9 stability contract
+
+Deferred-resource behavior from v0.8.1 is a 1.0 stable candidate:
+
+| Situation | Frozen behavior |
+| --- | --- |
+| Client lacks the capability | Every `defer=True` resource is resolved as blocking; the response has no deferred metadata. |
+| Capable full request, cache miss | The loader is not called; its key is pending in `deferred`. |
+| Capable full request, cache hit | The value is returned immediately; a known matching version is omitted without becoming pending. |
+| Resource-only follow-up | Only requested resource loaders run; sibling successes and sanitized errors share one envelope. The page route and dependencies still execute. |
+| Retry | Only the selected key is requested; success replaces its error and becomes ready. |
+| Navigation away | The old batch is aborted when possible, and any late result is ignored. |
+| History restore | Resolved values are reused; pending keys restart as one deferred batch. |
+| Prefetch | Misses stay pending without executing loaders; hits seed the resource store and are reused on the real visit. |
+| Mutation invalidation | Active keys revalidate while existing data stays visible and stale; inactive keys do not load eagerly. |
+| Deferred plus live | The same key may hydrate later and then stay synchronized; generation ordering prevents either older path from winning. |
+
+The observable guarantee is generation ordering, not a particular internal
+counter: a late deferred response cannot overwrite a newer navigation, retry,
+refresh, mutation, or live result. `defer=False` continues to mean required for
+the initial envelope. `defer=True` means postponement is permitted only after
+capability negotiation; it never weakens authentication or authorization.
+
 `defer=True` applies to a `ResourceSpec.loader`. It does not postpone work done
 inside the FastAPI page handler, its dependencies, authentication, validation,
 or authorization, and it does not move those responsibilities to Next.js.

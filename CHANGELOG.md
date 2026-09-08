@@ -7,6 +7,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Freeze capability-gated deferred-resource behavior across cache, follow-up,
+  retry, navigation, history, prefetch, mutation, live, and race scenarios.
 - Freeze resource identity, opaque versions, known-value omission, and scoped
   mutation/cache behavior with real request and client-router contract tests.
 - Freeze validator results, canonical validation paths, server authority, and

@@ -406,6 +406,40 @@ describe("FluxRouter Core", () => {
     });
   });
 
+  it("reuses a deferred cache hit from prefetch without a follow-up load", async () => {
+    const transport = new MockTransport();
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resourceKeys: ["analytics"],
+      resources: {
+        analytics: { version: "a-cached", value: { revenue: 95_000 } },
+      },
+    });
+    const router = new FluxRouter({ transport, deferHistory: true });
+    try {
+      await router.prefetch("/dashboard");
+      expect(router.resourceStore.getStateSnapshot("analytics")).toEqual({
+        data: { revenue: 95_000 },
+        status: "ready",
+        error: null,
+        stale: false,
+      });
+
+      await router.visit("/dashboard");
+
+      expect(transport.visitMock).toHaveBeenCalledTimes(1);
+      expect(router.resourceStore.getStateSnapshot("analytics")).toEqual({
+        data: { revenue: 95_000 },
+        status: "ready",
+        error: null,
+        stale: false,
+      });
+    } finally {
+      router.destroy();
+    }
+  });
+
   it("lets the newest overlapping resource request win", async () => {
     const transport = new MockTransport();
     const resolvers: Array<(value: PageEnvelope) => void> = [];
