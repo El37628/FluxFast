@@ -7,6 +7,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Freeze validator results, canonical validation paths, server authority, and
+  form state semantics, with explicit reset and success-timer contract tests.
 - Classify every top-level Python export as a stable candidate, advanced stable
   candidate, or deprecated API, with a CI-enforced inventory and targeted
   constructor, decorator, resource, scope, mutation, cache, and broker contract
