@@ -122,12 +122,17 @@ Compatibility remains directional and additive:
   not. The complete boundary is defined by the [generated artifact
   contract](generated-artifacts.md).
 
-Stable releases continue synchronizing all three package versions, and the
-release gates test both adjacent patch-package directions (`0.8.1`/`0.8.0` and
-`0.8.0`/`0.8.1`). See [typed contracts and code generation](type-safety.md),
-[General Application Contracts](contracts.md), the [Migration
-Guide](migration.md), and [the release guide](releasing.md) for clean-consumer
-requirements.
+Stable releases continue synchronizing all three package versions. The 0.9
+release gates start a real consumer with Python and JavaScript packages at
+0.8.1, upgrade Python first and JavaScript first in separate runs, and verify
+each mixed state before reaching the matched 0.9 candidate. Each run regenerates
+typed files, typechecks, production-builds, and exercises navigation, deferred
+and live resources, mutations, and the distributed Redis path. It then
+reinstalls 0.8.1, regenerates, rebuilds, and confirms that repeated `fluxfast
+init` calls did not rewrite the existing application scaffold. See [typed
+contracts and code generation](type-safety.md), [General Application
+Contracts](contracts.md), the [Migration Guide](migration.md), and [the release
+guide](releasing.md) for clean-consumer requirements.
 
 ## Production runtime compatibility
 

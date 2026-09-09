@@ -22,14 +22,19 @@ tarballs, it proves that a deferred live resource is populated by one worker,
 reused from the shared cache by another, invalidated by a mutation on a third,
 synchronized over Redis Pub/Sub, and then reused at its new value without
 running another loader.
-Before publication, the release-artifact workflow also combines the built
-current Python package with the published 0.8.0 JavaScript packages, then the
-published Python 0.8.0 package with the built current JavaScript packages.
-After registry publication, the release workflow repeats both pairings using
-only registry packages. The current-Python pairing must pass the full deferred,
-live, typed, and distributed Redis browser scenario; the current-JavaScript
-pairing must preserve v0.8 behavior. The GitHub release is created only after
-these registry-backed mixed-version checks pass.
+Before publication, the release-artifact workflow creates a real consumer using
+published 0.8.1 packages. One run installs the built current Python candidate
+first while JavaScript remains at 0.8.1; a second installs the built current
+JavaScript candidate first while Python remains at 0.8.1. Both mixed states
+must pass the full deferred, live, typed, mutation, navigation, and distributed
+Redis browser scenario before the remaining packages are upgraded. The matched
+candidate is tested again, then both sides are rolled back to 0.8.1 and must
+regenerate, typecheck, and production-build without `fluxfast init` rewriting
+the initialized scaffold.
+
+After registry publication, the release workflow repeats both complete upgrade
+and rollback orders using only registry packages. The GitHub release is created
+only after these registry-backed compatibility checks pass.
 
 A release that changes typed contracts or code generation must also prove the
 developer-tooling path from built artifacts: install the wheel and npm
