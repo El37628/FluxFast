@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
-from .protocol import PROTOCOL_VERSION, MutationEnvelope, MutationPayload
+from .protocol import (
+    PROTOCOL_VERSION,
+    MutationEnvelope,
+    MutationPayload,
+    _is_origin_relative_redirect,
+)
 from .scope import CacheScope
 
 _PATCH_OPERATIONS = {
@@ -23,7 +28,7 @@ def _validate_key(key: str) -> None:
         or not key.strip()
         or len(key) > 128
         or "," in key
-        or any(ord(char) < 32 for char in key)
+        or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in key)
     ):
         raise ValueError("mutation resource keys must be safe non-empty strings")
 
@@ -160,7 +165,7 @@ def mutation(
 
 def flux_redirect(url: str) -> MutationResult:
     """Initiate an internal SPA navigation redirect."""
-    if not isinstance(url, str) or not url.startswith("/") or url.startswith("//"):
+    if not isinstance(url, str) or not _is_origin_relative_redirect(url):
         raise ValueError("internal redirects must use an origin-relative path")
     return MutationResult(redirect=url)
 

@@ -62,6 +62,8 @@ def test_topic_derivation_requires_safe_key_and_reusable_scope() -> None:
         derive_live_topic(scope.request(), "profile")
     with pytest.raises(ValueError, match="safe non-empty"):
         derive_live_topic(scope.public(), "bad,key")
+    with pytest.raises(ValueError, match="safe non-empty"):
+        derive_live_topic(scope.public(), "bad\x7fkey")
 
 
 def test_subscription_uses_only_authoritative_live_declarations() -> None:

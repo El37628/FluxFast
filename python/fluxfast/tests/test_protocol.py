@@ -1,5 +1,6 @@
 """Tests for protocol definitions, version hashing, and headers."""
 
+import base64
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -8,13 +9,18 @@ from uuid import UUID
 import pytest
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
+from starlette.requests import Request
 
+from fluxfast.errors import ProtocolError
 from fluxfast.headers import (
+    HEADER_PROTOCOL,
     MAX_ENCODED_CHARS,
     MAX_KNOWN_RESOURCES,
+    MAX_ONLY_HEADER_BYTES,
     encode_known_header,
     parse_known_header,
     parse_only_header,
+    validate_protocol_header,
 )
 from fluxfast.protocol import (
     PROTOCOL_VERSION,
@@ -177,7 +183,56 @@ def test_known_header_invalid():
     assert parse_known_header("a" * (MAX_ENCODED_CHARS + 1)) == {}
 
 
+def test_known_header_rejects_non_base64url_and_duplicate_json_keys():
+    raw = b'{"rooms":"v1","rooms":"v2"}'
+    duplicate_keys = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    valid_json_with_invalid_alphabet = (
+        base64.urlsafe_b64encode(b'{"rooms":"v1"}').decode().rstrip("=") + "!"
+    )
+
+    assert parse_known_header(duplicate_keys) == {}
+    assert parse_known_header(valid_json_with_invalid_alphabet) == {}
+
+
+def test_known_header_discards_unsafe_resource_metadata():
+    encoded = base64.urlsafe_b64encode(
+        b'{"rooms":"v1","bad\\u007fkey":"v2","summary":"v3\\u009f"}'
+    ).decode().rstrip("=")
+
+    assert parse_known_header(encoded) == {"rooms": "v1"}
+    assert parse_known_header(encode_known_header({"bad\x7fkey": "v1"})) == {}
+
+
 def test_only_header():
     assert parse_only_header("rooms, summary, auth") == {"rooms", "summary", "auth"}
     assert parse_only_header(None) is None
     assert parse_only_header("   ") is None
+
+
+def test_only_header_is_bounded_and_discards_control_characters():
+    assert parse_only_header("rooms,bad\x7fkey,summary") == {"rooms", "summary"}
+    parsed = parse_only_header(",".join(f"key-{index}" for index in range(200)))
+    assert len(parsed or ()) == 100
+    with pytest.raises(ProtocolError, match="exceeds"):
+        parse_only_header("x" * (MAX_ONLY_HEADER_BYTES + 1))
+    with pytest.raises(ProtocolError, match="invalid text"):
+        parse_only_header("\ud800")
+
+
+def test_unsupported_protocol_diagnostics_do_not_reflect_header_input():
+    supplied = "attacker-" + "x" * 32_000
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [(HEADER_PROTOCOL.lower().encode(), supplied.encode())],
+        }
+    )
+
+    with pytest.raises(ProtocolError) as captured:
+        validate_protocol_header(request)
+
+    assert supplied not in captured.value.message
+    assert captured.value.details == {"expected": "1"}
+    assert len(captured.value.message) < 100

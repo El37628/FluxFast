@@ -30,6 +30,7 @@ from fluxfast.headers import (
     MAX_KNOWN_RESOURCES,
     MAX_LIVE_KEYS,
     MAX_LIVE_KEYS_HEADER_BYTES,
+    MAX_ONLY_HEADER_BYTES,
     MAX_VERSION_LENGTH,
 )
 from fluxfast.protocol import (
@@ -105,6 +106,8 @@ def test_page_envelope_preserves_optional_app_version() -> None:
         {"invalidate": [None]},
         {"redirect": "https://example.com/rooms"},
         {"redirect": "//example.com/rooms"},
+        {"redirect": "/\\example.com/rooms"},
+        {"redirect": "/\n/example.com/rooms"},
         {"externalRedirect": "/login"},
         {"externalRedirect": "javascript:alert(1)"},
         {"patches": {"rooms": [{"op": "merge-object", "value": 1}]}},
@@ -161,7 +164,8 @@ def test_protocol_identity_capabilities_and_header_limits_are_frozen() -> None:
         MAX_CAPABILITY_LENGTH,
     ) == (2048, 32, 64)
     assert (
+        MAX_ONLY_HEADER_BYTES,
         MAX_LIVE_KEYS_HEADER_BYTES,
         MAX_LIVE_KEYS,
         MAX_CLIENT_ID_LENGTH,
-    ) == (16 * 1024, 100, 64)
+    ) == (16 * 1024, 16 * 1024, 100, 64)

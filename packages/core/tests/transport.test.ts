@@ -67,6 +67,48 @@ describe("FetchTransport", () => {
     expect(encodeKnownVersions(known)).toBeUndefined();
   });
 
+  it("omits control-character metadata from known-resource headers", () => {
+    const encoded = encodeKnownVersions({
+      rooms: "v1",
+      "bad\u007fkey": "v2",
+      summary: "v3\u009f",
+    });
+
+    expect(encoded).toBeDefined();
+    expect(JSON.parse(Buffer.from(encoded!, "base64url").toString("utf8")))
+      .toEqual({ rooms: "v1" });
+    expect(encodeKnownVersions({ rooms: null as unknown as string }))
+      .toBeUndefined();
+  });
+
+  it("bounds and filters partial-resource request headers", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => (
+      new Response(JSON.stringify({
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: {},
+      }), { headers: { "content-type": "application/json" } })
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = new FetchTransport();
+
+    await transport.visit({
+      url: "/rooms",
+      visitId: "visit_safe",
+      only: ["rooms", "bad\u007fkey", null as unknown as string],
+    });
+    await transport.visit({
+      url: "/rooms",
+      visitId: "visit_oversized",
+      only: Array.from({ length: 100 }, () => "\u754c".repeat(128)),
+    });
+
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("X-FluxFast-Only"))
+      .toBe("rooms");
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get("X-FluxFast-Only"))
+      .toBeNull();
+  });
+
   it("rejects malformed page envelopes", () => {
     expect(() => assertPageEnvelope({ protocol: "fluxfast/1", resources: {} }))
       .toThrowError(ProtocolError);
@@ -128,6 +170,8 @@ describe("FetchTransport", () => {
     [{ invalidate: [null] }, "array of strings"],
     [{ redirect: "https://example.com/rooms" }, "origin-relative"],
     [{ redirect: "//example.com/rooms" }, "origin-relative"],
+    [{ redirect: "/\\example.com/rooms" }, "origin-relative"],
+    [{ redirect: "/\n/example.com/rooms" }, "origin-relative"],
     [{ externalRedirect: "/login" }, "absolute HTTP(S)"],
     [{ externalRedirect: "javascript:alert(1)" }, "absolute HTTP(S)"],
     [{ patches: { rooms: [{ op: "merge-object", value: 1 }] } }, "Incomplete"],

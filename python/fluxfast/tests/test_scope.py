@@ -86,3 +86,47 @@ async def test_same_wire_key_never_reuses_another_users_cached_value():
 
     assert result_b.resources["auth"].value == {"id": "b"}
     assert result_b.resources["auth"].version != result_a.resources["auth"].version
+
+
+@pytest.mark.anyio
+async def test_same_wire_key_never_reuses_another_tenants_cached_value():
+    cache = MemoryResourceCache()
+    tenant_a = Page(
+        "dashboard/index",
+        [
+            resource(
+                "summary",
+                lambda: {"tenant": "a"},
+                scope=scope.tenant("a"),
+                ttl=60,
+            )
+        ],
+    )
+    tenant_b = Page(
+        "dashboard/index",
+        [
+            resource(
+                "summary",
+                lambda: {"tenant": "b"},
+                scope=scope.tenant("b"),
+                ttl=60,
+            )
+        ],
+    )
+
+    result_a = await ResourceEngine.resolve_page_resources(
+        tenant_a, {}, None, cache, TimingMetrics()
+    )
+    result_b = await ResourceEngine.resolve_page_resources(
+        tenant_b,
+        {"summary": result_a.resources["summary"].version},
+        None,
+        cache,
+        TimingMetrics(),
+    )
+
+    assert result_b.resources["summary"].value == {"tenant": "b"}
+    assert (
+        result_b.resources["summary"].version
+        != result_a.resources["summary"].version
+    )

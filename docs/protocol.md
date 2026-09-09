@@ -36,8 +36,10 @@ X-FluxFast-Capabilities: deferred-resources,live-resources
 
 `X-FluxFast-Known` maps logical keys to opaque versions. Limits are 100 records,
 16 KiB decoded JSON, 128 characters per key, and 128 characters per version.
-Invalid or oversized metadata is ignored or omitted; correctness falls back to
-transferring values. `X-FluxFast-Only` requests resource-specific refresh.
+Invalid base64url, duplicate JSON object keys, and oversized metadata invalidate
+the optimization; invalid individual records are discarded. Correctness falls
+back to transferring values. `X-FluxFast-Only` requests resource-specific
+refresh and is limited to 16 KiB before parsing.
 
 `X-FluxFast-Capabilities` is an optional, comma-separated list of additive
 client features and is independent of `fluxfast/1`. Capability tokens contain
@@ -65,10 +67,10 @@ ordinary header limits.
 | --- | --- | --- | --- |
 | `Accept` | Optional for detection; sent by clients | The FluxFast media type identifies a FluxFast request for structured error handling even without `X-FluxFast`. Other values retain ordinary FastAPI error handling. Live clients send `text/event-stream`. | No FluxFast limit |
 | `X-FluxFast` | Optional for detection; sent by clients | The exact value `1` identifies a FluxFast request for structured error handling. Other values do not, unless `Accept` independently identifies it. | No FluxFast limit |
-| `X-FluxFast-Protocol` | Optional to the server; sent by clients | The value `1` names `fluxfast/1`. Any explicitly supplied other value produces HTTP 409 with an error envelope. | No FluxFast limit |
+| `X-FluxFast-Protocol` | Optional to the server; sent by clients | The value `1` names `fluxfast/1`. Any explicitly supplied other value produces HTTP 409 with a bounded error envelope that does not reflect the supplied value. | No FluxFast limit |
 | `X-FluxFast-Visit` | Sent on page visits and SSR requests | Opaque visit correlation value. The Python backend does not interpret it, so omission or any ordinary header value does not change page correctness. | No FluxFast limit |
-| `X-FluxFast-Known` | Optional | Base64url JSON object mapping resource keys to opaque versions. Invalid or oversized input is ignored and values are sent normally. | 100 entries; 16 KiB decoded JSON; 128 characters per key and version |
-| `X-FluxFast-Only` | Optional | Comma-separated page resource selection for refresh/deferred work. Invalid or empty entries are discarded; unknown keys never escape the route's authorized resource graph. No valid entries means no partial selection. | First 100 entries; 128 characters per accepted key |
+| `X-FluxFast-Known` | Optional | Strict base64url JSON object mapping resource keys to opaque versions. Invalid encoding, duplicate object keys, and oversized input invalidate the optimization; unsafe individual records are discarded. Values are then sent normally. | 100 entries; 16 KiB decoded JSON; 128 characters per key and version |
+| `X-FluxFast-Only` | Optional | Comma-separated page resource selection for refresh/deferred work. Invalid or empty entries are discarded; unknown keys never escape the route's authorized resource graph. No valid entries means no partial selection. An oversized value produces HTTP 409. | 16 KiB; first 100 entries; 128 characters per accepted key |
 | `X-FluxFast-Capabilities` | Optional | Comma-separated additive features. Unknown or malformed tokens are ignored; a non-ASCII, oversized, or over-count header negotiates no capabilities. | 2,048 ASCII bytes; 32 tokens; 64 characters per token |
 | `X-FluxFast-Client-ID` | Optional for mutations and live streams | Opaque per-router identity used only to suppress the originating tab's echoed live event. Invalid values produce HTTP 409. | 64 printable ASCII characters |
 | `X-FluxFast-Live` | Required to request a live stream | The exact value `1` selects live handling. Other values retain normal page handling. | No FluxFast limit |
@@ -249,7 +251,7 @@ The frozen mutation fields are:
 | --- | --- |
 | `patches` | Resource-key map of ordered patch lists. |
 | `invalidate` | Logical keys made stale after patches are applied. |
-| `redirect` | Origin-relative FluxFast visit; a 404 falls back to full browser navigation. |
+| `redirect` | Origin-relative FluxFast visit; backslashes and control characters are rejected so browser URL normalization cannot reinterpret it as another origin. A 404 falls back to full browser navigation. |
 | `externalRedirect` | Absolute full-browser destination. It takes precedence over `redirect`. |
 
 Patch lists apply in order. `replace-resource` replaces the complete value.

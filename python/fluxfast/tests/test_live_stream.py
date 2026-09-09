@@ -167,15 +167,23 @@ def test_live_header_limits_and_client_id_validation() -> None:
     }
     assert validate_live_client_id("ff_valid") == "ff_valid"
 
-    for invalid in (None, "", "bad,,key"):
+    for invalid in (None, "", "bad,,key", "summary\x7f"):
         with pytest.raises(ProtocolError, match="Live-Keys"):
             parse_live_keys_header(invalid)
     with pytest.raises(ProtocolError, match="at most"):
         parse_live_keys_header(",".join(f"key-{i}" for i in range(MAX_LIVE_KEYS + 1)))
     with pytest.raises(ProtocolError, match="exceeds"):
         parse_live_keys_header("x" * (MAX_LIVE_KEYS_HEADER_BYTES + 1))
-    with pytest.raises(ProtocolError, match="printable ASCII"):
-        validate_live_client_id("x" * (MAX_CLIENT_ID_LENGTH + 1))
+    for invalid_client_id in (
+        "",
+        "contains space",
+        "non-ascii-\N{SNOWMAN}",
+        "newline\n",
+        "delete\x7f",
+        "x" * (MAX_CLIENT_ID_LENGTH + 1),
+    ):
+        with pytest.raises(ProtocolError, match="printable ASCII"):
+            validate_live_client_id(invalid_client_id)
 
 
 def test_live_timing_configuration_is_bounded() -> None:
