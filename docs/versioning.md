@@ -11,14 +11,25 @@ versioned independently; package version `1.x` does not imply protocol version
 | Runtime | Supported and tested |
 | --- | --- |
 | Python | 3.11, 3.12, 3.13, and 3.14 |
-| Node.js | Active LTS lines 22 and 24 |
+| Node.js | 22 and 24 |
 | Next.js | `>=16.3.0 <17.0.0` |
 | React and React DOM | `>=19.0.0` |
 | Redis Open Source server | 6.2 through 8.10 when Redis features are configured |
 
-The CI matrices are the authoritative compatibility gate. Support for an
-end-of-life runtime may be removed in a minor release before FluxFast 1.0 and
-in a major release after 1.0.
+The CI matrices are the authoritative compatibility gate. Python tests run on
+every minor from 3.11 through 3.14, and JavaScript tests run on Node 22 and 24.
+Packed release consumers test the minimum Next.js 16.3.0 with React 19.0.0 on
+Node 22 and resolve the latest compatible Next.js 16 and React 19 releases on
+Node 24. This prevents the monorepo's installed dependency versions from being
+the only compatibility evidence.
+
+FluxFast 0.9 freezes this matrix through 1.0. A line may be removed before then
+only when an upstream dependency makes continued support impractical; such an
+exception requires an explicit compatibility decision and migration note.
+Dependabot security and required compatibility updates may advance versions
+inside these ranges, but dependency updates must not silently widen the public
+runtime or peer-dependency contract. Major dependency churn without concrete
+user benefit is deferred until after the 1.0 freeze.
 
 ## Package changes
 
