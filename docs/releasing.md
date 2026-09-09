@@ -14,8 +14,9 @@ Before publication, the built wheel and npm tarballs are installed together in
 a clean temporary consumer. That consumer runs `fluxfast init`, validates
 generated contracts, runs `fluxfast build`, and launches `fluxfast start` from
 the isolated wheel environment. It verifies public health/readiness, one-origin
-browser behavior, deferred settlement, and clean shutdown without importing a
-source checkout.
+browser behavior, generated validation and form submission, mutation patches,
+deferred/live settlement, dynamic-route navigation and history restoration, and
+clean shutdown without importing a source checkout.
 The release gate also runs a separate clean consumer against Redis with three
 independent FastAPI worker processes. From only the built wheel and npm
 tarballs, it proves that a deferred live resource is populated by one worker,
