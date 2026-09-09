@@ -8,16 +8,20 @@ on:
 
 jobs:
   javascript-consumer:
-    name: Next.js ${{ matrix.next-version }} on Node ${{ matrix.node-version }}
+    name: ${{ matrix.label }} (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - node-version: 22
-            next-version: 16.3.0
-          - node-version: 24
-            next-version: 16.3.3
+          - label: Next.js 16.3.0 / React 19.0.0
+            node-version: 22
+            next-version: "16.3.0"
+            react-version: "19.0.0"
+          - label: Latest compatible Next.js 16 / React 19
+            node-version: 24
+            next-version: "^16.3.0"
+            react-version: "^19.0.0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,6 +48,8 @@ jobs:
           cp -R tests/release-consumer/javascript/. "$RUNNER_TEMP/fluxfast-release/javascript"
           npm pkg set \
             "dependencies.next=${{ matrix.next-version }}" \
+            "dependencies.react=${{ matrix.react-version }}" \
+            "dependencies.react-dom=${{ matrix.react-version }}" \
             --prefix "$RUNNER_TEMP/fluxfast-release/javascript"
           npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false
           npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false --no-save \

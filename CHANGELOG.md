@@ -7,6 +7,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Freeze and CI-enforce the Python 3.11–3.14, Node.js 22/24, Next.js
+  `>=16.3.0 <17.0.0`, and React 19+ runtime support matrix, including minimum
+  and latest-compatible packed Next.js consumers.
 - Freeze the one-public-port production topology, Python and Next CLI command
   surfaces, environment-variable classifications, health/readiness lifecycle,
   supervisor failure behavior, and Docker/Podman/Compose deployment contract.

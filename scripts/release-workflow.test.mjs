@@ -3,9 +3,14 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflowDirectory = new URL("../.github/workflows/", import.meta.url);
+const repositoryDirectory = new URL("../", import.meta.url);
 
 function readWorkflow(name) {
   return readFileSync(new URL(name, workflowDirectory), "utf8");
+}
+
+function readRepositoryFile(name) {
+  return readFileSync(new URL(name, repositoryDirectory), "utf8");
 }
 
 function jobBlock(source, name) {
@@ -93,6 +98,56 @@ test("v0.8.1 compatibility gates use the adjacent v0.8.0 release", () => {
     2
   );
   assert.doesNotMatch(publishedSmoke, /0\.7\.0/);
+});
+
+test("freezes the v0.9 runtime support matrix in metadata and CI", () => {
+  const rootPackage = JSON.parse(readRepositoryFile("package.json"));
+  const corePackage = JSON.parse(readRepositoryFile("packages/core/package.json"));
+  const nextPackage = JSON.parse(readRepositoryFile("packages/next/package.json"));
+
+  for (const manifest of [rootPackage, corePackage, nextPackage]) {
+    assert.equal(manifest.engines.node, "^22.0.0 || ^24.0.0");
+  }
+  assert.deepEqual(nextPackage.peerDependencies, {
+    next: ">=16.3.0 <17.0.0",
+    react: ">=19.0.0",
+    "react-dom": ">=19.0.0",
+  });
+  assert.match(
+    readRepositoryFile("python/fluxfast/pyproject.toml"),
+    /^requires-python = ">=3\.11"$/m
+  );
+
+  assert.match(
+    readWorkflow("python.yml"),
+    /python-version: \["3\.11", "3\.12", "3\.13", "3\.14"\]/
+  );
+  assert.match(readWorkflow("javascript.yml"), /node-version: \[22, 24\]/);
+
+  const releaseSmoke = jobBlock(
+    readWorkflow("release-smoke.yml"),
+    "javascript-consumer"
+  );
+  assert.match(
+    releaseSmoke,
+    /- label: Next\.js 16\.3\.0 \/ React 19\.0\.0\n\s+node-version: 22\n\s+next-version: "16\.3\.0"\n\s+react-version: "19\.0\.0"/
+  );
+  assert.match(
+    releaseSmoke,
+    /- label: Latest compatible Next\.js 16 \/ React 19\n\s+node-version: 24\n\s+next-version: "\^16\.3\.0"\n\s+react-version: "\^19\.0\.0"/
+  );
+  assert.match(
+    releaseSmoke,
+    /"dependencies\.next=\$\{\{ matrix\.next-version \}\}"/
+  );
+  assert.match(
+    releaseSmoke,
+    /"dependencies\.react=\$\{\{ matrix\.react-version \}\}"/
+  );
+  assert.match(
+    releaseSmoke,
+    /"dependencies\.react-dom=\$\{\{ matrix\.react-version \}\}"/
+  );
 });
 
 test("audit steps ignore upstream registry outages in CI", () => {
