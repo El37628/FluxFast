@@ -37,7 +37,7 @@ def _validate_resource_key(key: str) -> None:
         or not key.strip()
         or len(key) > MAX_LIVE_RESOURCE_KEY_LENGTH
         or "," in key
-        or any(ord(char) < 32 for char in key)
+        or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in key)
     ):
         raise ValueError("live resource keys must be safe non-empty strings")
 

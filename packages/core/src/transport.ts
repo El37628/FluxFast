@@ -21,6 +21,8 @@ const MAX_KNOWN_RESOURCES = 100;
 const MAX_KNOWN_BYTES = 16 * 1024;
 const MAX_KEY_LENGTH = 128;
 const MAX_VERSION_LENGTH = 128;
+const MAX_ONLY_HEADER_BYTES = 16 * 1024;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
 
 export interface VisitTransportRequest {
   url: string;
@@ -49,6 +51,26 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isSafeResourceKey(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= MAX_KEY_LENGTH &&
+    !value.includes(",") &&
+    !CONTROL_CHARACTERS.test(value)
+  );
+}
+
+function isOriginRelativeRedirect(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.startsWith("/") &&
+    !value.startsWith("//") &&
+    !value.includes("\\") &&
+    !CONTROL_CHARACTERS.test(value)
+  );
+}
+
 function encodeBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -66,8 +88,10 @@ export function encodeKnownVersions(
   for (const [key, version] of Object.entries(knownVersions)) {
     if (Object.keys(safe).length >= MAX_KNOWN_RESOURCES) break;
     if (
-      key.length <= MAX_KEY_LENGTH &&
-      version.length <= MAX_VERSION_LENGTH
+      isSafeResourceKey(key) &&
+      typeof version === "string" &&
+      version.length <= MAX_VERSION_LENGTH &&
+      !CONTROL_CHARACTERS.test(version)
     ) {
       safe[key] = version;
     }
@@ -149,9 +173,7 @@ export function assertMutationEnvelope(data: unknown): asserts data is MutationE
   }
   if (
     data.mutation.redirect !== undefined &&
-    (typeof data.mutation.redirect !== "string" ||
-      !data.mutation.redirect.startsWith("/") ||
-      data.mutation.redirect.startsWith("//"))
+    !isOriginRelativeRedirect(data.mutation.redirect)
   ) {
     throw new MutationError(
       "Invalid MutationEnvelope: redirect must be origin-relative"
@@ -254,9 +276,15 @@ export class FetchTransport implements FluxTransport {
     if (encodedKnown) headers["X-FluxFast-Known"] = encodedKnown;
     if (request.only?.length) {
       const only = request.only
-        .filter(key => key.length <= MAX_KEY_LENGTH && !key.includes(",") && !/[\u0000-\u001f]/.test(key))
+        .filter(isSafeResourceKey)
         .slice(0, MAX_KNOWN_RESOURCES);
-      if (only.length) headers["X-FluxFast-Only"] = only.join(",");
+      const serializedOnly = only.join(",");
+      if (
+        serializedOnly &&
+        new TextEncoder().encode(serializedOnly).byteLength <= MAX_ONLY_HEADER_BYTES
+      ) {
+        headers["X-FluxFast-Only"] = serializedOnly;
+      }
     }
 
     const response = await fetch(this.resolveUrl(request.url), {

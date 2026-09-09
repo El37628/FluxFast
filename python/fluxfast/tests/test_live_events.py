@@ -101,6 +101,7 @@ def test_live_event_discriminated_union_parses_each_event(payload, event_type):
         {"protocol": "fluxfast/2", "type": "ready", "keys": ["summary"]},
         {"protocol": "fluxfast/1", "type": "unknown", "keys": ["summary"]},
         {"protocol": "fluxfast/1", "type": "ready", "keys": [1]},
+        {"protocol": "fluxfast/1", "type": "ready", "keys": ["bad\x7fkey"]},
         {
             "protocol": "fluxfast/1",
             "type": "ready",
@@ -111,6 +112,12 @@ def test_live_event_discriminated_union_parses_each_event(payload, event_type):
             "type": "invalidate",
             "keys": ["summary"],
             "originClientId": "x" * 65,
+        },
+        {
+            "protocol": "fluxfast/1",
+            "type": "invalidate",
+            "keys": ["summary"],
+            "originClientId": "bad\x7fid",
         },
         {
             "protocol": "fluxfast/1",

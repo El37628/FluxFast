@@ -49,6 +49,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Changed
 
+- Harden protocol metadata against invalid base64url, duplicate JSON keys,
+  control characters, oversized partial-resource headers, and reflected
+  protocol diagnostics; internal redirects now reject browser-normalizable
+  cross-origin forms.
 - Expose the existing `useLiveStatus` hook and its status types from the
   explicit `@fluxfast/next/client` entry point as a reviewed additive API
   correction before the 1.0 freeze.

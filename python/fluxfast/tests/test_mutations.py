@@ -73,6 +73,9 @@ def test_redirects():
 
     with pytest.raises(ValueError, match="origin-relative"):
         flux_redirect("https://example.com")
+    for unsafe_internal in ("/\\evil.example/path", "/\n/evil.example/path"):
+        with pytest.raises(ValueError, match="origin-relative"):
+            flux_redirect(unsafe_internal)
     with pytest.raises(ValueError, match="HTTP"):
         flux_external_redirect("javascript:alert(1)")
 
@@ -113,6 +116,8 @@ def test_mutation_rejects_unknown_or_incomplete_patch_operations():
         mutation(patches={"rooms": {"op": "remove-item", "id": {}}})
     with pytest.raises(ValueError, match="match.*object"):
         mutation(patches={"rooms": {"op": "remove-item", "match": []}})
+    with pytest.raises(ValueError, match="safe non-empty"):
+        mutation(invalidate=["bad\x7fkey"])
 
 
 def test_mutation_response_omits_unset_optional_wire_fields():

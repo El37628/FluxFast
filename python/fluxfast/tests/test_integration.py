@@ -23,6 +23,8 @@ from fluxfast.headers import (
     HEADER_KNOWN,
     HEADER_LIVE_RESOURCES,
     HEADER_ONLY,
+    HEADER_PROTOCOL,
+    MAX_ONLY_HEADER_BYTES,
     encode_known_header,
 )
 
@@ -224,7 +226,7 @@ def test_required_performance_cross_page_reuse_scenario():
 
 
 def test_partial_refresh_only_header():
-    app, _loader_counts = create_test_app()
+    app, loader_counts = create_test_app()
     client = TestClient(app)
 
     # Request only 'summary'
@@ -242,6 +244,48 @@ def test_partial_refresh_only_header():
     assert "summary" in data["resources"]
     assert "auth" not in data["resources"]
     assert "hotel" not in data["resources"]
+    assert loader_counts["summary"] == 1
+
+    # Unknown names never escape the page's authoritative resource graph.
+    unknown = client.get(
+        "/dashboard",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_ONLY: "invented,other-invented",
+        },
+    )
+    assert unknown.status_code == 200
+    assert unknown.json()["resources"] == {}
+    assert loader_counts["summary"] == 1
+
+
+def test_oversized_protocol_headers_fail_with_bounded_responses():
+    app, loader_counts = create_test_app()
+    client = TestClient(app)
+
+    oversized_only = client.get(
+        "/dashboard",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_ONLY: "x" * (MAX_ONLY_HEADER_BYTES + 1),
+        },
+    )
+    assert oversized_only.status_code == 409
+    assert len(oversized_only.content) < 512
+    assert all(count == 0 for count in loader_counts.values())
+
+    supplied_protocol = "attacker-" + "x" * 32_000
+    unsupported_protocol = client.get(
+        "/dashboard",
+        headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_PROTOCOL: supplied_protocol,
+        },
+    )
+    assert unsupported_protocol.status_code == 409
+    assert len(unsupported_protocol.content) < 512
+    assert supplied_protocol not in unsupported_protocol.text
+    assert all(count == 0 for count in loader_counts.values())
 
 
 def test_deferred_page_metadata_requires_capability_and_only_resolves_follow_up():

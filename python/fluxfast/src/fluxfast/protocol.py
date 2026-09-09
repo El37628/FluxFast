@@ -11,6 +11,17 @@ PROTOCOL_MEDIA_TYPE: str = "application/vnd.fluxfast+json"
 T = TypeVar("T")
 
 
+def _is_origin_relative_redirect(value: str) -> bool:
+    """Return whether a redirect is safe for browser origin-relative navigation."""
+
+    return (
+        value.startswith("/")
+        and not value.startswith("//")
+        and "\\" not in value
+        and not any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in value)
+    )
+
+
 class ResourceWireRecord(BaseModel, Generic[T]):
     version: str
     value: T
@@ -130,7 +141,7 @@ class MutationPayload(BaseModel):
     @field_validator("redirect")
     @classmethod
     def validate_redirect(cls, value: str | None) -> str | None:
-        if value is not None and (not value.startswith("/") or value.startswith("//")):
+        if value is not None and not _is_origin_relative_redirect(value):
             raise ValueError("redirect must be origin-relative")
         return value
 

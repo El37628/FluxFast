@@ -27,3 +27,15 @@ FluxFast does not implement authentication or CSRF protection. FastAPI
 dependencies remain authoritative, and applications using cookie credentials
 must configure CSRF and CORS deliberately. Component identifiers resolve only
 through the generated allowlist; never replace it with arbitrary runtime imports.
+
+## Security boundaries
+
+Request metadata is an optimization or a requested subset, never a source of
+authorization. FastAPI dependencies reconstruct the authoritative page before
+resource-only and live requests are intersected with its declared resource
+graph. Cache and broker identities are derived from server-owned scopes.
+
+Generated files are confined to the configured project output tree and reject
+symlink traversal. Internal mutation redirects accept only safe origin-relative
+paths; use `flux_external_redirect()` when full-browser external navigation is
+intentional.
