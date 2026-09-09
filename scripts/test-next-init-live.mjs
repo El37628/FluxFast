@@ -355,8 +355,33 @@ try {
   assert.equal(registrationRequests.length, 2);
   assert.deepEqual(registrationResponses, [422, 200]);
 
+  await second.getByRole("link", { name: "View quarterly report" }).click();
+  await second.getByRole("heading", { name: "Report Quarterly" }).waitFor();
+  assert.equal(new URL(second.url()).pathname, "/reports/quarterly");
+  assert.equal(await second.getByTestId("report-id").textContent(), "quarterly");
+  assert.equal(await second.getByTestId("report-meta").textContent(), "quarterly");
+  await second.goBack();
+  await second.getByRole("heading", { name: "Clean live consumer" }).waitFor();
+  assert.equal(new URL(second.url()).pathname, "/");
+  await second.locator("[data-testid=live-status]").filter({ hasText: "connected" }).waitFor();
+
   resourceBatches.length = 0;
+  const incrementResponsePromise = first.waitForResponse(
+    response =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/increment"
+  );
   await first.getByRole("button", { name: "Increment live resources" }).click();
+  const incrementResponse = await incrementResponsePromise;
+  assert.equal(incrementResponse.status(), 200);
+  const incrementEnvelope = await incrementResponse.json();
+  assert.deepEqual(incrementEnvelope.mutation.patches["live-counter"], [
+    { op: "replace-resource", value: { value: 1 } },
+  ]);
+  assert.deepEqual(
+    [...incrementEnvelope.mutation.invalidate].sort(),
+    ["live-counter", "live-report"]
+  );
   await second.locator("[data-testid=live-counter-value]").filter({ hasText: "1" }).waitFor();
   await second.locator("[data-testid=live-report-value]").filter({ hasText: "1" }).waitFor();
   assert.equal(await second.locator("[data-testid=live-report-stale]").count(), 0);

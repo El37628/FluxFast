@@ -296,9 +296,18 @@ function assertTypedConsumerArtifacts() {
     "analytics",
     "live-counter",
     "live-report",
+    "report-detail",
   ]);
   assert.equal(
     schema.pages.some(page => page.name === "home" && page.path === "/"),
+    true
+  );
+  assert.equal(
+    schema.pages.some(
+      page =>
+        page.name === "report_detail" &&
+        page.path === "/reports/{report_id}"
+    ),
     true
   );
   assert.equal(
@@ -332,6 +341,8 @@ function assertTypedConsumerArtifacts() {
   assert.match(types, /export interface RegistrationInput/);
   assert.match(types, /address: Address/);
   assert.match(types, /export interface User/);
+  assert.match(types, /export interface ReportDetail/);
+  assert.match(types, /reportDetail: "report-detail"/);
 
   const validators = fs.readFileSync(
     path.join(generatedRoot, "validators.generated.ts"),
@@ -347,6 +358,14 @@ function assertTypedConsumerArtifacts() {
   assert.match(mutations, /increment:/);
   assert.match(mutations, /body: IncrementBody/);
 
+  const routes = fs.readFileSync(
+    path.join(generatedRoot, "routes.generated.ts"),
+    "utf8"
+  );
+  assert.match(routes, /reportDetail: \(input:/);
+  assert.match(routes, /report_id: string/);
+  assert.match(routes, /path = "\/reports\/\{report_id\}"/);
+
   const page = fs.readFileSync(
     path.join(consumerRoot, "src", "flux-pages", "home", "index.tsx"),
     "utf8"
@@ -356,6 +375,14 @@ function assertTypedConsumerArtifacts() {
   assert.match(page, /mutations\.increment/);
   assert.match(page, /RegistrationInputValidator/);
   assert.match(page, /UserCard/);
+  assert.match(page, /routes\.reportDetail/);
+
+  const reportPage = fs.readFileSync(
+    path.join(consumerRoot, "src", "flux-pages", "report", "index.tsx"),
+    "utf8"
+  );
+  assert.match(reportPage, /resourceKeys\.reportDetail/);
+  assert.match(reportPage, /page\.meta\.reportId/);
 
   for (const modulePath of [
     path.join(consumerRoot, "src", "components", "UserCard.tsx"),
@@ -521,8 +548,10 @@ try {
   if (runLiveConsumer || runProductionConsumer) {
     const componentRoot = path.join(consumerRoot, "src", "components");
     const libraryRoot = path.join(consumerRoot, "src", "lib");
+    const reportRoot = path.join(consumerRoot, "src", "flux-pages", "report");
     fs.mkdirSync(componentRoot, { recursive: true });
     fs.mkdirSync(libraryRoot, { recursive: true });
+    fs.mkdirSync(reportRoot, { recursive: true });
     fs.copyFileSync(
       path.join(consumerRoot, "fixtures", "general-user-card.tsx"),
       path.join(componentRoot, "UserCard.tsx")
@@ -530,6 +559,10 @@ try {
     fs.copyFileSync(
       path.join(consumerRoot, "fixtures", "general-users.ts"),
       path.join(libraryRoot, "users.ts")
+    );
+    fs.copyFileSync(
+      path.join(consumerRoot, "fixtures", "typed-report.tsx"),
+      path.join(reportRoot, "index.tsx")
     );
   }
   if (runDistributedConsumer) {

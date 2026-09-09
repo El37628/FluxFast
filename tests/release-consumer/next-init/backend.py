@@ -8,6 +8,7 @@ from fluxfast import (
     Page,
     invalidate_resource,
     mutation,
+    replace_resource,
     resource,
     scope,
 )
@@ -31,6 +32,13 @@ class CounterValue(BaseModel):
     """Blocking and deferred live counter wire value."""
 
     value: int
+
+
+class ReportDetail(BaseModel):
+    """Typed value shown by the representative dynamic route."""
+
+    reportId: str
+    title: str
 
 
 class IncrementInput(BaseModel):
@@ -72,6 +80,7 @@ class RegistrationInput(BaseModel):
 ANALYTICS = flux.define_resource("analytics", Analytics)
 LIVE_COUNTER = flux.define_resource("live-counter", CounterValue)
 LIVE_REPORT = flux.define_resource("live-report", CounterValue)
+REPORT_DETAIL = flux.define_resource("report-detail", ReportDetail)
 flux.define_type("RegistrationInput", RegistrationInput, mode="validation")
 flux.define_type("User", User)
 
@@ -117,12 +126,32 @@ async def home() -> Page:
     )
 
 
+@flux.page("/reports/{report_id}", name="report_detail")
+async def report_detail(report_id: str) -> Page:
+    return Page(
+        component="report/index",
+        meta={"reportId": report_id},
+        resources=[
+            resource(
+                REPORT_DETAIL,
+                lambda: {
+                    "reportId": report_id,
+                    "title": f"Report {report_id.title()}",
+                },
+            )
+        ],
+    )
+
+
 @flux.mutation("/increment")
 async def increment(body: IncrementInput):
     global live_counter, live_report
     live_counter += body.amount
     live_report += body.amount
     return mutation(
+        patch={
+            "live-counter": replace_resource({"value": live_counter}),
+        },
         invalidates=[
             invalidate_resource("live-counter", scope=scope.public()),
             invalidate_resource("live-report", scope=scope.public()),

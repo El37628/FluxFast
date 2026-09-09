@@ -42,6 +42,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Gate release candidates through real 0.8.1 consumer upgrades in both package
   orders, matched-version verification, generated-code rebuilds, safe repeated
   initialization, and a rollback regeneration/build check.
+- Expand the packed production consumer into a representative application that
+  combines typed resources and general contracts with validation forms,
+  mutation patches, deferred/live state, dynamic routes, browser history, and a
+  production build.
 
 ### Changed
 

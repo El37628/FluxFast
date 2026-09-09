@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Link,
   useForm,
   useDeferredResource,
   useLiveStatus,
@@ -8,6 +9,7 @@ import {
   useRouter,
 } from "@fluxfast/next";
 import { mutations } from "@/.fluxfast/mutations.generated";
+import { routes } from "@/.fluxfast/routes.generated";
 import {
   resourceKeys,
   type RegistrationInput,
@@ -51,6 +53,12 @@ export default function HomePage() {
       >
         Increment live resources
       </button>
+      <Link
+        href={routes.reportDetail({ report_id: "quarterly" })}
+        prefetch={false}
+      >
+        View quarterly report
+      </Link>
       <form
         aria-label="Registration"
         onSubmit={registration.submit("/registrations", {
