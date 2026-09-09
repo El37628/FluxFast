@@ -24,7 +24,7 @@ const pairingName = process.env.FLUXFAST_PAIRING ?? "python-current";
 const pairing = resolvePublishedMixedPairing({
   pairing: pairingName,
   releaseVersion: process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion,
-  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.8.0"
+  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.8.1"
 });
 const expectedPythonVersion =
   process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "") ?? pairing.pythonVersion;
@@ -37,6 +37,21 @@ const pythonSpec =
     : `fluxfast==${expectedPythonVersion}`);
 const coreSpec = process.env.FLUXFAST_CORE_SPEC ?? `@fluxfast/core@${expectedJavaScriptVersion}`;
 const nextSpec = process.env.FLUXFAST_NEXT_SPEC ?? `@fluxfast/next@${expectedJavaScriptVersion}`;
+const upgradeSequence = process.env.FLUXFAST_UPGRADE_SEQUENCE === "1";
+const releaseVersion = (process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion).replace(
+  /^v/,
+  ""
+);
+const previousVersion = (process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.8.1").replace(/^v/, "");
+const previousPythonSpec = `fluxfast[redis]==${previousVersion}`;
+const previousCoreSpec = `@fluxfast/core@${previousVersion}`;
+const previousNextSpec = `@fluxfast/next@${previousVersion}`;
+const currentPythonSpec =
+  process.env.FLUXFAST_CURRENT_PYTHON_SPEC ?? `fluxfast[redis]==${releaseVersion}`;
+const currentCoreSpec =
+  process.env.FLUXFAST_CURRENT_CORE_SPEC ?? `@fluxfast/core@${releaseVersion}`;
+const currentNextSpec =
+  process.env.FLUXFAST_CURRENT_NEXT_SPEC ?? `@fluxfast/next@${releaseVersion}`;
 
 function cleanEnvironment(extra = {}) {
   const environment = { ...process.env };
@@ -170,7 +185,7 @@ function schemaGenerationEnvironment() {
   };
 }
 
-function assertSchemaTwoGeneration() {
+function assertSchemaTwoGeneration(producerVersion = expectedPythonVersion) {
   const generatedRoot = path.join(consumerRoot, "src", ".fluxfast");
   for (const file of [
     "schema.generated.json",
@@ -191,7 +206,7 @@ function assertSchemaTwoGeneration() {
     fs.readFileSync(path.join(generatedRoot, "schema.generated.json"), "utf8")
   );
   assert.equal(schema.schema, "fluxfast-schema/2");
-  assert.equal(schema.producer, expectedPythonVersion);
+  assert.equal(schema.producer, producerVersion);
   assert.deepEqual(schema.types, {});
   assert.deepEqual(Object.keys(schema.resources).sort(), [
     "distributed-counter",
@@ -218,22 +233,23 @@ function assertSchemaTwoGeneration() {
   assert.match(mutations, /body: IncrementBody/);
 }
 
-async function installPublishedPython(python) {
-  const attempts = process.env.FLUXFAST_PYTHON_SPEC ? 1 : 18;
+async function installPythonSpec(
+  python,
+  spec,
+  { retryRegistry = false, forceReinstall = false } = {}
+) {
+  const attempts = retryRegistry ? 18 : 1;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const result = runResult(
-      python,
-      ["-m", "pip", "install", "--disable-pip-version-check", pythonSpec],
-      consumerRoot
-    );
+    const installArgs = ["-m", "pip", "install", "--disable-pip-version-check"];
+    if (forceReinstall) installArgs.push("--force-reinstall", "--no-deps");
+    installArgs.push(spec);
+    const result = runResult(python, installArgs, consumerRoot);
     if (!result.error && result.status === 0) return;
     if (result.error) throw result.error;
     if (attempt === attempts) {
-      throw new Error(
-        `Published Python package ${pythonSpec} was unavailable after ${attempts} attempts.`
-      );
+      throw new Error(`Python package ${spec} was unavailable after ${attempts} attempts.`);
     }
-    console.log(`Waiting for ${pythonSpec} registry propagation (${attempt}/${attempts})…`);
+    console.log(`Waiting for ${spec} registry propagation (${attempt}/${attempts})…`);
     await delay(10_000);
   }
 }
@@ -247,37 +263,130 @@ function installDistributedHarnessDependency(python) {
   );
 }
 
-async function installPublishedJavaScript() {
-  const attempts = process.env.FLUXFAST_CORE_SPEC || process.env.FLUXFAST_NEXT_SPEC ? 1 : 18;
+async function installJavaScriptSpecs(
+  selectedCoreSpec,
+  selectedNextSpec,
+  { retryRegistry = false, forceReinstall = false } = {}
+) {
+  const attempts = retryRegistry ? 18 : 1;
+  if (forceReinstall) {
+    fs.rmSync(path.join(consumerRoot, "node_modules", "@fluxfast", "core"), {
+      recursive: true,
+      force: true
+    });
+    fs.rmSync(path.join(consumerRoot, "node_modules", "@fluxfast", "next"), {
+      recursive: true,
+      force: true
+    });
+  }
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const result = runResult(
       npmCommand,
-      ["install", "--package-lock=false", "--no-save", coreSpec, nextSpec],
+      ["install", "--package-lock=false", "--no-save", selectedCoreSpec, selectedNextSpec],
       consumerRoot
     );
     if (!result.error && result.status === 0) return;
     if (result.error) throw result.error;
     if (attempt === attempts) {
       throw new Error(
-        `Published JavaScript packages ${coreSpec} and ${nextSpec} were unavailable ` +
+        `JavaScript packages ${selectedCoreSpec} and ${selectedNextSpec} were unavailable ` +
           `after ${attempts} attempts.`
       );
     }
     console.log(
-      `Waiting for ${coreSpec} and ${nextSpec} registry propagation ` + `(${attempt}/${attempts})…`
+      `Waiting for ${selectedCoreSpec} and ${selectedNextSpec} registry propagation ` +
+        `(${attempt}/${attempts})…`
     );
     await delay(10_000);
   }
 }
 
+function assertInstalledPythonVersion(python, version) {
+  run(
+    python,
+    [
+      "-c",
+      "import sys; from pathlib import Path; import fluxfast; " +
+        "assert fluxfast.__version__ == sys.argv[1]; " +
+        "assert Path(fluxfast.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())",
+      version
+    ],
+    consumerRoot
+  );
+}
+
+function verifyTypedConsumer(python, producerVersion) {
+  run(
+    python,
+    typedGenerationArgs("distributed_backend:app"),
+    consumerRoot,
+    schemaGenerationEnvironment()
+  );
+  assertSchemaTwoGeneration(producerVersion);
+  run(
+    python,
+    typedGenerationArgs("distributed_backend:app", { check: true }),
+    consumerRoot,
+    schemaGenerationEnvironment()
+  );
+  run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
+  run(npmCommand, ["run", "typecheck"], consumerRoot);
+  run(npmCommand, ["run", "build"], consumerRoot);
+}
+
+const scaffoldPaths = [
+  "next.config.ts",
+  path.join("src", "fluxfast.config.ts"),
+  path.join("src", "app", "(flux)", "[[...flux]]", "page.tsx"),
+  path.join("src", "app", "%5Ffluxfast", "[probe]", "route.ts"),
+  path.join("src", "app", "%5Ffluxfast", "transport", "[[...path]]", "route.ts")
+];
+
+function captureScaffold() {
+  return Object.fromEntries(
+    scaffoldPaths.map(relativePath => [
+      relativePath,
+      fs.readFileSync(path.join(consumerRoot, relativePath), "utf8")
+    ])
+  );
+}
+
+function assertScaffoldUnchanged(expected) {
+  assert.deepEqual(captureScaffold(), expected);
+}
+
+function runDistributedHarness(python) {
+  if (!process.env.FLUXFAST_TEST_REDIS_URL) {
+    throw new Error("FLUXFAST_TEST_REDIS_URL is required for distributed mixed pairings.");
+  }
+  run(
+    process.execPath,
+    [path.join(repositoryRoot, "scripts", "test-next-init-distributed.mjs"), consumerRoot],
+    repositoryRoot,
+    { FLUXFAST_E2E_PYTHON: python, PYTHONPATH: "" }
+  );
+}
+
 let child;
 let browser;
 try {
+  if (upgradeSequence && pairing.mode !== "distributed") {
+    throw new Error("Upgrade compatibility sequences require a distributed pairing.");
+  }
+
   fs.cpSync(fixtureRoot, consumerRoot, { recursive: true });
   run(npmCommand, ["install", "--package-lock=false"], consumerRoot);
-  await installPublishedJavaScript();
-  assert.equal(installedPackageVersion("@fluxfast/core"), expectedJavaScriptVersion);
-  assert.equal(installedPackageVersion("@fluxfast/next"), expectedJavaScriptVersion);
+  await installJavaScriptSpecs(
+    upgradeSequence ? previousCoreSpec : coreSpec,
+    upgradeSequence ? previousNextSpec : nextSpec,
+    {
+      retryRegistry:
+        upgradeSequence || (!process.env.FLUXFAST_CORE_SPEC && !process.env.FLUXFAST_NEXT_SPEC)
+    }
+  );
+  const initialJavaScriptVersion = upgradeSequence ? previousVersion : expectedJavaScriptVersion;
+  assert.equal(installedPackageVersion("@fluxfast/core"), initialJavaScriptVersion);
+  assert.equal(installedPackageVersion("@fluxfast/next"), initialJavaScriptVersion);
 
   run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
   fs.copyFileSync(
@@ -300,6 +409,7 @@ try {
   }
   run(npxCommand, ["--no-install", "fluxfast", "generate"], consumerRoot);
   assertTraditionalRegistryGeneration();
+  const initializedScaffold = upgradeSequence ? captureScaffold() : undefined;
 
   run(bootstrapPython, ["-m", "venv", environmentRoot]);
   const python =
@@ -307,53 +417,96 @@ try {
       ? path.join(environmentRoot, "Scripts", "python.exe")
       : path.join(environmentRoot, "bin", "python");
   run(python, ["-m", "ensurepip", "--upgrade"]);
-  await installPublishedPython(python);
+  await installPythonSpec(python, upgradeSequence ? previousPythonSpec : pythonSpec, {
+    retryRegistry: upgradeSequence || !process.env.FLUXFAST_PYTHON_SPEC
+  });
   installDistributedHarnessDependency(python);
-  run(
-    python,
-    [
-      "-c",
-      "import sys; from pathlib import Path; import fluxfast; " +
-        "assert fluxfast.__version__ == sys.argv[1]; " +
-        "assert Path(fluxfast.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())",
-      expectedPythonVersion
-    ],
-    consumerRoot
-  );
+  assertInstalledPythonVersion(python, upgradeSequence ? previousVersion : expectedPythonVersion);
 
-  run(
-    python,
-    typedGenerationArgs("distributed_backend:app"),
-    consumerRoot,
-    schemaGenerationEnvironment()
-  );
-  assertSchemaTwoGeneration();
-  run(
-    python,
-    typedGenerationArgs("distributed_backend:app", { check: true }),
-    consumerRoot,
-    schemaGenerationEnvironment()
-  );
+  if (upgradeSequence) {
+    verifyTypedConsumer(python, previousVersion);
+    assertScaffoldUnchanged(initializedScaffold);
 
-  run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
-  run(npmCommand, ["run", "typecheck"], consumerRoot);
-  run(npmCommand, ["run", "build"], consumerRoot);
-
-  if (pairing.mode === "distributed") {
-    if (!process.env.FLUXFAST_TEST_REDIS_URL) {
-      throw new Error("FLUXFAST_TEST_REDIS_URL is required for distributed mixed pairings.");
+    if (pairingName === "python-current") {
+      await installPythonSpec(python, pythonSpec, {
+        retryRegistry: !process.env.FLUXFAST_PYTHON_SPEC,
+        forceReinstall: true
+      });
+      assertInstalledPythonVersion(python, expectedPythonVersion);
+      assert.equal(installedPackageVersion("@fluxfast/core"), previousVersion);
+      assert.equal(installedPackageVersion("@fluxfast/next"), previousVersion);
+    } else {
+      await installJavaScriptSpecs(coreSpec, nextSpec, {
+        retryRegistry: !process.env.FLUXFAST_CORE_SPEC && !process.env.FLUXFAST_NEXT_SPEC,
+        forceReinstall: true
+      });
+      assertInstalledPythonVersion(python, previousVersion);
+      assert.equal(installedPackageVersion("@fluxfast/core"), expectedJavaScriptVersion);
+      assert.equal(installedPackageVersion("@fluxfast/next"), expectedJavaScriptVersion);
     }
-    run(
-      process.execPath,
-      [path.join(repositoryRoot, "scripts", "test-next-init-distributed.mjs"), consumerRoot],
-      repositoryRoot,
-      { FLUXFAST_E2E_PYTHON: python, PYTHONPATH: "" }
+
+    verifyTypedConsumer(python, expectedPythonVersion);
+    assertScaffoldUnchanged(initializedScaffold);
+    runDistributedHarness(python);
+    console.log(
+      `Upgrade mixed pairing passed: Python ${expectedPythonVersion} + ` +
+        `@fluxfast/next ${expectedJavaScriptVersion}.`
     );
+
+    if (pairingName === "python-current") {
+      await installJavaScriptSpecs(currentCoreSpec, currentNextSpec, {
+        retryRegistry:
+          !process.env.FLUXFAST_CURRENT_CORE_SPEC && !process.env.FLUXFAST_CURRENT_NEXT_SPEC,
+        forceReinstall: true
+      });
+    } else {
+      await installPythonSpec(python, currentPythonSpec, {
+        retryRegistry: !process.env.FLUXFAST_CURRENT_PYTHON_SPEC,
+        forceReinstall: true
+      });
+    }
+
+    assertInstalledPythonVersion(python, releaseVersion);
+    assert.equal(installedPackageVersion("@fluxfast/core"), releaseVersion);
+    assert.equal(installedPackageVersion("@fluxfast/next"), releaseVersion);
+    run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
+    assertScaffoldUnchanged(initializedScaffold);
+    verifyTypedConsumer(python, releaseVersion);
+    assertScaffoldUnchanged(initializedScaffold);
+    runDistributedHarness(python);
+
+    await installPythonSpec(python, previousPythonSpec, {
+      retryRegistry: true,
+      forceReinstall: true
+    });
+    await installJavaScriptSpecs(previousCoreSpec, previousNextSpec, {
+      retryRegistry: true,
+      forceReinstall: true
+    });
+    assertInstalledPythonVersion(python, previousVersion);
+    assert.equal(installedPackageVersion("@fluxfast/core"), previousVersion);
+    assert.equal(installedPackageVersion("@fluxfast/next"), previousVersion);
+    run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
+    assertScaffoldUnchanged(initializedScaffold);
+    verifyTypedConsumer(python, previousVersion);
+    assertScaffoldUnchanged(initializedScaffold);
+    run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
+    assertScaffoldUnchanged(initializedScaffold);
+    run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
+
+    console.log(
+      `Upgrade and rollback sequence passed: 0.8.1 -> ${releaseVersion} ` +
+        `(${pairingName}) -> 0.8.1.`
+    );
+  } else if (pairing.mode === "distributed") {
+    verifyTypedConsumer(python, expectedPythonVersion);
+    runDistributedHarness(python);
     console.log(
       `Mixed distributed pairing passed: Python ${expectedPythonVersion} + ` +
         `@fluxfast/next ${expectedJavaScriptVersion}.`
     );
   } else {
+    verifyTypedConsumer(python, expectedPythonVersion);
     const frontendPort = await reservePort();
     const frontendUrl = `http://127.0.0.1:${frontendPort}`;
     child = spawn(

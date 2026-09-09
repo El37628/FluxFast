@@ -39,6 +39,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Freeze generated artifact filenames, semantic exports, and predictable naming
   rules, with deterministic and per-file atomic replacement coverage on Linux
   and Windows.
+- Gate release candidates through real 0.8.1 consumer upgrades in both package
+  orders, matched-version verification, generated-code rebuilds, safe repeated
+  initialization, and a rollback regeneration/build check.
 
 ### Changed
 
