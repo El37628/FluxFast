@@ -2,6 +2,26 @@ import { describe, it, expect, vi } from "vitest";
 import { ResourceStore, PageStore } from "../src/store";
 
 describe("ResourceStore", () => {
+  it("releases repeated key and global subscriptions without retaining callbacks", () => {
+    const store = new ResourceStore();
+    const keyCallback = vi.fn();
+    const globalCallback = vi.fn();
+
+    for (let index = 0; index < 1_000; index += 1) {
+      const unsubscribeKey = store.subscribe(`resource-${index % 5}`, keyCallback);
+      const unsubscribeGlobal = store.subscribeAll(globalCallback);
+      unsubscribeKey();
+      unsubscribeKey();
+      unsubscribeGlobal();
+      unsubscribeGlobal();
+    }
+
+    store.set({ key: "resource-0", version: "v1", value: 1 });
+    expect(keyCallback).not.toHaveBeenCalled();
+    expect(globalCallback).not.toHaveBeenCalled();
+    expect(store.hasSubscribers("resource-0")).toBe(false);
+  });
+
   it("returns a stable frozen missing-state snapshot", () => {
     const store = new ResourceStore();
 

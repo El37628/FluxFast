@@ -195,11 +195,15 @@ restore pending keys and restart their batch. A missing, stale, evicted, or
 version-mismatched resolved value invalidates the cached page rather than
 rendering an incoherent shell.
 
-Prefetch entries are rejected if their prerequisite versions have been
-evicted, invalidated, or replaced. Prefetch may return a deferred cache hit, but
-it does not execute a deferred loader on a cache miss; the real visit schedules
-that pending work.
+Completed and in-flight prefetch sets are independently capped at 32 entries.
+Oldest in-flight work is aborted when the cap is exceeded, and `router.clear()`
+aborts all remaining prefetch requests. Entries are rejected if their
+prerequisite or returned resource versions have been evicted, invalidated, or
+replaced. A response that loses a per-resource race cannot overwrite the newer
+record. Prefetch may return a deferred cache hit, but it does not execute a
+deferred loader on a cache miss; the real visit schedules that pending work.
 
-Call `router.clear()` on logout. It closes the live stream and clears resource,
-page, and prefetch state so authenticated values and subscriptions cannot
-survive a session transition.
+Call `router.clear()` on logout. It closes the live stream, aborts pending visit,
+deferred, and prefetch transport work, and clears resource, page, and prefetch
+state. Lifecycle generations prevent a late mutation from patching or
+redirecting the next authenticated session.

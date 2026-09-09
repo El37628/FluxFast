@@ -79,6 +79,7 @@ export class FluxRouter {
   private activeDeferredKeys: string[] = [];
   private activeDeferredEpochs = new Map<string, number>();
   private visitCounter = 0;
+  private lifecycleGeneration = 0;
   private resourceLoadCounter = 0;
   private resourceEpochCounter = 0;
   private readonly resourceEpochs = new Map<string, number>();
@@ -477,15 +478,21 @@ export class FluxRouter {
   async prefetch(url: string): Promise<PageEnvelope> {
     this.events.emit("prefetch:start", { url });
     const knownVersions = this.resourceStore.exportKnownVersions();
+    const startedAtEpoch = this.resourceEpochCounter;
     const envelope = await this.prefetchManager.fetch(
       url,
       this.transport,
       knownVersions
     );
-    for (const key of Object.keys(envelope.resources)) {
+    const safeResources = Object.fromEntries(
+      Object.entries(envelope.resources).filter(([key]) => (
+        (this.resourceEpochs.get(key) ?? 0) <= startedAtEpoch
+      ))
+    );
+    for (const key of Object.keys(safeResources)) {
       this.bumpResourceEpoch(key);
     }
-    this.emitResourceUpdates(this.resourceStore.setMany(envelope.resources));
+    this.emitResourceUpdates(this.resourceStore.setMany(safeResources));
     this.cachePageEnvelope(envelope);
     this.events.emit("prefetch:success", { url });
     return envelope;
@@ -496,6 +503,8 @@ export class FluxRouter {
     data?: unknown,
     options: MutateOptions = {}
   ): Promise<MutationEnvelope> {
+    const lifecycleGeneration = this.lifecycleGeneration;
+    const visitCounter = this.visitCounter;
     this.events.emit("mutation:start", { url });
 
     try {
@@ -506,6 +515,7 @@ export class FluxRouter {
         headers: options.headers,
         clientId: this.clientId,
       });
+      if (lifecycleGeneration !== this.lifecycleGeneration) return envelope;
 
       for (const [key, patches] of Object.entries(
         envelope.mutation.patches ?? {}
@@ -531,9 +541,10 @@ export class FluxRouter {
         this.events.emit("resource:invalidate", { key });
       }
 
-      if (envelope.mutation.externalRedirect) {
+      const canRedirect = visitCounter === this.visitCounter;
+      if (canRedirect && envelope.mutation.externalRedirect) {
         this.hardNavigate(envelope.mutation.externalRedirect);
-      } else if (envelope.mutation.redirect) {
+      } else if (canRedirect && envelope.mutation.redirect) {
         try {
           await this.visit(envelope.mutation.redirect, {
             preserveScroll: options.preserveScroll,
@@ -554,6 +565,7 @@ export class FluxRouter {
       this.events.emit("mutation:success", { url });
       return envelope;
     } catch (error) {
+      if (lifecycleGeneration !== this.lifecycleGeneration) throw error;
       const normalized = error instanceof Error ? error : new Error(String(error));
       this.events.emit("mutation:error", { url, error: normalized });
       throw error;
@@ -561,6 +573,7 @@ export class FluxRouter {
   }
 
   clear(): void {
+    this.lifecycleGeneration += 1;
     this.abortActiveDeferred();
     this.abortActiveVisit();
     this.liveStarted = false;
@@ -575,6 +588,7 @@ export class FluxRouter {
   }
 
   destroy(): void {
+    this.lifecycleGeneration += 1;
     this.abortActiveDeferred();
     this.abortActiveVisit();
     this.liveStarted = false;

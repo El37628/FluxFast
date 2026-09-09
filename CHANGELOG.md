@@ -49,6 +49,11 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Changed
 
+- Bound completed and in-flight prefetch state, abort evicted or logout-cleared
+  transport work, reject stale shared-resource completions, and prevent pending
+  mutations from patching a new session or redirecting over newer navigation.
+- Add repeated subscription, page-cache, live connection/timer, and concurrent
+  server-shutdown stress coverage to freeze lifecycle cleanup behavior.
 - Harden protocol metadata against invalid base64url, duplicate JSON keys,
   control characters, oversized partial-resource headers, and reflected
   protocol diagnostics; internal redirects now reject browser-normalizable

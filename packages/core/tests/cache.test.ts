@@ -3,6 +3,26 @@ import { PageCache } from "../src/cache";
 import { ResourceStore } from "../src/store";
 
 describe("PageCache resource manifests", () => {
+  it("keeps repeated navigation entries within the configured LRU bound", () => {
+    const resources = new ResourceStore({ maxResources: 256 });
+    const cache = new PageCache(4);
+
+    for (let index = 0; index < 100; index += 1) {
+      const key = `resource-${index}`;
+      const version = `v${index}`;
+      resources.set({ key, version, value: index });
+      cache.set(
+        { component: "page/index", url: `/page-${index}` },
+        { [key]: version },
+        { resourceKeys: [key], pendingDeferred: [] }
+      );
+    }
+
+    expect(cache.getValid("/page-95", resources)).toBeUndefined();
+    expect(cache.getValid("/page-96", resources)?.url).toBe("/page-96");
+    expect(cache.getValid("/page-99", resources)?.url).toBe("/page-99");
+  });
+
   it("tracks only the page-owned resources from an explicit manifest", () => {
     const resources = new ResourceStore();
     resources.set({ key: "auth", version: "a1", value: { id: 1 } });
