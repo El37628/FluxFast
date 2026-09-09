@@ -136,9 +136,19 @@ resource invalidates the page entry.
 
 Each visit receives an ID and `AbortController`. A superseding visit aborts the
 previous request where possible, and the latest visit ID is checked before any
-state update. Prefetch requests are deduplicated by URL plus known versions;
-prefetched deltas are used only while the versions on which they depended still
-exist.
+state update. Prefetch requests are deduplicated by URL plus known versions and
+both active and completed prefetch sets are bounded to 32 entries. Eviction or
+`router.clear()` aborts active transport work. A completed prefetch applies only
+resource keys that have not advanced since it began, and its cached envelope is
+rejected once any prerequisite or returned version conflicts with current
+state.
+
+Logout/session clear advances a lifecycle generation before clearing client
+state. Mutation responses from the earlier generation are returned to their
+caller but cannot patch the new session or trigger navigation. A mutation
+redirect is likewise ignored if the user has begun a newer navigation while
+that mutation was pending; its cache invalidation and resource effects remain
+eligible because the server-side mutation may already have committed.
 
 ## Live lifecycle
 

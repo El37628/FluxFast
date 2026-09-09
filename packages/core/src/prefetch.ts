@@ -3,6 +3,8 @@
 import { PageEnvelope } from "./protocol.js";
 import { FluxTransport } from "./transport.js";
 
+const MAX_PREFETCH_ENTRIES = 32;
+
 export interface PrefetchEntry {
   readonly envelope: PageEnvelope;
   readonly expiresAt: number;
@@ -19,14 +21,26 @@ function versionsStillAvailable(
   current: Record<string, string>,
   envelope: PageEnvelope
 ): boolean {
-  return Object.entries(basedOn).every(([key, version]) => {
-    const expected = envelope.resources[key]?.version ?? version;
-    return current[key] === expected;
-  });
+  return (
+    Object.entries(basedOn).every(([key, version]) => {
+      const expected = envelope.resources[key]?.version ?? version;
+      return current[key] === expected;
+    }) &&
+    Object.entries(envelope.resources).every(([key, record]) => (
+      current[key] === undefined || current[key] === record.version
+    ))
+  );
+}
+
+function prefetchCancellation(): Error {
+  const cancellation = new Error("Prefetch was cleared or superseded");
+  cancellation.name = "AbortError";
+  return cancellation;
 }
 
 export class PrefetchManager {
   private readonly inFlight = new Map<string, Promise<PageEnvelope>>();
+  private readonly controllers = new Map<string, AbortController>();
   private readonly cache = new Map<string, PrefetchEntry>();
   private generation = 0;
 
@@ -46,30 +60,40 @@ export class PrefetchManager {
     if (pending) return pending;
 
     const generation = this.generation;
+    const controller = new AbortController();
     const promise = transport
       .visit({
         url,
         visitId: `prefetch_${Date.now().toString(36)}`,
         knownVersions,
+        signal: controller.signal,
       })
       .then(envelope => {
-        if (generation !== this.generation) {
-          const cancellation = new Error("Prefetch was cleared");
-          cancellation.name = "AbortError";
-          throw cancellation;
+        if (generation !== this.generation || controller.signal.aborted) {
+          throw prefetchCancellation();
         }
+        this.pruneExpired();
+        this.cache.delete(url);
         this.cache.set(url, {
           envelope,
           expiresAt: Date.now() + ttlMs,
           basedOnVersions: { ...knownVersions },
         });
+        this.evictOldest(this.cache);
         return envelope;
       })
       .finally(() => {
-        this.inFlight.delete(requestFingerprint);
+        if (this.inFlight.get(requestFingerprint) === promise) {
+          this.inFlight.delete(requestFingerprint);
+        }
+        if (this.controllers.get(requestFingerprint) === controller) {
+          this.controllers.delete(requestFingerprint);
+        }
       });
 
     this.inFlight.set(requestFingerprint, promise);
+    this.controllers.set(requestFingerprint, controller);
+    this.evictInFlight();
     return promise;
   }
 
@@ -93,12 +117,41 @@ export class PrefetchManager {
       this.cache.delete(url);
       return undefined;
     }
+    this.cache.delete(url);
+    this.cache.set(url, entry);
     return entry.envelope;
   }
 
   clear(): void {
     this.generation += 1;
+    for (const controller of this.controllers.values()) controller.abort();
+    this.controllers.clear();
     this.inFlight.clear();
     this.cache.clear();
+  }
+
+  private evictInFlight(): void {
+    while (this.inFlight.size > MAX_PREFETCH_ENTRIES) {
+      const oldest = this.inFlight.keys().next().value as string | undefined;
+      if (oldest === undefined) return;
+      this.controllers.get(oldest)?.abort();
+      this.controllers.delete(oldest);
+      this.inFlight.delete(oldest);
+    }
+  }
+
+  private evictOldest(entries: Map<string, PrefetchEntry>): void {
+    while (entries.size > MAX_PREFETCH_ENTRIES) {
+      const oldest = entries.keys().next().value as string | undefined;
+      if (oldest === undefined) return;
+      entries.delete(oldest);
+    }
+  }
+
+  private pruneExpired(): void {
+    const now = Date.now();
+    for (const [url, entry] of this.cache) {
+      if (now >= entry.expiresAt) this.cache.delete(url);
+    }
   }
 }

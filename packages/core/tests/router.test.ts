@@ -968,6 +968,132 @@ describe("FluxRouter Core", () => {
     expect(router.pageStore.getSnapshot().component).toBe("rooms/index");
   });
 
+  it("does not let an older prefetch overwrite a newer shared resource", async () => {
+    const transport = new MockTransport();
+    const router = new FluxRouter({ transport });
+    router.resourceStore.set({
+      key: "summary",
+      version: "v1",
+      value: { count: 1 },
+    });
+    let resolvePrefetch!: (value: PageEnvelope) => void;
+    transport.visitMock.mockImplementation(request => {
+      if (request.url === "/reports") {
+        return new Promise(resolve => { resolvePrefetch = resolve; });
+      }
+      return Promise.resolve({
+        protocol: "fluxfast/1",
+        page: { component: "dashboard/index", url: "/dashboard" },
+        resourceKeys: ["summary"],
+        resources: {
+          summary: { version: "v3", value: { count: 3 } },
+        },
+      });
+    });
+
+    const prefetch = router.prefetch("/reports");
+    await router.visit("/dashboard", { usePrefetch: false });
+    resolvePrefetch({
+      protocol: "fluxfast/1",
+      page: { component: "reports/index", url: "/reports" },
+      resourceKeys: ["summary"],
+      resources: {
+        summary: { version: "v2", value: { count: 2 } },
+      },
+    });
+    await prefetch;
+
+    expect(router.resourceStore.getRecord("summary")).toMatchObject({
+      version: "v3",
+      value: { count: 3 },
+    });
+    expect(router.prefetchManager.getCached("/reports", { summary: "v3" }))
+      .toBeUndefined();
+  });
+
+  it("does not apply a pre-logout mutation to a new session", async () => {
+    const transport = new MockTransport();
+    const hardNavigate = vi.fn();
+    const router = new FluxRouter({ transport, hardNavigate });
+    router.resourceStore.set({
+      key: "profile",
+      version: "user-a",
+      value: { id: "a" },
+    });
+    let resolveMutation!: (value: MutationEnvelope) => void;
+    transport.mutateMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveMutation = resolve; })
+    );
+
+    const mutation = router.mutate("/profile/update");
+    router.clear();
+    router.resourceStore.set({
+      key: "profile",
+      version: "user-b",
+      value: { id: "b" },
+    });
+    resolveMutation({
+      protocol: "fluxfast/1",
+      mutation: {
+        patches: {
+          profile: [{ op: "replace-resource", value: { id: "a-updated" } }],
+        },
+        externalRedirect: "https://example.com/user-a",
+      },
+    });
+
+    await mutation;
+    expect(router.resourceStore.getRecord("profile")).toMatchObject({
+      version: "user-b",
+      value: { id: "b" },
+    });
+    expect(hardNavigate).not.toHaveBeenCalled();
+  });
+
+  it("does not emit a pre-logout mutation failure into a new session", async () => {
+    const transport = new MockTransport();
+    const router = new FluxRouter({ transport });
+    const mutationErrors = vi.fn();
+    router.on("mutation:error", mutationErrors);
+    let rejectMutation!: (error: Error) => void;
+    transport.mutateMock.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => { rejectMutation = reject; })
+    );
+
+    const mutation = router.mutate("/profile/update");
+    router.clear();
+    rejectMutation(new Error("old session failed"));
+
+    await expect(mutation).rejects.toThrow("old session failed");
+    expect(mutationErrors).not.toHaveBeenCalled();
+  });
+
+  it("does not honor an old mutation redirect after newer navigation", async () => {
+    const transport = new MockTransport();
+    const hardNavigate = vi.fn();
+    const router = new FluxRouter({ transport, hardNavigate });
+    let resolveMutation!: (value: MutationEnvelope) => void;
+    transport.mutateMock.mockImplementationOnce(
+      () => new Promise(resolve => { resolveMutation = resolve; })
+    );
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "dashboard/index", url: "/dashboard" },
+      resources: {},
+    });
+
+    const mutation = router.mutate("/session/finish");
+    await router.visit("/dashboard", { usePrefetch: false });
+    resolveMutation({
+      protocol: "fluxfast/1",
+      mutation: { externalRedirect: "https://example.com/old-destination" },
+    });
+
+    await mutation;
+    expect(router.pageStore.getSnapshot().url).toBe("/dashboard");
+    expect(hardNavigate).not.toHaveBeenCalled();
+  });
+
   it("honors external redirects from mutation envelopes", async () => {
     const transport = new MockTransport();
     const hardNavigate = vi.fn();

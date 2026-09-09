@@ -124,6 +124,41 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("LiveManager", () => {
+  it("returns connections, timers, and network listeners to baseline after stress", async () => {
+    vi.useFakeTimers();
+    const transport = new ControlledTransport();
+    const network = new ControlledNetwork();
+    const manager = new LiveManager({
+      transport,
+      network,
+      reconnectJitter: 0,
+    });
+    manager.updateManifest("/dashboard", ["summary"]);
+
+    for (let index = 0; index < 100; index += 1) {
+      manager.connect();
+      manager.disconnect();
+    }
+
+    expect(transport.connections).toHaveLength(100);
+    expect(transport.connections.every(connection => connection.signal.aborted))
+      .toBe(true);
+    expect(network.subscribed).toBe(false);
+
+    manager.connect();
+    transport.connections.at(-1)!.finish();
+    await flushMicrotasks();
+    manager.disconnect();
+    await vi.runAllTimersAsync();
+    expect(transport.connections).toHaveLength(101);
+    expect(manager.getSnapshot()).toMatchObject({
+      status: "idle",
+      connected: false,
+      reconnectAttempt: 0,
+    });
+    manager.destroy();
+  });
+
   it("connects explicitly, reports ready status, and disconnects cleanly", async () => {
     const transport = new ControlledTransport();
     const events: LiveEvent[] = [];

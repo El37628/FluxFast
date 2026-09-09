@@ -95,3 +95,20 @@ async def test_cache_still_closes_when_broker_shutdown_fails() -> None:
 
     assert events == ["broker", "cache"]
     assert cache.close_count == 1
+
+
+@pytest.mark.anyio
+async def test_concurrent_close_calls_share_one_shutdown_sequence() -> None:
+    events: list[str] = []
+    cache = RecordingCache(events)
+    broker = RecordingBroker(events)
+    flux = FluxFast(FastAPI(), cache=cache, broker=broker)
+
+    async with anyio.create_task_group() as tasks:
+        for _index in range(50):
+            tasks.start_soon(flux.close)
+
+    assert events == ["broker", "cache"]
+    assert broker.close_count == 1
+    assert cache.close_count == 1
+    assert flux.health.shutting_down is True
