@@ -7,6 +7,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Freeze release artifact metadata and contents, publish verified SHA-256
+  digests, and document the v0.9 OIDC/provenance integrity policy.
 - Add a focused documentation-consistency gate for supported runtimes, peer
   ranges, protocol and schema versions, capability names, validation formats,
   generated filenames, and public package entry points.

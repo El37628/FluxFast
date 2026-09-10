@@ -80,10 +80,12 @@ jobs:
       - name: Test Python package
         run: |
           python -m ruff check python/fluxfast tests/release-consumer/python \
+            tests/release-artifacts \
             tests/release-consumer/next-init/backend.py \
             tests/release-consumer/next-init/distributed_backend.py \
-            tests/release-consumer/next-init/distributed_proxy.py
-          python -m pytest -q python/fluxfast/tests
+            tests/release-consumer/next-init/distributed_proxy.py \
+            scripts/verify_release_artifacts.py
+          python -m pytest -q python/fluxfast/tests tests/release-artifacts
           python -m pip_audit python/fluxfast --strict --progress-spinner off
       - name: Test same-origin browser integration
         run: |
@@ -96,6 +98,10 @@ jobs:
           npm pack ./packages/core --pack-destination release/npm
           npm pack ./packages/next --pack-destination release/npm
           python -m twine check release/python/*
+          python scripts/verify_release_artifacts.py \
+            --release-dir release \
+            --version "${GITHUB_REF_NAME#v}" \
+            --write-checksums
       - name: Verify combined artifacts in a clean typed live consumer
         env:
           FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-deferred-consumer/artifacts
@@ -157,6 +163,13 @@ jobs:
           path: release/npm/*
           if-no-files-found: error
           retention-days: 7
+      - name: Upload immutable release checksums
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-checksums
+          path: release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
 
   publish-pypi:
     name: Publish fluxfast to PyPI
@@ -178,6 +191,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           packages-dir: release/python
+          attestations: true
 
   publish-npm:
     name: Publish JavaScript packages to npm
@@ -339,6 +353,11 @@ jobs:
         with:
           name: npm-distributions
           path: release/npm
+      - name: Download release checksums
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-checksums
+          path: release
       - name: Create release and attach distributions
         env:
           GH_TOKEN: ${{ github.token }}
@@ -346,6 +365,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             release/python/* \
             release/npm/* \
+            release/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --generate-notes \
