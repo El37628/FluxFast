@@ -7,6 +7,13 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Establish the v0.9 performance freeze baseline against v0.8.1 across request,
+  cache, deferred, live, Redis, code-generation, validation, bundle, memory,
+  and production-startup workloads, with correctness gates and documented
+  repeatability policy.
+- Add repeatable 100-cycle client memory/resource workloads and expand the real
+  production bundle matrix to minimal Core, minimal Next, validator-free,
+  single-validator, and realistic validators/live/forms consumers.
 - Freeze and CI-enforce the Python 3.11–3.14, Node.js 22/24, Next.js
   `>=16.3.0 <17.0.0`, and React 19+ runtime support matrix, including minimum
   and latest-compatible packed Next.js consumers.

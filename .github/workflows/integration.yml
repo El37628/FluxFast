@@ -129,6 +129,8 @@ jobs:
         run: pnpm benchmark:codegen -- --samples 1
       - name: Verify validator runtime benchmark workloads
         run: pnpm benchmark:validation -- --samples 1 --iterations 1
+      - name: Verify memory benchmark correctness
+        run: pnpm benchmark:memory -- --samples 2 --cycles 100
       - name: Verify production validator tree-shaking
         run: pnpm benchmark:bundle
       - name: Verify full-stack type generation helper

@@ -20,7 +20,12 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = Path(
+    os.getenv(
+        "FLUXFAST_BENCHMARK_REPOSITORY_ROOT",
+        str(Path(__file__).resolve().parents[2]),
+    )
+).resolve()
 FRONTEND = REPOSITORY_ROOT / "tests" / "browser" / "frontend"
 WORKER_COUNTS = (1, 2, 4, 8)
 HTTP = build_opener(ProxyHandler({}))

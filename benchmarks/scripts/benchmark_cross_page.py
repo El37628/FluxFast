@@ -15,6 +15,8 @@ from benchmarks.fixtures.app import create_benchmark_app
 class Measurement:
     duration_ms: float
     payload_bytes: int
+    cache_hits: int
+    cache_misses: int
 
 
 def measured_get(client: TestClient, path: str, headers: dict[str, str] | None = None):
@@ -22,7 +24,12 @@ def measured_get(client: TestClient, path: str, headers: dict[str, str] | None =
     response = client.get(path, headers=headers)
     duration_ms = (time.perf_counter() - started) * 1_000
     response.raise_for_status()
-    return response, Measurement(duration_ms, len(response.content))
+    return response, Measurement(
+        duration_ms,
+        len(response.content),
+        int(response.headers.get("X-FluxFast-Cache-Hits", "0")),
+        int(response.headers.get("X-FluxFast-Cache-Misses", "0")),
+    )
 
 
 def median(values: list[Measurement], field: str) -> float:
@@ -46,6 +53,7 @@ def run_benchmark(samples: int = 5) -> None:
     initial_measurements: list[Measurement] = []
     baseline_measurements: list[Measurement] = []
     delta_measurements: list[Measurement] = []
+    warm_measurements: list[Measurement] = []
     delta_resource_names: set[str] | None = None
 
     for _ in range(samples):
@@ -70,12 +78,25 @@ def run_benchmark(samples: int = 5) -> None:
                     HEADER_KNOWN: encode_known_header(known),
                 },
             )
+            warm, warm_measurement = measured_get(
+                client,
+                "/rooms",
+                {HEADER_FLUXFAST: "1"},
+            )
 
         delta_resources = set(delta.json()["resources"])
         shared = {"auth", "hotel", "permissions", "settings"}
         assert shared.isdisjoint(delta_resources)
         assert {"room-types", "rooms"}.issubset(delta_resources)
-        assert all(loader_counts[key] == 1 for key in shared)
+        assert set(warm.json()["resources"]) == shared | {"room-types", "rooms"}
+        assert initial.cache_hits == 0
+        assert initial.cache_misses == 6
+        assert delta_measurement.cache_hits == 4
+        assert delta_measurement.cache_misses == 2
+        assert warm_measurement.cache_hits == 6
+        assert warm_measurement.cache_misses == 0
+        loaded_keys = shared | {"room-types", "rooms"}
+        assert all(loader_counts[key] == 1 for key in loaded_keys)
         assert len(baseline.content) == baseline_measurement.payload_bytes
         if delta_resource_names is None:
             delta_resource_names = delta_resources
@@ -84,10 +105,12 @@ def run_benchmark(samples: int = 5) -> None:
         initial_measurements.append(initial)
         baseline_measurements.append(baseline_measurement)
         delta_measurements.append(delta_measurement)
+        warm_measurements.append(warm_measurement)
 
     assert_stable_payload_bytes(initial_measurements, "initial dashboard")
     assert_stable_payload_bytes(baseline_measurements, "complete props")
     assert_stable_payload_bytes(delta_measurements, "resource delta")
+    assert_stable_payload_bytes(warm_measurements, "warm resource response")
 
     initial_bytes = median(initial_measurements, "payload_bytes")
     baseline_bytes = median(baseline_measurements, "payload_bytes")
@@ -109,13 +132,19 @@ def run_benchmark(samples: int = 5) -> None:
     print(
         "resource delta: "
         f"{median(delta_measurements, 'duration_ms'):.2f} ms median, "
-        f"{delta_bytes:.0f} bytes median"
+        f"{delta_bytes:.0f} bytes median, 4 cache hits, 2 cache misses"
+    )
+    print(
+        "warm resource response: "
+        f"{median(warm_measurements, 'duration_ms'):.2f} ms median, "
+        "6 cache hits, 0 cache misses"
     )
     print(f"payload reduction: {reduction:.1f}% ({bytes_saved:.0f} bytes)")
     print(f"delta resources: {', '.join(sorted(delta_resource_names or set()))}")
     print(
         "correctness: PASS — every fresh app omitted all four known shared resources; "
-        "shared loaders ran once; response byte counts remained stable"
+        "cold, mixed, and warm cache counters matched; every loader ran once; "
+        "response byte counts remained stable"
     )
 
 
