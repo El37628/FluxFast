@@ -59,6 +59,61 @@ release line:
 | Runtime behavior | Documented validation, resource, mutation, cache/scope, deferred, live, one-origin production, health, and lifecycle semantics. |
 | Runtime support | Python 3.11–3.14, Node.js 22 and 24, Next.js `>=16.3.0 <17.0.0`, React 19+, and Redis 6.2–8.10 when Redis features are configured. |
 
+### Machine-checkable reference
+
+The focused documentation-consistency gate compares this small fact set with
+package metadata, CI matrices, Python and TypeScript constants, generator
+source, and the detailed specifications. It is intentionally not a general
+Markdown compiler.
+
+<!-- stability-facts:start -->
+```json
+{
+  "runtime": {
+    "python": ["3.11", "3.12", "3.13", "3.14"],
+    "node": ["22", "24"],
+    "nextPeer": ">=16.3.0 <17.0.0",
+    "reactPeer": ">=19.0.0"
+  },
+  "protocolVersion": "fluxfast/1",
+  "schema": {
+    "readable": ["fluxfast-schema/1", "fluxfast-schema/2"],
+    "produced": "fluxfast-schema/2"
+  },
+  "capabilities": ["deferred-resources", "live-resources"],
+  "validationFormats": [
+    "date",
+    "date-time",
+    "email",
+    "ipv4",
+    "ipv6",
+    "time",
+    "uri",
+    "uuid"
+  ],
+  "generatedFiles": [
+    "mutations.generated.ts",
+    "pages.generated.ts",
+    "routes.generated.ts",
+    "schema.generated.json",
+    "types.generated.ts",
+    "validators.generated.ts"
+  ],
+  "packageEntryPoints": {
+    "fluxfast": ["fluxfast"],
+    "@fluxfast/core": ["."],
+    "@fluxfast/next": [
+      ".",
+      "./client",
+      "./generate",
+      "./next-config",
+      "./server"
+    ]
+  }
+}
+```
+<!-- stability-facts:end -->
+
 The synchronized `fluxfast`, `@fluxfast/core`, and `@fluxfast/next` package
 versions identify a matched release. Supported mixed-version behavior is
 defined by the protocol, schema, generated-code, and adjacent-release consumer
