@@ -168,8 +168,8 @@ production path. See [production deployment](production.md) and
 Add user-facing entries beneath `Unreleased`, then run:
 
 ```bash
-pnpm release:prepare 0.8.1
-pnpm release:check v0.8.1
+pnpm release:prepare 0.9.0
+pnpm release:check v0.9.0
 ```
 
 The preparation command synchronizes every package manifest, the Python runtime

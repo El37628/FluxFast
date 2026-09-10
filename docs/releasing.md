@@ -163,7 +163,7 @@ the package manifests, Python runtime version, lockfile, and dated release
 section together:
 
 ```bash
-version=0.8.1
+version=0.9.0
 pnpm release:prepare "$version"
 pnpm release:check "v$version"
 ```
@@ -177,7 +177,7 @@ an up-to-date checkout:
 ```bash
 git switch main
 git pull --ff-only
-version=0.8.1
+version=0.9.0
 pnpm release:check "v$version"
 git tag -a "v$version" -m "FluxFast $version"
 git push origin "v$version"

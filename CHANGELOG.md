@@ -5,6 +5,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-10
+
 ### Added
 
 - Gate the v0.9 release candidate through one isolated consumer that installs
@@ -437,7 +439,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v0.9.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
@@ -450,3 +452,4 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 [0.7.0]: https://github.com/El37628/FluxFast/releases/tag/v0.7.0
 [0.8.0]: https://github.com/El37628/FluxFast/releases/tag/v0.8.0
 [0.8.1]: https://github.com/El37628/FluxFast/releases/tag/v0.8.1
+[0.9.0]: https://github.com/El37628/FluxFast/releases/tag/v0.9.0
