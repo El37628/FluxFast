@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify FluxFast release distributions against their source manifests."""
 
 from __future__ import annotations
