@@ -484,16 +484,24 @@ export class FluxRouter {
       this.transport,
       knownVersions
     );
+    const resourceEntries = Object.entries(envelope.resources);
     const safeResources = Object.fromEntries(
-      Object.entries(envelope.resources).filter(([key]) => (
+      resourceEntries.filter(([key]) => (
         (this.resourceEpochs.get(key) ?? 0) <= startedAtEpoch
       ))
+    );
+    const pageResourceKeys = envelope.resourceKeys ?? [
+      ...Object.keys(knownVersions),
+      ...resourceEntries.map(([key]) => key),
+    ];
+    const hasResourceRace = pageResourceKeys.some(
+      key => (this.resourceEpochs.get(key) ?? 0) > startedAtEpoch
     );
     for (const key of Object.keys(safeResources)) {
       this.bumpResourceEpoch(key);
     }
     this.emitResourceUpdates(this.resourceStore.setMany(safeResources));
-    this.cachePageEnvelope(envelope);
+    if (!hasResourceRace) this.cachePageEnvelope(envelope);
     this.events.emit("prefetch:success", { url });
     return envelope;
   }
@@ -599,6 +607,7 @@ export class FluxRouter {
     this.stopLiveDiagnosticListener?.();
     this.stopLiveDiagnosticListener = undefined;
     this.liveManager.destroy();
+    this.prefetchManager.clear();
     this.stopHistory();
     this.history.destroy();
     this.events.removeAllListeners();

@@ -252,7 +252,7 @@ The frozen mutation fields are:
 | `patches` | Resource-key map of ordered patch lists. |
 | `invalidate` | Logical keys made stale after patches are applied. |
 | `redirect` | Origin-relative FluxFast visit; backslashes and control characters are rejected so browser URL normalization cannot reinterpret it as another origin. A 404 falls back to full browser navigation. |
-| `externalRedirect` | Absolute full-browser destination. It takes precedence over `redirect`. |
+| `externalRedirect` | Absolute HTTP(S) full-browser destination. It takes precedence over `redirect`. |
 
 Patch lists apply in order. `replace-resource` replaces the complete value.
 `merge-object` requires an object value and shallow-merges its properties, or

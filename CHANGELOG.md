@@ -85,6 +85,14 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   Python protocol model and reject non-string values in the TypeScript
   consumer.
 
+### Fixed
+
+- Abort and discard pending prefetch work when a router is destroyed so an
+  abandoned request cannot retain or resume a dead router lifecycle.
+- Do not populate the page cache from a prefetch whose resource dependencies
+  were superseded while the request was in flight, preventing stale page
+  metadata from being paired with newer resource state.
+
 ### Deprecated
 
 - Mark the dormant `ValidationError` and `PageNotFoundError` compatibility

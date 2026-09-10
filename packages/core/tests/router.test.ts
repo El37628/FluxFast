@@ -1009,6 +1009,34 @@ describe("FluxRouter Core", () => {
     });
     expect(router.prefetchManager.getCached("/reports", { summary: "v3" }))
       .toBeUndefined();
+    expect(router.pageCache.getValid("/reports", router.resourceStore))
+      .toBeUndefined();
+  });
+
+  it("aborts pending prefetch work when the router is destroyed", async () => {
+    const transport = new MockTransport();
+    let requestSignal: AbortSignal | undefined;
+    transport.visitMock.mockImplementationOnce(request => new Promise(
+      (_resolve, reject) => {
+        requestSignal = request.signal;
+        request.signal?.addEventListener("abort", () => {
+          const error = new Error("Prefetch aborted");
+          error.name = "AbortError";
+          reject(error);
+        }, { once: true });
+      }
+    ));
+    const router = new FluxRouter({ transport });
+
+    const prefetch = router.prefetch("/reports");
+    expect(requestSignal?.aborted).toBe(false);
+    router.destroy();
+
+    expect(requestSignal?.aborted).toBe(true);
+    await expect(prefetch).rejects.toMatchObject({ name: "AbortError" });
+    expect(router.prefetchManager.getPending("/reports", {})).toBeUndefined();
+    expect(router.pageCache.getValid("/reports", router.resourceStore))
+      .toBeUndefined();
   });
 
   it("does not apply a pre-logout mutation to a new session", async () => {
