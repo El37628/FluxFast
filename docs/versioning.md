@@ -4,7 +4,8 @@ FluxFast uses one synchronized [Semantic Version](https://semver.org/) for the
 `fluxfast`, `@fluxfast/core`, and `@fluxfast/next` packages. The wire protocol is
 versioned independently; package version `1.x` does not imply protocol version
 1, and a breaking wire change requires the protocol process in
-[`protocol.md`](protocol.md).
+[`protocol.md`](protocol.md). The central [stability contract](stability.md)
+defines what FluxFast 0.9 treats as public, frozen, deprecated, and internal.
 
 ## Supported runtimes
 
@@ -33,16 +34,22 @@ user benefit is deferred until after the 1.0 freeze.
 
 ## Package changes
 
-- Patch releases contain backwards-compatible fixes and security updates.
-- Minor releases add backwards-compatible features. Before 1.0, a minor
-  release may also remove an API that was deprecated in an earlier minor.
-- Major releases may make breaking public API changes.
+- The 0.9.x line contains backwards-compatible bug, security, performance,
+  compatibility, and documentation fixes. It does not add significant public
+  API, redesign existing API, or remove compatibility-sensitive behavior.
+- From 1.0 onward, patch releases contain backwards-compatible fixes and minor
+  releases may add backwards-compatible features.
+- Breaking public API changes require a major release. An extraordinary
+  security fix may be incompatible only when no compatible solution exists;
+  its impact and migration must be documented.
 
-Public APIs are deprecated in documentation and, where practical, with a
-runtime or type-system warning for at least one minor release before removal.
-Immediate removal remains possible for security vulnerabilities, behavior that
-was never part of the documented public API, or changes required to preserve
-protocol correctness.
+The normal deprecation path introduces a supported replacement, marks the old
+API deprecated, documents migration, retains it through compatible releases,
+and removes it only in a major release. Where practical, documentation is
+reinforced with a runtime or type-system warning without producing noise on an
+ordinary import or application startup. The only immediate incompatible action
+is the extraordinary security or protocol-correctness case where no compatible
+fix exists.
 
 Starting with 0.9, exported APIs are classified as stable candidates,
 advanced stable candidates, deprecated, or internal. Stable and advanced

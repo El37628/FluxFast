@@ -7,6 +7,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Define the v0.9 stability contract for public and internal surfaces, 0.9.x
+  maintenance, post-1.0 versioning, deprecation, CLI compatibility, protocol and
+  schema evolution, package support, and generated-code guarantees.
 - Establish the v0.9 performance freeze baseline against v0.8.1 across request,
   cache, deferred, live, Redis, code-generation, validation, bundle, memory,
   and production-startup workloads, with correctness gates and documented
