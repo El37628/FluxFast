@@ -116,6 +116,34 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   }
 });
 
+test("runs the full packed v0.9 release-candidate consumer", () => {
+  const smoke = jobBlock(readWorkflow("release-smoke.yml"), "clean-production-consumer");
+  assert.match(smoke, /name: Clean production consumer/);
+  assert.match(smoke, /python -m build/);
+  assert.equal(smoke.match(/npm pack \.\/packages\//g)?.length, 2);
+  assert.match(smoke, /Verify the full packed v0\.9 release-candidate lifecycle/);
+  assert.match(smoke, /FLUXFAST_ARTIFACT_DIR:/);
+  assert.match(smoke, /FLUXFAST_RUN_PRODUCTION: "1"/);
+  assert.match(smoke, /pnpm test:consumer:init/);
+
+  const initializer = readRepositoryFile("scripts/test-next-init-consumer.mjs");
+  assert.match(initializer, /"fluxfast", "init", "--yes"/);
+  assert.match(initializer, /typedGenerationArgs\(\{ check: true \}\)/);
+  assert.match(initializer, /"build",\n\s+"--app"/);
+  assert.match(initializer, /installedCoreVersion,\n\s+installedNextVersion/);
+  assert.match(initializer, /assert version\('fluxfast'\) == sys\.argv\[1\]/);
+
+  const runtime = readRepositoryFile("scripts/test-next-init-live.mjs");
+  assert.match(runtime, /assert\.match\(html, \/Clean live consumer\//);
+  assert.match(runtime, /second\.goBack\(\)/);
+  assert.match(runtime, /protocolVisitsBeforeHistory/);
+  assert.match(runtime, /omitted from the navigation delta/);
+  assert.match(runtime, /Postcode is not serviceable/);
+  assert.match(runtime, /pathname === "\/increment"/);
+  assert.match(runtime, /"\/reports\/quarterly"/);
+  assert.match(runtime, /FLUXFAST_CONSUMER_PRODUCTION/);
+});
+
 test("v0.9 compatibility gates exercise both v0.8.1 upgrade orders and rollback", () => {
   const branchSmoke = jobBlock(readWorkflow("release-smoke.yml"), "mixed-version-consumers");
   assert.match(branchSmoke, /name: v0\.8\.1 upgrade and rollback compatibility/);

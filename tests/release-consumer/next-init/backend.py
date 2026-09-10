@@ -41,6 +41,12 @@ class ReportDetail(BaseModel):
     title: str
 
 
+class Navigation(BaseModel):
+    """Stable resource reused across representative application pages."""
+
+    label: str
+
+
 class IncrementInput(BaseModel):
     """Typed JSON mutation body used by the generated frontend helper."""
 
@@ -61,9 +67,16 @@ class Address(BaseModel):
     city: str = Field(min_length=2, max_length=80)
     postcode: str = Field(min_length=3, max_length=12)
 
+    @field_validator("postcode")
+    @classmethod
+    def reject_unserviceable_postcode(cls, value: str) -> str:
+        if value == "00000":
+            raise ValueError("Postcode is not serviceable")
+        return value
+
 
 class RegistrationInput(BaseModel):
-    """Client-validated form with one authoritative server-only rule."""
+    """Client-validated form with authoritative server-only rules."""
 
     name: str = Field(min_length=2, max_length=80)
     email: str = Field(min_length=5, max_length=120)
@@ -81,6 +94,7 @@ ANALYTICS = flux.define_resource("analytics", Analytics)
 LIVE_COUNTER = flux.define_resource("live-counter", CounterValue)
 LIVE_REPORT = flux.define_resource("live-report", CounterValue)
 REPORT_DETAIL = flux.define_resource("report-detail", ReportDetail)
+NAVIGATION = flux.define_resource("navigation", Navigation)
 flux.define_type("RegistrationInput", RegistrationInput, mode="validation")
 flux.define_type("User", User)
 
@@ -122,6 +136,12 @@ async def home() -> Page:
                 defer=True,
                 live=True,
             ),
+            resource(
+                NAVIGATION,
+                lambda: {"label": "Primary navigation"},
+                scope=scope.public(),
+                ttl=60,
+            ),
         ],
     )
 
@@ -132,6 +152,12 @@ async def report_detail(report_id: str) -> Page:
         component="report/index",
         meta={"reportId": report_id},
         resources=[
+            resource(
+                NAVIGATION,
+                lambda: {"label": "Primary navigation"},
+                scope=scope.public(),
+                ttl=60,
+            ),
             resource(
                 REPORT_DETAIL,
                 lambda: {

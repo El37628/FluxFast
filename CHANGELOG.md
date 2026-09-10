@@ -7,6 +7,11 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Gate the v0.9 release candidate through one isolated consumer that installs
+  all three packed packages, initializes and generates a typed application,
+  checks generated drift, builds and starts production, and verifies SSR,
+  cross-page resource reuse, history restoration, nested server validation,
+  mutations, deferred and live resources, and dynamic routing.
 - Freeze release artifact metadata and contents, publish verified SHA-256
   digests, and document the v0.9 OIDC/provenance integrity policy.
 - Add a focused documentation-consistency gate for supported runtimes, peer

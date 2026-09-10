@@ -244,11 +244,14 @@ try {
   assert.equal(envelope.page.component, "home/index");
   assert.deepEqual(
     [...envelope.resourceKeys].sort(),
-    ["analytics", "live-counter", "live-report"]
+    ["analytics", "live-counter", "live-report", "navigation"]
   );
   assert.deepEqual([...envelope.deferred].sort(), ["analytics", "live-report"]);
   assert.deepEqual(envelope.live, ["live-counter", "live-report"]);
   assert.deepEqual(envelope.resources["live-counter"].value, { value: 0 });
+  assert.deepEqual(envelope.resources.navigation.value, {
+    label: "Primary navigation",
+  });
   assert.equal(new URL(protocolResponse.url).origin, new URL(frontendUrl).origin);
 
   browser = await chromium.launch({ headless: true });
@@ -258,6 +261,7 @@ try {
   const second = await secondContext.newPage();
   const browserErrors = [];
   const resourceBatches = [];
+  const protocolVisits = [];
   const protocolOrigins = [];
   const registrationRequests = [];
   const registrationResponses = [];
@@ -280,7 +284,13 @@ try {
   second.on("request", request => {
     if (request.resourceType() === "document") documentRequests += 1;
     const headers = request.headers();
-    if (headers["x-fluxfast"] === "1") protocolOrigins.push(new URL(request.url()).origin);
+    if (headers["x-fluxfast"] === "1") {
+      const requestUrl = new URL(request.url());
+      protocolOrigins.push(requestUrl.origin);
+      if (!headers["x-fluxfast-only"]) {
+        protocolVisits.push(requestUrl.pathname);
+      }
+    }
     if (
       request.method() === "POST" &&
       new URL(request.url()).pathname === "/registrations"
@@ -310,6 +320,10 @@ try {
   const analytics = second.locator("[data-testid=analytics-value]");
   await analytics.waitFor({ timeout: 10_000 });
   assert.match(await analytics.textContent(), /Revenue 120000 from loader [12]/);
+  assert.equal(
+    await second.getByTestId("navigation-value").textContent(),
+    "Primary navigation"
+  );
   await Promise.all([
     first.locator("[data-testid=live-status]").waitFor(),
     second.locator("[data-testid=live-status]").waitFor(),
@@ -337,13 +351,20 @@ try {
   assert.equal(registrationRequests.length, 0);
 
   await registration.getByLabel("Registration name").fill("Ada Lovelace");
-  await registration.getByLabel("Registration email").fill("taken@example.com");
+  await registration.getByLabel("Registration email").fill("ada@example.com");
   await registration.getByLabel("Registration city").fill("Kuala Lumpur");
-  await registration.getByLabel("Registration postcode").fill("50000");
+  await registration.getByLabel("Registration postcode").fill("00000");
   await registration.getByRole("button", { name: "Register" }).click();
-  await registration.getByText("Email is already registered", { exact: false }).waitFor();
+  await registration.getByText("Postcode is not serviceable", { exact: false }).waitFor();
   assert.equal(registrationRequests.length, 1);
   assert.deepEqual(registrationResponses, [422]);
+
+  await registration.getByLabel("Registration postcode").fill("50000");
+  await registration.getByLabel("Registration email").fill("taken@example.com");
+  await registration.getByRole("button", { name: "Register" }).click();
+  await registration.getByText("Email is already registered", { exact: false }).waitFor();
+  assert.equal(registrationRequests.length, 2);
+  assert.deepEqual(registrationResponses, [422, 422]);
 
   await registration.getByLabel("Registration email").fill("ada@example.com");
   await registration.getByRole("button", { name: "Register" }).click();
@@ -352,17 +373,48 @@ try {
     await registration.getByRole("status").textContent(),
     "Registration accepted"
   );
-  assert.equal(registrationRequests.length, 2);
-  assert.deepEqual(registrationResponses, [422, 200]);
+  assert.equal(registrationRequests.length, 3);
+  assert.deepEqual(registrationResponses, [422, 422, 200]);
 
+  const reportResponsePromise = second.waitForResponse(response => {
+    const request = response.request();
+    const headers = request.headers();
+    return (
+      headers["x-fluxfast"] === "1" &&
+      !headers["x-fluxfast-only"] &&
+      new URL(response.url()).pathname === "/reports/quarterly"
+    );
+  });
   await second.getByRole("link", { name: "View quarterly report" }).click();
+  const reportResponse = await reportResponsePromise;
+  assert.equal(reportResponse.status(), 200);
+  const reportEnvelope = await reportResponse.json();
+  assert.equal(reportEnvelope.resourceKeys.includes("navigation"), true);
+  assert.equal(
+    Object.hasOwn(reportEnvelope.resources, "navigation"),
+    false,
+    "an unchanged shared resource must be omitted from the navigation delta"
+  );
   await second.getByRole("heading", { name: "Report Quarterly" }).waitFor();
   assert.equal(new URL(second.url()).pathname, "/reports/quarterly");
   assert.equal(await second.getByTestId("report-id").textContent(), "quarterly");
   assert.equal(await second.getByTestId("report-meta").textContent(), "quarterly");
+  assert.equal(
+    await second.getByTestId("navigation-value").textContent(),
+    "Primary navigation",
+    "the dynamic page must reuse the shared resource omitted from its delta"
+  );
+  assert.equal(protocolVisits.at(-1), "/reports/quarterly");
+  const protocolVisitsBeforeHistory = protocolVisits.length;
   await second.goBack();
   await second.getByRole("heading", { name: "Clean live consumer" }).waitFor();
   assert.equal(new URL(second.url()).pathname, "/");
+  assert.equal(
+    protocolVisits.slice(protocolVisitsBeforeHistory).includes("/"),
+    true,
+    "browser history must revalidate the live page in place"
+  );
+  assert.equal(await second.getByTestId("navigation-value").textContent(), "Primary navigation");
   await second.locator("[data-testid=live-status]").filter({ hasText: "connected" }).waitFor();
 
   resourceBatches.length = 0;
