@@ -54,6 +54,46 @@ and newest [supported Redis server lines](distributed-cache.md#supported-redis-v
 Both matrix ends must be green before preparing a release that changes
 distributed-cache behavior.
 
+## v0.9 release integrity policy
+
+FluxFast v0.9 selects the GitHub release, workflow provenance, and digest policy
+instead of requiring maintainers to GPG-sign release tags. Release tags remain
+annotated, immutable, restricted to maintainers, and must identify a reviewed
+commit already reachable from `main`; an unsigned annotated tag is therefore
+not itself a release failure. This avoids making a local signing-key setup a
+release blocker while retaining an auditable build and publication chain.
+
+Before publication, the release workflow builds exactly four distributions:
+
+```text
+fluxfast-VERSION-py3-none-any.whl
+fluxfast-VERSION.tar.gz
+fluxfast-core-VERSION.tgz
+fluxfast-next-VERSION.tgz
+```
+
+The release artifact verifier rejects missing or extra distributions, unsafe
+archive entries, metadata drift, missing export or command targets, dependency
+and peer-dependency drift, incorrect Python metadata, mismatched license or
+README content, and packaged source/build output that differs from the checked
+out package trees. It then writes `SHA256SUMS` for the four verified files.
+The GitHub release attaches those exact distributions and the checksum file;
+after downloading the five assets into one directory, verify them with:
+
+```bash
+sha256sum --check SHA256SUMS
+```
+
+Registry publication uses short-lived GitHub OIDC identities rather than
+stored publication tokens. npm publication requests registry provenance for
+both packages. PyPI trusted publishing emits PEP 740 attestations explicitly.
+All external release actions stay pinned to full commit SHAs, and write
+permissions remain scoped to the individual publish or GitHub-release job that
+needs them. Post-publication registry-consumer and mixed-version checks must pass
+before the GitHub release is created. CodeQL and dependency-security failures
+remain release failures; only independently diagnosed registry availability
+failures may be retried without weakening vulnerability policy.
+
 ## One-time registry setup
 
 Create GitHub environments named `pypi` and `npm`. Add required reviewers to

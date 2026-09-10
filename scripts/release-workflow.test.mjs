@@ -76,6 +76,46 @@ test("release publication waits for full production and container CI", () => {
   assert.match(githubRelease, /- verify-published-mixed-version/);
 });
 
+test("freezes release artifact metadata, contents, digests, and provenance", () => {
+  const smoke = readWorkflow("release-smoke.yml");
+  assert.match(smoke, /permissions:\n  contents: read/);
+  const artifactContract = jobBlock(smoke, "artifact-contract");
+  assert.match(artifactContract, /name: Four-distribution contract/);
+  assert.match(artifactContract, /python -m build/);
+  assert.equal(artifactContract.match(/npm pack \.\/packages\//g)?.length, 2);
+  assert.match(artifactContract, /scripts\/verify_release_artifacts\.py/);
+  assert.match(artifactContract, /--write-checksums/);
+
+  const release = readWorkflow("release.yml");
+  const build = jobBlock(release, "build");
+  assert.match(build, /scripts\/verify_release_artifacts\.py/);
+  assert.match(build, /--version "\$\{GITHUB_REF_NAME#v\}"/);
+  assert.match(build, /name: release-checksums/);
+  assert.match(build, /path: release\/SHA256SUMS/);
+
+  const pypi = jobBlock(release, "publish-pypi");
+  assert.match(pypi, /id-token: write/);
+  assert.match(pypi, /attestations: true/);
+
+  const npm = jobBlock(release, "publish-npm");
+  assert.match(npm, /id-token: write/);
+  assert.match(npm, /npm publish "\$tarball"[\s\S]*--provenance/);
+
+  const githubRelease = jobBlock(release, "github-release");
+  assert.match(githubRelease, /name: release-checksums/);
+  assert.match(githubRelease, /release\/SHA256SUMS/);
+
+  for (const workflow of [smoke, release]) {
+    for (const match of workflow.matchAll(/^\s+- uses: (?!\.\/)(\S+)$/gm)) {
+      assert.match(
+        match[1],
+        /^[^@]+@[0-9a-f]{40}\/?.*$/,
+        `release action is not pinned by commit: ${match[1]}`
+      );
+    }
+  }
+});
+
 test("v0.9 compatibility gates exercise both v0.8.1 upgrade orders and rollback", () => {
   const branchSmoke = jobBlock(readWorkflow("release-smoke.yml"), "mixed-version-consumers");
   assert.match(branchSmoke, /name: v0\.8\.1 upgrade and rollback compatibility/);

@@ -6,7 +6,48 @@ on:
   pull_request:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
+  artifact-contract:
+    name: Four-distribution contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: npm install --global pnpm@10.15.0
+      - run: pnpm install --frozen-lockfile
+      - name: Build all four release distributions
+        run: |
+          pnpm --filter @fluxfast/core run build
+          pnpm --filter @fluxfast/next run build
+          python -m pip install build
+          mkdir -p "$RUNNER_TEMP/fluxfast-release-contract/python"
+          mkdir -p "$RUNNER_TEMP/fluxfast-release-contract/npm"
+          python -m build \
+            --outdir "$RUNNER_TEMP/fluxfast-release-contract/python" \
+            python/fluxfast
+          npm pack ./packages/core \
+            --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
+          npm pack ./packages/next \
+            --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
+      - name: Verify release metadata, contents, and checksums
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          python scripts/verify_release_artifacts.py \
+            --release-dir "$RUNNER_TEMP/fluxfast-release-contract" \
+            --version "$version" \
+            --write-checksums
+
   javascript-consumer:
     name: ${{ matrix.label }} (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
