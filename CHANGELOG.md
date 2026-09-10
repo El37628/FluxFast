@@ -7,6 +7,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add a focused documentation-consistency gate for supported runtimes, peer
+  ranges, protocol and schema versions, capability names, validation formats,
+  generated filenames, and public package entry points.
 - Define the v0.9 stability contract for public and internal surfaces, 0.9.x
   maintenance, post-1.0 versioning, deprecation, CLI compatibility, protocol and
   schema evolution, package support, and generated-code guarantees.
