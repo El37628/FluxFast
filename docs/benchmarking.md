@@ -33,8 +33,9 @@ establishes the [supported Redis server range](distributed-cache.md#supported-re
 
 The command runs all controlled scenarios. The cross-page script reports
 observed duration and bytes for the initial dashboard, complete rooms props,
-and the resource delta. It also asserts that the four shared values are absent
-and their loaders executed only once.
+the known-version delta, and a fully warm resource response. It asserts the
+exact cold, mixed, and warm cache counters, proves that the four shared values
+are absent from the delta, and requires every loader to execute only once.
 
 For the deployment behavior measured below, see the [production
 guide](production.md) and [container guide](containers.md). Benchmark timings
@@ -47,17 +48,31 @@ Run only the offline schema and TypeScript toolchain benchmark with:
 pnpm benchmark:codegen
 ```
 
-Run the core validation-plan runtime and production bundle scenarios with:
+Run the core validation-plan runtime, retained-memory trend, and production
+bundle scenarios with:
 
 ```bash
 pnpm benchmark:validation
+pnpm benchmark:memory
 pnpm benchmark:bundle
 ```
 
-The bundle scenario performs three real Next.js production builds. It uses a
+The memory scenario requires Node's explicit garbage-collection hook, which the
+package command enables. It samples repeated 100-cycle navigation, deferred,
+mutation, and live-reconnect workloads plus 10,000-entry ResourceStore and
+validation workloads. Heap trends are observations; bounded store, connection,
+listener, and result state are correctness gates.
+
+The bundle scenario performs five real Next.js production builds. It uses a
 temporary project inside the repository boundary because Turbopack rejects
 package symlinks that leave its detected filesystem root. The temporary build
 trees are removed whether the benchmark passes or fails.
+
+For a same-harness source comparison, build the other checkout first and point
+the memory, bundle, or production script at it with
+`FLUXFAST_BENCHMARK_REPOSITORY_ROOT`. The compared checkout must use the same
+Node, Python, Next.js, and React versions. This override exists for controlled
+comparisons and does not change the ordinary `pnpm benchmark` path.
 
 Run only the production supervisor benchmark with:
 
@@ -260,13 +275,14 @@ traverses every item.
 
 ## Production Bundle Scenario
 
-The bundle benchmark generates 100 distinct contracts and makes three clean
-Next.js production builds. Every page retains the same ordinary imports from
-`@fluxfast/core` and `@fluxfast/next`; only generated-validator usage differs:
-none, one, or a realistic set of ten. Unique field markers prove exactly which
-static validation plans survive tree-shaking. Separate validation-runtime
-string markers prove that ordinary FluxFast usage does not retain the runtime
-when no validator is imported; byte totals alone cannot prove either property.
+The bundle benchmark generates 100 distinct contracts and makes five clean
+Next.js production builds: a minimal Core consumer, a minimal Next consumer, a
+realistic validator-free consumer, that same consumer with one validator, and a
+realistic validators/live/forms consumer with ten validators. Unique field
+markers prove exactly which static validation plans survive tree-shaking.
+Separate validation-runtime string markers prove that validator-free FluxFast
+usage does not retain the runtime; byte totals alone cannot prove either
+property.
 
 On the same host on 2026-09-04 with Next.js 16.3.3:
 
@@ -287,6 +303,104 @@ disappear and that the runtime is opt-in. The observed first-validator cost is
 about 24.6 KiB of first-load JavaScript; additional plans add incremental bytes.
 Aggregate `.next` totals also contain framework chunks, so they are comparison
 data rather than package-size guarantees.
+
+## v0.9 Freeze Baseline Against v0.8.1
+
+The v0.9 freeze comparison used the `v0.8.1` tag and the v0.9 candidate based on
+`ed313bc8cca7c9276761605d763ecb671319cb82`. Both checkouts ran the current
+benchmark harness on 2026-09-10 on Linux WSL2 x86_64 with an AMD Ryzen 5 3600,
+Python 3.13.14, Node 24.19.0, Next.js 16.3.4, and React 19.2.8. Each comparison
+ran sequentially on the same host. Values below are medians; timings remain
+observations rather than release promises.
+
+The existing request and synchronization hot paths stayed within 10%:
+
+| Existing hot path | v0.8.1 | v0.9 candidate | Change |
+| --- | ---: | ---: | ---: |
+| Initial dashboard, 6 cold misses | 5.15 ms | 5.18 ms | +0.6% |
+| Complete rooms props | 2.07 ms | 2.09 ms | +1.0% |
+| Known-version rooms delta, 4 hits / 2 misses | 6.07 ms | 6.29 ms | +3.6% |
+| Warm rooms response, 6 hits / 0 misses | 2.97 ms | 3.01 ms | +1.3% |
+| Deferred initial response | 12.64 ms | 12.52 ms | -0.9% |
+| Deferred settlement | 515.97 ms | 515.79 ms | -0.0% |
+| Live publish to receive | 0.072 ms | 0.073 ms | +1.4% |
+| Live invalidation to canonical refresh | 2.806 ms | 2.769 ms | -1.3% |
+| Redis cold fan-out, 1/2/4/8 workers | 56.506/57.153/58.868/63.439 ms | 56.510/57.417/60.256/61.651 ms | -2.8% to +2.4% |
+| Redis warm hit, 1/2/4/8 workers | 136.004/94.850/58.200/58.269 ms | 140.231/98.039/60.120/62.464 ms | +3.1% to +7.2% |
+
+All payloads and correctness outcomes matched. The 86,119-byte complete rooms
+response became a 64,314-byte delta, a 25.3% reduction, while all four known
+shared resources were omitted. Redis retained exact cross-client values,
+bounded cold fan-out behavior, one loader execution during every warm phase,
+and known-version omission at every worker count.
+
+The five-sample developer-tool and validator comparison used the same manifests
+and generated output:
+
+| Workload | Operation | v0.8.1 | v0.9 candidate | Change |
+| --- | --- | ---: | ---: | ---: |
+| 1,000 contracts | Python schema export | 271.669 ms | 274.845 ms | +1.2% |
+| 1,000 contracts | Manifest parse | 13.698 ms | 13.227 ms | -3.4% |
+| 1,000 contracts | Type generation | 14.836 ms | 16.368 ms | +10.3% |
+| 1,000 contracts | Validator generation | 17.267 ms | 18.167 ms | +5.2% |
+| 500 resources | TypeScript compile | 351.601 ms | 346.327 ms | -1.5% |
+| 500 resources | `fluxfast doctor` | 156.038 ms | 156.759 ms | +0.5% |
+| 500 resources | `generate --check` | 91.546 ms | 100.984 ms | +10.3% |
+| 10,000-object valid array | Validator runtime | 11.326 ms | 11.637 ms | +2.7% |
+| 10,000-object invalid-tail array | Validator runtime | 11.410 ms | 11.303 ms | -0.9% |
+
+The two 10.3% tool observations were investigated. Neither reproduced above
+10% in the independent three-sample pass: type generation was +7.4%, while
+`generate --check` was -0.9%. The underlying compiler output remained
+byte-identical and the compiler implementations did not change. They are
+recorded as host and process noise in millisecond-scale developer tooling, not
+as repeatable regressions in an application hot path.
+
+Using the identical five-build harness against each checkout produced the same
+reported JavaScript size profile:
+
+| Consumer | First-load JS | All client chunks | Retained plans | Runtime markers |
+| --- | ---: | ---: | ---: | ---: |
+| Minimal Core | 447.9 KiB (458,694 B) | 557.9 KiB (571,288 B) | 0 | 0 |
+| Minimal Next | 448.6 KiB (459,341 B) | 558.5 KiB (571,935 B) | 0 | 0 |
+| No validators | 453.0 KiB (463,860 B) | 562.9 KiB (576,454 B) | 0 | 0 |
+| One validator | 477.5 KiB (488,994 B) | 587.5 KiB (601,588 B) | 1 | 2 |
+| Validators/live/forms | 478.9 KiB (490,367 B) | 588.8 KiB (602,961 B) | 10 | 2 |
+
+The one-validator cost remained 24.5 KiB over the realistic validator-free
+consumer, and ten validators cost 25.9 KiB. Every validator-free build omitted
+all plans and validation-runtime markers, preserving the tree-shaking contract.
+
+The repeated retained-heap observation used five samples after one warm-up.
+Both versions completed each batch with the same hard bounds: page cache at or
+below 8 entries, ResourceStore at or below 32 navigation resources or 256 large
+store entries, one converged deferred or mutation resource, and zero live
+connections and network listeners after teardown. Per-sample heap trends were
+within 0.2 KiB for navigation, deferred loads, mutation cycles, live reconnects,
+and the large ResourceStore. Validation-call trends were 10.1 KiB for v0.8.1
+and 8.6 KiB for the candidate. V8 heap values are diagnostic and are not exact
+byte thresholds; the bounded state assertions are the CI gate.
+
+The three-sample production repeat showed no startup regression:
+
+| Workers | v0.8.1 FastAPI start / public ready | v0.9 FastAPI start / public ready |
+| ---: | ---: | ---: |
+| 1 | 391.710 / 1,545.145 ms | 360.649 / 1,517.695 ms |
+| 2 | 356.695 / 1,603.197 ms | 357.491 / 1,612.745 ms |
+| 4 | 357.679 / 1,676.619 ms | 358.821 / 1,715.014 ms |
+| 8 | 358.368 / 1,781.522 ms | 357.258 / 1,824.361 ms |
+
+Every lifecycle used the requested worker count, exposed only the public port,
+kept FastAPI on loopback, reached readiness in causal order, shut down cleanly,
+and left no child process or listening socket. An earlier two-sample pass
+showed a greater than 10% difference in process-discovery timing at higher
+worker counts; the three-sample repeat did not reproduce it, so it was treated
+as scheduler noise rather than an accepted regression.
+
+The freeze policy is therefore: correctness, payload identity, resource bounds,
+and tree-shaking checks fail hard; host timing and heap observations do not.
+Any repeatable regression above 10% in a meaningful existing runtime hot path
+must be investigated and either fixed or recorded with its accepted tradeoff.
 
 ## v0.7 Runtime Regression Comparison
 

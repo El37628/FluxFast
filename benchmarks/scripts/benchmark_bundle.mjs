@@ -1,4 +1,4 @@
-/** Measure validator tree-shaking in real minimal Next.js production builds. */
+/** Measure FluxFast surface cost and validator tree-shaking in real Next.js builds. */
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -9,14 +9,21 @@ import { performance } from "node:perf_hooks";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-const require = createRequire(import.meta.url);
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = path.resolve(scriptDirectory, "../..");
+const repositoryRoot = process.env.FLUXFAST_BENCHMARK_REPOSITORY_ROOT
+  ? path.resolve(process.env.FLUXFAST_BENCHMARK_REPOSITORY_ROOT)
+  : path.resolve(scriptDirectory, "../..");
+const requireFromRepository = createRequire(
+  path.join(repositoryRoot, "package.json")
+);
 const browserFixture = path.join(repositoryRoot, "tests", "browser", "frontend");
 const fixtureNodeModules = path.join(browserFixture, "node_modules");
 const nextBinary = path.join(fixtureNodeModules, ".bin", "next");
-const { generateFluxFastProject } = require(
-  "../../packages/next/dist/generate.js"
+const nextPackage = requireFromRepository(
+  "./tests/browser/frontend/node_modules/next/package.json"
+);
+const { generateFluxFastProject } = requireFromRepository(
+  "./packages/next/dist/generate.js"
 );
 
 const contractCount = 100;
@@ -85,25 +92,39 @@ function createManifest() {
   };
 }
 
-function renderPage(importedIndexes) {
+function renderPage(name, importedIndexes) {
+  if (name === "minimal-core") {
+    return `"use client";\n\nimport { PROTOCOL_VERSION } from "@fluxfast/core";\n\nexport default function Page() {\n  return <main data-fluxfast-core={PROTOCOL_VERSION}>Minimal Core consumer</main>;\n}\n`;
+  }
+
+  if (name === "minimal-next") {
+    return `"use client";\n\nimport { useResource } from "@fluxfast/next";\n\nconst fluxfastConsumer = String(useResource).length;\n\nexport default function Page() {\n  return <main data-fluxfast-next={fluxfastConsumer}>Minimal Next consumer</main>;\n}\n`;
+  }
+
   const runtimeImports = [
     'import { PROTOCOL_VERSION } from "@fluxfast/core";',
-    'import { useResource } from "@fluxfast/next";',
+    'import { Link, useDeferredResource, useForm, useLiveStatus, useResource } from "@fluxfast/next";',
   ].join("\n");
-  const consumerProbe =
-    "const fluxfastConsumer = `${PROTOCOL_VERSION}:${String(useResource).length}`;";
+  const consumerProbe = [
+    "PROTOCOL_VERSION,",
+    "String(Link).length,",
+    "String(useDeferredResource).length,",
+    "String(useForm).length,",
+    "String(useLiveStatus).length,",
+    "String(useResource).length,",
+  ].join("\n  ");
   if (importedIndexes.length === 0) {
-    return `"use client";\n\n${runtimeImports}\n\n${consumerProbe}\n\nexport default function Page() {\n  return <main data-fluxfast-consumer={fluxfastConsumer} data-validator-count="0">No validators imported</main>;\n}\n`;
+    return `"use client";\n\n${runtimeImports}\n\nconst fluxfastConsumer = [\n  ${consumerProbe}\n].join(":");\n\nexport default function Page() {\n  return <main data-fluxfast-consumer={fluxfastConsumer} data-validator-count="0">No validators imported</main>;\n}\n`;
   }
   const names = importedIndexes.map(index => `${contractName(index)}Validator`);
   const imports = `import { ${names.join(", ")} } from "../.fluxfast/validators.generated";`;
   const entries = importedIndexes.map((index, position) =>
     `${names[position]}.is({ ${marker(index)}: "ok" })`
   );
-  return `"use client";\n\n${runtimeImports}\n${imports}\n\n${consumerProbe}\nconst checks = [\n  ${entries.join(",\n  ")}\n];\n\nexport default function Page() {\n  return <main data-fluxfast-consumer={fluxfastConsumer} data-validator-count={checks.filter(Boolean).length}>Validators imported</main>;\n}\n`;
+  return `"use client";\n\n${runtimeImports}\n${imports}\n\nconst fluxfastConsumer = [\n  ${consumerProbe}\n].join(":");\nconst checks = [\n  ${entries.join(",\n  ")}\n];\n\nexport default function Page() {\n  return <main data-fluxfast-consumer={fluxfastConsumer} data-validator-count={checks.filter(Boolean).length}>Validators imported</main>;\n}\n`;
 }
 
-function prepareProject(root, importedIndexes) {
+function prepareProject(root, name, importedIndexes) {
   writeFile(
     root,
     "package.json",
@@ -112,7 +133,7 @@ function prepareProject(root, importedIndexes) {
       dependencies: {
         "@fluxfast/core": "workspace:*",
         "@fluxfast/next": "workspace:*",
-        next: "16.3.3",
+        next: nextPackage.version,
         react: "19.2.8",
         "react-dom": "19.2.8",
       },
@@ -146,7 +167,7 @@ function prepareProject(root, importedIndexes) {
     "src/app/layout.tsx",
     "export default function Layout({ children }: Readonly<{ children: React.ReactNode }>) { return <html><body>{children}</body></html>; }\n",
   );
-  writeFile(root, "src/app/page.tsx", renderPage(importedIndexes));
+  writeFile(root, "src/app/page.tsx", renderPage(name, importedIndexes));
   writeFile(
     root,
     "src/flux-pages/home/index.tsx",
@@ -180,7 +201,7 @@ function listJavaScriptFiles(root) {
 function buildVariant(temporaryRoot, name, importedIndexes) {
   const projectRoot = path.join(temporaryRoot, name);
   fs.mkdirSync(projectRoot, { recursive: true });
-  prepareProject(projectRoot, importedIndexes);
+  prepareProject(projectRoot, name, importedIndexes);
   const started = performance.now();
   const result = spawnSync(nextBinary, ["build"], {
     cwd: projectRoot,
@@ -253,7 +274,7 @@ function formatBytes(value) {
   const absolute = Math.abs(value);
   return absolute < 1024
     ? `${value} B`
-    : `${sign}${(absolute / 1024).toFixed(1)} KiB`;
+    : `${sign}${(absolute / 1024).toFixed(1)} KiB (${value} B)`;
 }
 
 function runBenchmark() {
@@ -263,30 +284,36 @@ function runBenchmark() {
   );
   try {
     const variants = [
+      ["minimal-core", []],
+      ["minimal-next", []],
       ["no-validators", []],
       ["one-validator", [0]],
-      ["multiple-validators", Array.from({ length: multipleCount }, (_, index) => index)],
+      ["realistic-validators-live-forms", Array.from({ length: multipleCount }, (_, index) => index)],
     ];
     const results = variants.map(([name, importedIndexes]) =>
       buildVariant(temporaryRoot, name, importedIndexes)
     );
     const baseline = results[0];
+    const noValidators = results.find(result => result.name === "no-validators");
+    assert.ok(noValidators);
 
     console.log("FluxFast controlled production-bundle benchmark");
-    console.log(`environment: Node ${process.versions.node}; Next.js 16.3.3`);
     console.log(
-      `workload: three clean production builds generated from ${contractCount} contracts; no timing or byte thresholds`,
+      `environment: Node ${process.versions.node}; Next.js ${nextPackage.version}; packages ${repositoryRoot}`,
+    );
+    console.log(
+      `workload: five clean production builds generated from ${contractCount} contracts; no timing or byte thresholds`,
     );
     for (const result of results) {
       console.log(
-        `${result.name}: / first-load ${formatBytes(result.firstLoadBytes)}; all client chunks ${formatBytes(result.totalChunkBytes)} (${formatBytes(result.totalChunkBytes - baseline.totalChunkBytes)} vs no-import); validator chunks ${formatBytes(result.validatorChunkBytes)}; build ${result.buildMs.toFixed(3)} ms; retained plans ${result.retained.length}; retained runtime markers ${result.retainedRuntimeMarkers.length}`,
+        `${result.name}: / first-load ${formatBytes(result.firstLoadBytes)}; all client chunks ${formatBytes(result.totalChunkBytes)} (${formatBytes(result.totalChunkBytes - baseline.totalChunkBytes)} vs minimal-core, ${formatBytes(result.totalChunkBytes - noValidators.totalChunkBytes)} vs no-validators); validator chunks ${formatBytes(result.validatorChunkBytes)}; build ${result.buildMs.toFixed(3)} ms; retained plans ${result.retained.length}; retained runtime markers ${result.retainedRuntimeMarkers.length}`,
       );
     }
     console.log(
       "tradeoff: dual ESM/CommonJS package output preserves require() compatibility while allowing production bundlers to omit the framework-neutral validation runtime until a validator is imported; aggregate .next chunk totals include framework chunks and are comparison data, not a package-size guarantee",
     );
     console.log(
-      "correctness: PASS — every build retained the same ordinary @fluxfast/core and @fluxfast/next consumer; the no-import build retained neither validator plans nor validation-runtime markers, while the single-import and realistic builds retained exactly one and ten plans plus the runtime",
+      "correctness: PASS — minimal Core and Next consumers built independently; every validator-free build retained neither generated plans nor validation-runtime markers, while the single-validator and realistic validators/live/forms builds retained exactly one and ten plans plus the runtime",
     );
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
