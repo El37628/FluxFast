@@ -296,6 +296,7 @@ function assertTypedConsumerArtifacts() {
     "analytics",
     "live-counter",
     "live-report",
+    "navigation",
     "report-detail",
   ]);
   assert.equal(
@@ -342,6 +343,7 @@ function assertTypedConsumerArtifacts() {
   assert.match(types, /address: Address/);
   assert.match(types, /export interface User/);
   assert.match(types, /export interface ReportDetail/);
+  assert.match(types, /navigation: "navigation"/);
   assert.match(types, /reportDetail: "report-detail"/);
 
   const validators = fs.readFileSync(
@@ -372,6 +374,7 @@ function assertTypedConsumerArtifacts() {
   );
   assert.doesNotMatch(page, /use(?:Deferred)?Resource\s*</);
   assert.match(page, /resourceKeys\.analytics/);
+  assert.match(page, /resourceKeys\.navigation/);
   assert.match(page, /mutations\.increment/);
   assert.match(page, /RegistrationInputValidator/);
   assert.match(page, /UserCard/);
@@ -382,6 +385,7 @@ function assertTypedConsumerArtifacts() {
     "utf8"
   );
   assert.match(reportPage, /resourceKeys\.reportDetail/);
+  assert.match(reportPage, /resourceKeys\.navigation/);
   assert.match(reportPage, /page\.meta\.reportId/);
 
   for (const modulePath of [
@@ -526,6 +530,11 @@ try {
   }
   const installedCoreVersion = assertIsolatedNpmPackage("@fluxfast/core");
   const installedNextVersion = assertIsolatedNpmPackage("@fluxfast/next");
+  assert.equal(
+    installedCoreVersion,
+    installedNextVersion,
+    "the packed Core and Next candidates must have the same version"
+  );
   if (publishedConfig) {
     assert.equal(installedCoreVersion, publishedConfig.version);
     assert.equal(installedNextVersion, publishedConfig.version);
@@ -577,6 +586,17 @@ try {
     ? await prepareIsolatedPython()
     : undefined;
   if (livePython) {
+    run(
+      livePython,
+      [
+        "-c",
+        "import sys; from importlib.metadata import version; "
+          + "assert version('fluxfast') == sys.argv[1]",
+        installedNextVersion,
+      ],
+      consumerRoot,
+      { PYTHONPATH: "" }
+    );
     run(
       livePython,
       typedGenerationArgs(),

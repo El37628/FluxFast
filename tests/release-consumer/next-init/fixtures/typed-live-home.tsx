@@ -20,6 +20,7 @@ import { featuredUser } from "@/lib/users";
 
 export default function HomePage() {
   const analytics = useDeferredResource(resourceKeys.analytics);
+  const navigation = useResource(resourceKeys.navigation);
   const counter = useResource(resourceKeys.liveCounter);
   const report = useDeferredResource(resourceKeys.liveReport);
   const live = useLiveStatus();
@@ -36,6 +37,7 @@ export default function HomePage() {
   return (
     <main>
       <h1>Clean live consumer</h1>
+      <p data-testid="navigation-value">{navigation.label}</p>
       <UserCard user={featuredUser} />
       <p data-testid="live-status">{live.status}</p>
       <p data-testid="live-counter-value">{counter.value}</p>
