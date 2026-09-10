@@ -341,6 +341,7 @@ pnpm benchmark
 ```
 
 Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
+[stability contract](docs/stability.md),
 [developer schema](docs/developer-schema.md),
 [caching](docs/caching.md), [distributed resource
 coherence](docs/distributed-cache.md), [deferred
@@ -352,8 +353,10 @@ contracts](docs/contracts.md), [native client validation](docs/validation.md),
 deployment](docs/production.md), [containers](docs/containers.md), and
 [mutations](docs/mutations.md) before extending a wire, schema, cache, or
 deployment boundary. The [compatibility and versioning
-policy](docs/versioning.md) lists supported runtimes and the deprecation
-policy; the [Python public API freeze](docs/python-api.md) classifies every
+policy](docs/versioning.md) lists supported runtimes and release rules; the
+[stability contract](docs/stability.md) defines the public boundary,
+compatibility meaning, and deprecation policy; the [Python public API
+freeze](docs/python-api.md) classifies every
 official top-level export, and the [`@fluxfast/core` API
 freeze](docs/core-api.md) classifies the framework-neutral runtime. The
 [`@fluxfast/next` API freeze](docs/next-api.md) defines the supported adapter
