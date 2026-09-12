@@ -94,6 +94,80 @@ before the GitHub release is created. CodeQL and dependency-security failures
 remain release failures; only independently diagnosed registry availability
 failures may be retried without weakening vulnerability policy.
 
+## Protected repository governance
+
+The active `Protect main` ruleset requires an up-to-date pull request, resolved
+review threads, and the following merge checks. The list covers every supported
+Python and Node.js runtime, protocol and browser integration, representative
+distributed and packed-production behavior, release artifacts, dependency
+security, and both CodeQL languages.
+
+<!-- governance-facts:start -->
+```json
+{
+  "mainRuleset": {
+    "name": "Protect main",
+    "strict": true,
+    "pullRequestRequired": true,
+    "reviewThreadsResolved": true,
+    "requiredChecks": [
+      "Node 22",
+      "Node 24",
+      "Python 3.11",
+      "Python 3.12",
+      "Python 3.13",
+      "Python 3.14",
+      "protocol",
+      "Redis multi-worker",
+      "Same-origin browser flow",
+      "Four-distribution contract",
+      "Python wheel consumer",
+      "Clean production consumer",
+      "pnpm audit",
+      "pip-audit",
+      "Dependency review",
+      "Analyze javascript-typescript",
+      "Analyze python"
+    ]
+  },
+  "releaseTagRuleset": {
+    "name": "Protect release tags",
+    "pattern": "refs/tags/v*.*.*",
+    "rules": ["creation", "update", "deletion", "non_fast_forward"]
+  },
+  "nonRequiredExhaustiveChecks": [
+    "Generated artifacts (ubuntu-latest)",
+    "Generated artifacts (windows-latest)",
+    "Redis 6.2.24 on Python 3.11",
+    "Redis 8.10.1 on Python 3.14",
+    "Distributed browser flow",
+    "Clean live consumer",
+    "Clean distributed consumer",
+    "v0.8.1 upgrade and rollback compatibility",
+    "Docker production image",
+    "Rootless Podman production image",
+    "Docker Compose with Redis",
+    "Rootless Podman Compose with Redis"
+  ]
+}
+```
+<!-- governance-facts:end -->
+
+The non-required checks still run in their ordinary workflows and remain part
+of release validation. They are not all branch-protection requirements because
+duplicating every platform and exhaustive consumer path would over-gate small
+pull requests. The controlled benchmark workflow remains manual and is never a
+routine merge requirement. Release tags retain the existing annotated-tag,
+protected mutation, reviewed-main, workflow-provenance, OIDC, and SHA256SUMS
+policy; GPG signing remains optional.
+
+The API payloads for these two repository settings are versioned in
+`.github/rulesets/protect-main.json` and
+`.github/rulesets/protect-release-tags.json`. GitHub does not apply those
+files automatically; a maintainer updates the corresponding active ruleset
+through the GitHub API, then compares the returned ruleset with the reviewed
+payload.
+
 ## One-time registry setup
 
 Create GitHub environments named `pypi` and `npm`. Add required reviewers to

@@ -13,6 +13,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Enforce comment- and whitespace-insensitive declaration fingerprints for
   every public Core and Next entry point, and explicitly retain the deprecated
   Python compatibility exports promised through 1.0.
+- Align and document the protected `main` merge policy for the complete runtime
+  matrix, representative integration and release consumers, dependency review,
+  and both CodeQL languages without making exhaustive diagnostics mandatory.
 
 ## [0.9.0] - 2026-09-10
 
