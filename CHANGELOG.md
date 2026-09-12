@@ -16,6 +16,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Align and document the protected `main` merge policy for the complete runtime
   matrix, representative integration and release consumers, dependency review,
   and both CodeQL languages without making exhaustive diagnostics mandatory.
+- Freeze the reviewed dependency/tooling set during 1.0 preparation, defer
+  routine major upgrades, and keep validated security and compatibility fixes
+  eligible without weakening dependency audits.
 
 ## [0.9.0] - 2026-09-10
 

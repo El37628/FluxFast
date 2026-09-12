@@ -4,9 +4,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Temporary v1.0 preparation policy; security updates remain eligible.
+    allow:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch", "version-update:semver-minor"]
     groups:
       javascript-dependencies:
+        applies-to: version-updates
         patterns: ["*"]
+        update-types: [patch, minor]
     ignore:
       # Keep type coverage aligned with the oldest supported Node.js runtime.
       - dependency-name: "@types/node"
@@ -16,14 +22,24 @@ updates:
     directory: /python/fluxfast
     schedule:
       interval: weekly
+    allow:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch", "version-update:semver-minor"]
     groups:
       python-dependencies:
+        applies-to: version-updates
         patterns: ["*"]
+        update-types: [patch, minor]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    allow:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch", "version-update:semver-minor"]
     groups:
       workflow-actions:
+        applies-to: version-updates
         patterns: ["*"]
+        update-types: [patch, minor]
