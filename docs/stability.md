@@ -70,6 +70,12 @@ contracts adopted from v0.9.0. The historical
 retained so compatibility history is not rewritten when the promotion baseline
 advances.
 
+The npm portion also fingerprints the complete declaration dependency graph of
+every public Core and Next entry point. The fingerprint ignores comments and
+whitespace but changes when declaration tokens, referenced public types, or
+entry-point dependencies change. This makes signature drift fail the same gate
+as an added or removed export.
+
 The focused documentation-consistency gate compares this small fact set with
 package metadata, CI matrices, Python and TypeScript constants, generator
 source, and the detailed specifications. It is intentionally not a general

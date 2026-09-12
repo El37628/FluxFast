@@ -3,7 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createPublicApiSnapshot } from "./public-api-snapshot.mjs";
+import {
+  createPublicApiSnapshot,
+  declarationFingerprint,
+} from "./public-api-snapshot.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -40,5 +43,22 @@ test("retains the historical v0.8.1 baseline and its reviewed v0.9 delta", () =>
   );
   expected.packages["@fluxfast/next"].entries["./client"].valueOnly.sort();
   const adjacent = JSON.parse(fs.readFileSync(v09BaselinePath, "utf8"));
-  assert.deepEqual(adjacent.packages, expected.packages);
+  const adjacentWithoutSignatures = structuredClone(adjacent.packages);
+  for (const packageContract of Object.values(adjacentWithoutSignatures)) {
+    delete packageContract.declarations;
+  }
+  assert.deepEqual(adjacentWithoutSignatures, expected.packages);
+});
+
+test("declaration fingerprints ignore trivia but detect signature drift", () => {
+  const baseline = `
+    /** Stable public function. */
+    export declare function load(key: string): Promise<string>;
+  `;
+  const triviaOnly =
+    "export  declare\nfunction load ( key : string ) : Promise < string > ; // same";
+  const changed = "export declare function load(key: string): Promise<number>;";
+
+  assert.equal(declarationFingerprint(triviaOnly), declarationFingerprint(baseline));
+  assert.notEqual(declarationFingerprint(changed), declarationFingerprint(baseline));
 });
