@@ -96,6 +96,12 @@ failures may be retried without weakening vulnerability policy.
 
 ## Protected repository governance
 
+During 1.0 preparation, follow the [dependency-freeze policy and reviewed
+tooling inventory](releases/v1.0-dependency-freeze.md). Routine major dependency
+upgrades are deferred; security and necessary compatibility corrections remain
+eligible after validation. A green dependency PR alone is not a reason to
+change the stable candidate's test environment.
+
 The active `Protect main` ruleset requires an up-to-date pull request, resolved
 review threads, and the following merge checks. The list covers every supported
 Python and Node.js runtime, protocol and browser integration, representative
