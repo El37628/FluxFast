@@ -1,0 +1,685 @@
+{
+  "version": "0.9.0",
+  "python": {
+    "exports": {
+      "classes": [
+        "CacheScope",
+        "CachedResource",
+        "ErrorDetail",
+        "ErrorEnvelope",
+        "FluxFast",
+        "FluxFastError",
+        "FluxFastLiveScopeError",
+        "FluxRouter",
+        "InvalidateResource",
+        "LiveBroker",
+        "LiveCoordinator",
+        "LiveInvalidateEvent",
+        "LiveMetrics",
+        "LiveMetricsSnapshot",
+        "LivePatchEvent",
+        "LiveReadyEvent",
+        "LiveResyncEvent",
+        "LiveSubscription",
+        "MemoryLiveBroker",
+        "MemoryResourceCache",
+        "MutationEnvelope",
+        "MutationPayload",
+        "MutationResult",
+        "Page",
+        "PageDescriptor",
+        "PageEnvelope",
+        "PageNotFoundError",
+        "ProtocolError",
+        "RedisCacheMetrics",
+        "RedisCacheMetricsSnapshot",
+        "RedisLiveBroker",
+        "RedisResourceCache",
+        "ResourceCacheBackend",
+        "ResourceCacheError",
+        "ResourceCacheSerializationError",
+        "ResourceCacheUnavailableError",
+        "ResourceContract",
+        "ResourceContractError",
+        "ResourceError",
+        "ResourceErrorDetail",
+        "ResourceSpec",
+        "ResourceWireRecord",
+        "ScopeError",
+        "ScopeType",
+        "TypeContract",
+        "ValidationError"
+      ],
+      "constants": [
+        "CAPABILITY_DEFERRED_RESOURCES",
+        "CAPABILITY_LIVE_RESOURCES",
+        "DEFAULT_LIVE_HEARTBEAT_INTERVAL",
+        "DEFAULT_LIVE_MAX_CONNECTION_AGE",
+        "DEFAULT_LIVE_QUEUE_SIZE",
+        "DEFAULT_REDIS_CHANNEL_PREFIX",
+        "DEFAULT_REDIS_MAX_MESSAGE_BYTES",
+        "DEFAULT_REDIS_MAX_VALUE_BYTES",
+        "DEFAULT_REDIS_SCAN_COUNT",
+        "HEADER_CAPABILITIES",
+        "LIVE_EVENT_NAME",
+        "LIVE_HEARTBEAT",
+        "LIVE_RESYNC_REASONS",
+        "PROTOCOL_MEDIA_TYPE",
+        "PROTOCOL_VERSION"
+      ],
+      "functions": [
+        "append_item",
+        "client_supports",
+        "derive_live_topic",
+        "encode_sse_event",
+        "flux_external_redirect",
+        "flux_redirect",
+        "invalidate_resource",
+        "iter_live_events",
+        "merge_object",
+        "mutation",
+        "remove_item",
+        "replace_item",
+        "replace_resource",
+        "resource"
+      ],
+      "objects": [
+        "scope"
+      ],
+      "typeAliases": [
+        "ContractMode",
+        "LiveEvent",
+        "LiveResyncReason",
+        "ResourceLoader"
+      ]
+    },
+    "signatures": {
+      "FluxFast": "(app: fastapi.applications.FastAPI, cache: fluxfast.cache.ResourceCacheBackend | None = None, debug: bool = False, broker: fluxfast.live.broker.LiveBroker | None = None, live_max_connection_age: float = 900.0, live_heartbeat_interval: float = 15.0, *, live_broker: fluxfast.live.broker.LiveBroker | None = None)",
+      "FluxFast.define_resource": "(self, key: str, annotation: type[~T]) -> fluxfast.contract.ResourceContract[~T]",
+      "FluxFast.define_type": "(self, name: str, annotation: Any, *, mode: Literal['serialization', 'validation'] = 'serialization') -> fluxfast.contract.TypeContract[Any]",
+      "FluxFast.page": "(self, path: str, *args: Any, **kwargs: Any) -> collections.abc.Callable[..., Any]",
+      "FluxFast.mutation": "(self, path: str, methods: list[str] | None = None, *args: Any, **kwargs: Any) -> collections.abc.Callable[..., Any]",
+      "resource": "(key: str | fluxfast.contract.ResourceContract[Any], loader: collections.abc.Callable[[], collections.abc.Awaitable[Any]] | collections.abc.Callable[[], Any], *, scope: fluxfast.scope.CacheScope | None = None, ttl: float = 0.0, tags: collections.abc.Sequence[str] = (), defer: bool = False, live: bool = False) -> fluxfast.resource.ResourceSpec",
+      "mutation": "(*, patch: dict[str, list[dict[str, Any]] | dict[str, Any]] | None = None, patches: dict[str, list[dict[str, Any]] | dict[str, Any]] | None = None, invalidate: collections.abc.Sequence[str | fluxfast.mutation.InvalidateResource] | None = None, invalidates: collections.abc.Sequence[str | fluxfast.mutation.InvalidateResource] | None = None, redirect: str | None = None) -> fluxfast.mutation.MutationResult",
+      "scope.public": "() -> fluxfast.scope.CacheScope",
+      "scope.user": "(user_id: str | int) -> fluxfast.scope.CacheScope",
+      "scope.tenant": "(tenant_id: str | int) -> fluxfast.scope.CacheScope",
+      "scope.request": "() -> fluxfast.scope.CacheScope",
+      "scope.custom": "(namespace: str, identifier: str | int) -> fluxfast.scope.CacheScope",
+      "replace_resource": "(value: Any) -> dict[str, Any]",
+      "merge_object": "(value: dict[str, Any]) -> dict[str, Any]",
+      "replace_item": "(identity: str | int, value: Any) -> dict[str, Any]",
+      "remove_item": "(identity: str | int) -> dict[str, Any]",
+      "append_item": "(value: Any) -> dict[str, Any]",
+      "invalidate_resource": "(key: str, scope: fluxfast.scope.CacheScope | None = None) -> fluxfast.mutation.InvalidateResource",
+      "flux_redirect": "(url: str) -> fluxfast.mutation.MutationResult",
+      "flux_external_redirect": "(url: str) -> fluxfast.mutation.MutationResult",
+      "MemoryResourceCache": "(max_entries: int = 10000)",
+      "RedisResourceCache": "(client: '_RedisClient', *, namespace: 'str', max_value_bytes: 'int' = 1048576, scan_count: 'int' = 500, owns_client: 'bool' = False, metrics: 'RedisCacheMetrics | None' = None) -> 'None'",
+      "MemoryLiveBroker": "(*, max_queue_size: 'int' = 64, metrics: 'LiveMetrics | None' = None) -> 'None'",
+      "RedisLiveBroker": "(client: '_RedisClient', *, channel_prefix: 'str' = 'fluxfast:v1:', max_message_bytes: 'int' = 1048576, owns_client: 'bool' = False) -> 'None'",
+      "LiveCoordinator": "(cache: 'ResourceCacheBackend', broker: 'LiveBroker', metrics: 'LiveMetrics | None' = None) -> 'None'"
+    }
+  },
+  "packages": {
+    "@fluxfast/core": {
+      "entries": {
+        ".": {
+          "typeOnly": [
+            "CachedPage",
+            "CompiledValidationPlan",
+            "ErrorDetail",
+            "ErrorEnvelope",
+            "FluxCapability",
+            "FluxEventListener",
+            "FluxEventName",
+            "FluxEventPayloads",
+            "FluxResourceKey",
+            "FluxResourceMap",
+            "FluxResourceValue",
+            "FluxRuntimeOptions",
+            "FluxTransport",
+            "FluxValidator",
+            "HistoryOptions",
+            "LiveConnection",
+            "LiveConnectionCloseEvent",
+            "LiveConnectionEvent",
+            "LiveConnectionOptions",
+            "LiveConnectionStatus",
+            "LiveEvent",
+            "LiveInvalidateEvent",
+            "LiveManagerDiagnostic",
+            "LiveManagerOptions",
+            "LiveManifest",
+            "LiveNetworkAdapter",
+            "LivePatchEvent",
+            "LiveReadyEvent",
+            "LiveResyncEvent",
+            "LiveResyncReason",
+            "LiveStatusSnapshot",
+            "LiveTransport",
+            "LoadResourcesOptions",
+            "MutateOptions",
+            "MutationEnvelope",
+            "MutationPayload",
+            "MutationTransportRequest",
+            "PageCacheManifest",
+            "PageDescriptor",
+            "PageEnvelope",
+            "PageState",
+            "PatchOp",
+            "PopStateCallback",
+            "PrefetchEntry",
+            "ProtocolVersion",
+            "RefreshOptions",
+            "ResourceErrorDetail",
+            "ResourceErrorEvent",
+            "ResourceLoadErrorEvent",
+            "ResourceLoadEvent",
+            "ResourceLoadReason",
+            "ResourcePatch",
+            "ResourceRecord",
+            "ResourceStateSnapshot",
+            "ResourceStatus",
+            "ResourceWireRecord",
+            "ValidationAnyPlan",
+            "ValidationArrayPlan",
+            "ValidationBooleanPlan",
+            "ValidationEnumPlan",
+            "ValidationFormat",
+            "ValidationIntersectionPlan",
+            "ValidationIssue",
+            "ValidationLimits",
+            "ValidationLiteralPlan",
+            "ValidationNeverPlan",
+            "ValidationNode",
+            "ValidationNullPlan",
+            "ValidationNumberPlan",
+            "ValidationObjectPlan",
+            "ValidationOneOfPlan",
+            "ValidationOptions",
+            "ValidationPath",
+            "ValidationPathSegment",
+            "ValidationPlan",
+            "ValidationPlanDocument",
+            "ValidationRefPlan",
+            "ValidationReferenceTarget",
+            "ValidationResult",
+            "ValidationStringPlan",
+            "ValidationTuplePlan",
+            "ValidationUnionPlan",
+            "ValidatorRefinement",
+            "VisitOptions",
+            "VisitTransportRequest"
+          ],
+          "valueOnly": [
+            "CAPABILITY_DEFERRED_RESOURCES",
+            "CAPABILITY_LIVE_RESOURCES",
+            "DEFAULT_LIVE_RECONNECT_INITIAL_DELAY_MS",
+            "DEFAULT_LIVE_RECONNECT_JITTER",
+            "DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS",
+            "DEFAULT_VALIDATION_MAX_DEPTH",
+            "DEFAULT_VALIDATION_MAX_ISSUES",
+            "DEFAULT_VALIDATION_MAX_OPERATIONS",
+            "DEFAULT_VALIDATION_MAX_PROPERTIES",
+            "FLUX_CAPABILITIES",
+            "HEADER_CAPABILITIES",
+            "HEADER_CLIENT_ID",
+            "HEADER_LIVE",
+            "HEADER_LIVE_KEYS",
+            "LIVE_EVENT_NAME",
+            "LIVE_RESYNC_REASONS",
+            "MAX_LIVE_CLIENT_ID_LENGTH",
+            "MAX_LIVE_EVENT_BYTES",
+            "MAX_LIVE_EVENT_KEYS",
+            "MAX_LIVE_KEYS_HEADER_BYTES",
+            "MAX_LIVE_RESOURCE_KEY_LENGTH",
+            "PROTOCOL_MEDIA_TYPE",
+            "PROTOCOL_VERSION",
+            "VALIDATION_FORMATS",
+            "VALIDATION_PATTERN_MAX_LENGTH",
+            "applyPatchToValue",
+            "assertClientId",
+            "assertLiveEvent",
+            "assertMutationEnvelope",
+            "assertPageEnvelope",
+            "compileValidationPlan",
+            "createClientId",
+            "createFetchSseLiveTransport",
+            "createFetchTransport",
+            "createFluxRuntime",
+            "createLiveManager",
+            "createValidationIssue",
+            "createValidator",
+            "displayValidationKey",
+            "encodeKnownVersions",
+            "evaluateValidationPlan",
+            "formatValidationPath",
+            "isSupportedValidationFormat",
+            "isValidationPlanDocument",
+            "prepareValidationPlan",
+            "refineValidator",
+            "serializeCapabilities",
+            "serializeLiveKeys",
+            "validateValidationFormat",
+            "validateWithPlan",
+            "validationPatternError"
+          ],
+          "typeAndValue": [
+            "ComponentResolutionError",
+            "EventEmitter",
+            "FetchSseLiveTransport",
+            "FetchTransport",
+            "FluxFastError",
+            "FluxRouter",
+            "FluxSseParser",
+            "HistoryManager",
+            "LiveManager",
+            "MutationError",
+            "PageCache",
+            "PageNotFoundError",
+            "PageStore",
+            "PrefetchManager",
+            "ProtocolError",
+            "ResourceError",
+            "ResourceStore",
+            "TransportError",
+            "ValidationError",
+            "VersionMismatchError"
+          ]
+        }
+      },
+      "exportMap": {
+        ".": {
+          "types": "./dist/index.d.ts",
+          "import": "./dist/esm/index.js",
+          "require": "./dist/index.js",
+          "default": "./dist/index.js"
+        }
+      }
+    },
+    "@fluxfast/next": {
+      "entries": {
+        ".": {
+          "typeOnly": [
+            "ComponentModule",
+            "ComponentRegistry",
+            "ComponentRegistryEntry",
+            "DeferredResourceResult",
+            "FluxApplicationProps",
+            "FluxCacheConfig",
+            "FluxContextValue",
+            "FluxNextConfig",
+            "FluxProviderProps",
+            "FluxRootProps",
+            "FormOptions",
+            "LazyComponentEntry",
+            "LinkProps",
+            "LiveConnectionStatus",
+            "LiveStatusSnapshot",
+            "UseFormOptions",
+            "UseFormReturn"
+          ],
+          "valueOnly": [
+            "DEFAULT_FLUXFAST_BACKEND_URL",
+            "FluxContext",
+            "FluxProvider",
+            "FluxRoot",
+            "Link",
+            "defineFluxConfig",
+            "getComponentRegistry",
+            "resolveComponent",
+            "resolveFluxBackendUrl",
+            "resolveInternalDestination",
+            "setComponentRegistry",
+            "useDeferredResource",
+            "useFlux",
+            "useFluxContext",
+            "useForm",
+            "useLiveStatus",
+            "usePage",
+            "useResource",
+            "useResourceState",
+            "useRouter"
+          ]
+        },
+        "./client": {
+          "typeOnly": [
+            "ComponentModule",
+            "ComponentRegistry",
+            "ComponentRegistryEntry",
+            "DeferredResourceResult",
+            "FluxApplicationProps",
+            "FluxCacheConfig",
+            "FluxContextValue",
+            "FluxNextConfig",
+            "FluxProviderProps",
+            "FluxRootProps",
+            "FormOptions",
+            "LazyComponentEntry",
+            "LinkProps",
+            "LiveConnectionStatus",
+            "LiveStatusSnapshot",
+            "UseFormOptions",
+            "UseFormReturn"
+          ],
+          "valueOnly": [
+            "DEFAULT_FLUXFAST_BACKEND_URL",
+            "FluxContext",
+            "FluxProvider",
+            "FluxRoot",
+            "Link",
+            "defineFluxConfig",
+            "getComponentRegistry",
+            "resolveComponent",
+            "resolveFluxBackendUrl",
+            "resolveInternalDestination",
+            "setComponentRegistry",
+            "useDeferredResource",
+            "useFlux",
+            "useFluxContext",
+            "useForm",
+            "useLiveStatus",
+            "usePage",
+            "useResource",
+            "useResourceState",
+            "useRouter"
+          ]
+        },
+        "./generate": {
+          "typeOnly": [
+            "FluxFastGenerationCheckResult",
+            "FluxFastGenerationOptions",
+            "FluxFastGenerationResult",
+            "GenerateOptions",
+            "PagesRegistrySnapshot"
+          ],
+          "valueOnly": [
+            "checkFluxFastProject",
+            "createPagesRegistrySnapshot",
+            "generateFluxFastProject",
+            "generatePagesRegistry"
+          ]
+        },
+        "./next-config": {
+          "typeOnly": [
+            "FluxFastNextOptions"
+          ],
+          "valueOnly": [
+            "withFluxFast"
+          ]
+        },
+        "./server": {
+          "typeOnly": [
+            "FetchInitialEnvelopeOptions",
+            "FluxHealthHandlerOptions",
+            "FluxNextPageProps",
+            "FluxSearchParams",
+            "FluxTransportHandlerOptions",
+            "FluxTransportRouteContext"
+          ],
+          "valueOnly": [
+            "buildFluxPath",
+            "createFluxHealthHandler",
+            "createFluxNextPage",
+            "createFluxTransportHandler",
+            "fetchInitialEnvelope"
+          ]
+        }
+      },
+      "bin": {
+        "fluxfast": "bin/fluxfast.js"
+      },
+      "exportMap": {
+        ".": {
+          "types": "./dist/index.d.ts",
+          "import": "./dist/esm/index.js",
+          "require": "./dist/index.js",
+          "default": "./dist/index.js"
+        },
+        "./server": {
+          "types": "./dist/server.d.ts",
+          "import": "./dist/server.js",
+          "require": "./dist/server.js",
+          "default": "./dist/server.js"
+        },
+        "./client": {
+          "types": "./dist/client.d.ts",
+          "import": "./dist/esm/client.js",
+          "require": "./dist/client.js",
+          "default": "./dist/client.js"
+        },
+        "./generate": {
+          "types": "./dist/generate.d.ts",
+          "import": "./dist/esm/generate.js",
+          "require": "./dist/generate.js",
+          "default": "./dist/generate.js"
+        },
+        "./next-config": {
+          "types": "./dist/next-config.d.ts",
+          "import": "./dist/esm/next-config.js",
+          "require": "./dist/next-config.js",
+          "default": "./dist/next-config.js"
+        }
+      }
+    }
+  },
+  "contracts": {
+    "environmentVariables": {
+      "FLUXFAST_APP": "Public diagnostic input",
+      "FLUXFAST_BACKEND_HOST": "Public operator input",
+      "FLUXFAST_BACKEND_PORT": "Public operator input",
+      "FLUXFAST_BACKEND_URL": "Server-only adapter input",
+      "FLUXFAST_COMPOSE_PORT": "Reference Compose input",
+      "FLUXFAST_HOST": "Public operator input",
+      "FLUXFAST_PORT": "Public operator input",
+      "FLUXFAST_PRODUCTION_START": "Internal supervisor handshake",
+      "FLUXFAST_SHUTDOWN_TIMEOUT": "Public operator input",
+      "FLUXFAST_STANDALONE": "Reference image-build input",
+      "FLUXFAST_STARTUP_TIMEOUT": "Public operator input",
+      "FLUXFAST_WORKERS": "Public operator input",
+      "NEXT_PUBLIC_FLUXFAST_BACKEND_URL": "Deprecated and unsupported",
+      "PORT": "Public compatibility input"
+    },
+    "generatedFiles": [
+      "mutations.generated.ts",
+      "pages.generated.ts",
+      "routes.generated.ts",
+      "schema.generated.json",
+      "types.generated.ts",
+      "validators.generated.ts"
+    ],
+    "javascriptCli": {
+      "commands": {
+        "doctor": {
+          "options": []
+        },
+        "generate": {
+          "options": [
+            "--check",
+            "--schema-file"
+          ]
+        },
+        "init": {
+          "options": [
+            "--check",
+            "--dry-run",
+            "--force",
+            "--yes"
+          ]
+        }
+      }
+    },
+    "productionDefaults": {
+      "backend_host": "127.0.0.1",
+      "backend_port": 8123,
+      "host": "0.0.0.0",
+      "port": 3000,
+      "shutdown_timeout": 20,
+      "startup_timeout": 30,
+      "workers": 1
+    },
+    "protocol": {
+      "capabilities": [
+        "deferred-resources",
+        "live-resources"
+      ],
+      "liveEventName": "fluxfast",
+      "mediaType": "application/vnd.fluxfast+json",
+      "requestHeaders": [
+        "Accept",
+        "Content-Type",
+        "X-FluxFast",
+        "X-FluxFast-Capabilities",
+        "X-FluxFast-Client-ID",
+        "X-FluxFast-Known",
+        "X-FluxFast-Live",
+        "X-FluxFast-Live-Keys",
+        "X-FluxFast-Only",
+        "X-FluxFast-Protocol",
+        "X-FluxFast-Visit"
+      ],
+      "version": "fluxfast/1"
+    },
+    "pythonCli": {
+      "commands": {
+        "build": {
+          "defaults": {
+            "--app": null,
+            "--frontend": null
+          },
+          "options": [
+            "--app",
+            "--frontend"
+          ],
+          "positionals": [],
+          "requiredOptions": []
+        },
+        "dev": {
+          "defaults": {
+            "--backend-host": "127.0.0.1",
+            "--backend-port": null,
+            "--frontend": "<cwd>",
+            "--frontend-host": "127.0.0.1",
+            "--frontend-port": 3000,
+            "--no-reload": false,
+            "--startup-timeout": 15
+          },
+          "options": [
+            "--backend-host",
+            "--backend-port",
+            "--frontend",
+            "--frontend-host",
+            "--frontend-port",
+            "--no-reload",
+            "--startup-timeout"
+          ],
+          "positionals": [
+            "app"
+          ],
+          "requiredOptions": []
+        },
+        "doctor": {
+          "defaults": {
+            "--app": null,
+            "--backend-host": null,
+            "--backend-port": null,
+            "--frontend": null,
+            "--host": null,
+            "--port": null,
+            "--production": false,
+            "--strict": false,
+            "--workers": null
+          },
+          "options": [
+            "--app",
+            "--backend-host",
+            "--backend-port",
+            "--frontend",
+            "--host",
+            "--port",
+            "--production",
+            "--strict",
+            "--workers"
+          ],
+          "positionals": [],
+          "requiredOptions": [
+            "--production"
+          ]
+        },
+        "schema": {
+          "defaults": {
+            "--check": false,
+            "--output": null
+          },
+          "options": [
+            "--check",
+            "--output"
+          ],
+          "positionals": [
+            "app"
+          ],
+          "requiredOptions": []
+        },
+        "start": {
+          "defaults": {
+            "--backend-host": null,
+            "--backend-port": null,
+            "--frontend": "<cwd>",
+            "--host": null,
+            "--port": null,
+            "--shutdown-timeout": null,
+            "--startup-timeout": null,
+            "--workers": null
+          },
+          "options": [
+            "--backend-host",
+            "--backend-port",
+            "--frontend",
+            "--host",
+            "--port",
+            "--shutdown-timeout",
+            "--startup-timeout",
+            "--workers"
+          ],
+          "positionals": [
+            "app"
+          ],
+          "requiredOptions": []
+        },
+        "types": {
+          "defaults": {
+            "--check": false,
+            "--frontend": "<cwd>"
+          },
+          "options": [
+            "--check",
+            "--frontend"
+          ],
+          "positionals": [
+            "app"
+          ],
+          "requiredOptions": []
+        }
+      }
+    },
+    "schema": {
+      "javascriptConstants": {
+        "FLUXFAST_SCHEMA_MANIFEST_V1": "fluxfast-schema/1",
+        "FLUXFAST_SCHEMA_MANIFEST_V2": "fluxfast-schema/2",
+        "FLUXFAST_SCHEMA_MANIFEST_VERSION": "fluxfast-schema/1"
+      },
+      "produced": "fluxfast-schema/2",
+      "pythonConstants": {
+        "SCHEMA_MANIFEST_V1": "fluxfast-schema/1",
+        "SCHEMA_MANIFEST_V2": "fluxfast-schema/2",
+        "SCHEMA_MANIFEST_VERSION": "fluxfast-schema/1",
+        "SCHEMA_MANIFEST_VERSION_2": "fluxfast-schema/2"
+      },
+      "readable": [
+        "fluxfast-schema/1",
+        "fluxfast-schema/2"
+      ]
+    }
+  }
+}

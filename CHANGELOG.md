@@ -5,6 +5,12 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+### Added
+
+- Record the exact v0.9.0 public API, CLI, environment, protocol, schema, and
+  generated-artifact promotion baseline used to evaluate 1.0 compatibility,
+  while retaining the historical v0.8.1 snapshot.
+
 ## [0.9.0] - 2026-09-10
 
 ### Added
