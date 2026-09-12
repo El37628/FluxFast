@@ -10,6 +10,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Record the exact v0.9.0 public API, CLI, environment, protocol, schema, and
   generated-artifact promotion baseline used to evaluate 1.0 compatibility,
   while retaining the historical v0.8.1 snapshot.
+- Enforce comment- and whitespace-insensitive declaration fingerprints for
+  every public Core and Next entry point, and explicitly retain the deprecated
+  Python compatibility exports promised through 1.0.
 
 ## [0.9.0] - 2026-09-10
 

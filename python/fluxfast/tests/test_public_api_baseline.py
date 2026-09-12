@@ -95,6 +95,15 @@ def test_v09_python_api_matches_retained_v081_history() -> None:
     assert _baseline() == _historical_baseline()
 
 
+def test_deprecated_compatibility_exports_remain_public_through_v1() -> None:
+    """Keep the two v0.9 compatibility names promised through v1.0."""
+
+    deprecated = {"PageNotFoundError", "ValidationError"}
+    assert deprecated <= set(fluxfast.__all__)
+    assert deprecated <= set(_baseline()["exports"]["classes"])
+    assert all(hasattr(fluxfast, name) for name in deprecated)
+
+
 def test_signature_snapshot_ignores_supported_python_repr_aliases() -> None:
     old_repr = (
         "(key: Union[str, fluxfast.contract.ResourceContract[typing.Any]]) "

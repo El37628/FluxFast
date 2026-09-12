@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -133,6 +134,77 @@ function declarationExports(relativeEntry) {
   );
 }
 
+function declarationModuleSpecifiers(source) {
+  return [
+    ...source.matchAll(/(?:from\s+|import\s*\()\s*["'](\.[^"']+)["']/g),
+  ].map(match => match[1]);
+}
+
+function declarationTokens(source) {
+  const tokenPattern =
+    /\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|`(?:\\[\s\S]|[^`\\])*`|[A-Za-z_$][A-Za-z0-9_$]*|(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?|./gy;
+  const tokens = [];
+  for (const match of source.matchAll(tokenPattern)) {
+    const token = match[0];
+    if (/^\s/.test(token) || token.startsWith("//") || token.startsWith("/*")) {
+      continue;
+    }
+    tokens.push(token);
+  }
+  return tokens.join("\n");
+}
+
+function sha256(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+export function declarationFingerprint(source) {
+  return sha256(declarationTokens(source));
+}
+
+function declarationSignatures(relativeEntry) {
+  const entry = path.join(repositoryRoot, relativeEntry);
+  const distRoot = path.join(
+    repositoryRoot,
+    ...relativeEntry.split("/").slice(0, 3)
+  );
+  const pending = [entry];
+  const visited = new Set();
+  const files = {};
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (visited.has(current)) continue;
+    visited.add(current);
+    if (!fs.existsSync(current)) {
+      throw new Error(
+        `Missing declaration dependency ${path.relative(repositoryRoot, current)}; run pnpm build before checking the API baseline.`
+      );
+    }
+
+    const source = fs.readFileSync(current, "utf8");
+    const relative = path.relative(distRoot, current).replaceAll(path.sep, "/");
+    files[relative] = declarationFingerprint(source);
+    for (const specifier of declarationModuleSpecifiers(source)) {
+      const target = declarationTarget(current, specifier);
+      if (!target.startsWith(`${distRoot}${path.sep}`)) {
+        throw new Error(
+          `Declaration dependency escaped package dist: ${path.relative(repositoryRoot, target)}`
+        );
+      }
+      pending.push(target);
+    }
+  }
+
+  const sortedFiles = Object.fromEntries(
+    Object.entries(files).sort(([left], [right]) => left.localeCompare(right))
+  );
+  return {
+    fingerprint: sha256(JSON.stringify(sortedFiles)),
+    files: sortedFiles,
+  };
+}
+
 function packageManifest(packageDirectory) {
   return JSON.parse(
     fs.readFileSync(
@@ -150,6 +222,12 @@ export function createPublicApiSnapshot() {
         Object.entries(entries).map(([publicPath, declaration]) => [
           publicPath,
           declarationExports(declaration),
+        ])
+      ),
+      declarations: Object.fromEntries(
+        Object.entries(entries).map(([publicPath, declaration]) => [
+          publicPath,
+          declarationSignatures(declaration),
         ])
       ),
     };
