@@ -1,4 +1,4 @@
-"""Machine-verifiable v0.8.1 top-level public API baseline."""
+"""Machine-verifiable v0.9.0 top-level public API promotion baseline."""
 
 import inspect
 import json
@@ -7,16 +7,21 @@ from typing import get_origin
 
 import fluxfast
 
-_BASELINE_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "tests"
-    / "fixtures"
-    / "public-api-v0.8.1.json"
-)
+_FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
+_BASELINE_PATH = _FIXTURES / "public-api-v0.9.0.json"
+_HISTORICAL_BASELINE_PATH = _FIXTURES / "public-api-v0.8.1.json"
+
+
+def _document(path: Path = _BASELINE_PATH) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf8"))
 
 
 def _baseline() -> dict[str, object]:
-    return json.loads(_BASELINE_PATH.read_text(encoding="utf8"))["python"]
+    return _document()["python"]
+
+
+def _historical_baseline() -> dict[str, object]:
+    return _document(_HISTORICAL_BASELINE_PATH)["python"]
 
 
 def _export_kind(name: str) -> str:
@@ -56,7 +61,7 @@ def _stable_signature(target: object) -> str:
     return _normalize_signature(str(inspect.signature(target)))
 
 
-def test_top_level_public_names_and_kinds_match_v081() -> None:
+def test_top_level_public_names_and_kinds_match_v090() -> None:
     """Every supported name remains importable from its public package path."""
 
     expected = _baseline()["exports"]
@@ -73,7 +78,7 @@ def test_top_level_public_names_and_kinds_match_v081() -> None:
     assert all(hasattr(fluxfast, name) for name in expected_names)
 
 
-def test_important_public_signatures_match_v081() -> None:
+def test_important_public_signatures_match_v090() -> None:
     """Lock the call shapes most likely to be used by applications."""
 
     expected = _baseline()["signatures"]
@@ -82,6 +87,12 @@ def test_important_public_signatures_match_v081() -> None:
         for path in expected
     }
     assert actual == expected
+
+
+def test_v09_python_api_matches_retained_v081_history() -> None:
+    """The adjacent baseline stays explicit without deleting old evidence."""
+
+    assert _baseline() == _historical_baseline()
 
 
 def test_signature_snapshot_ignores_supported_python_repr_aliases() -> None:

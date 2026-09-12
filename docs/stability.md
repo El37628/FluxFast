@@ -61,6 +61,15 @@ release line:
 
 ### Machine-checkable reference
 
+The exact adjacent promotion snapshot is
+[`tests/fixtures/public-api-v0.9.0.json`](../tests/fixtures/public-api-v0.9.0.json).
+It records the Python and npm export surfaces together with the CLI,
+environment-variable, protocol, schema, capability, and generated-filename
+contracts adopted from v0.9.0. The historical
+[`public-api-v0.8.1.json`](../tests/fixtures/public-api-v0.8.1.json) snapshot is
+retained so compatibility history is not rewritten when the promotion baseline
+advances.
+
 The focused documentation-consistency gate compares this small fact set with
 package metadata, CI matrices, Python and TypeScript constants, generator
 source, and the detailed specifications. It is intentionally not a general

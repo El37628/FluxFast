@@ -15,14 +15,13 @@ const repositoryRoot = path.resolve(import.meta.dirname, "../../..");
 const apiDocumentPath = path.join(repositoryRoot, "docs/next-api.md");
 const baselinePath = path.join(
   repositoryRoot,
+  "tests/fixtures/public-api-v0.9.0.json"
+);
+const historicalBaselinePath = path.join(
+  repositoryRoot,
   "tests/fixtures/public-api-v0.8.1.json"
 );
 const manifestPath = path.join(repositoryRoot, "packages/next/package.json");
-
-const v09ClientAdditions = {
-  typeOnly: ["LiveConnectionStatus", "LiveStatusSnapshot"],
-  valueOnly: ["useLiveStatus"],
-} as const;
 
 function namesBetween(start: string, end: string): string[] {
   const document = fs.readFileSync(apiDocumentPath, "utf8");
@@ -42,19 +41,14 @@ function expectedEntries(): Record<string, ExportGroups> {
   const baseline = JSON.parse(
     fs.readFileSync(baselinePath, "utf8")
   ) as NextBaseline;
-  const entries = structuredClone(
-    baseline.packages["@fluxfast/next"].entries
-  );
-  entries["./client"].typeOnly.push(...v09ClientAdditions.typeOnly);
-  entries["./client"].valueOnly.push(...v09ClientAdditions.valueOnly);
-  return entries;
+  return baseline.packages["@fluxfast/next"].entries;
 }
 
 function entryNames(groups: ExportGroups): string[] {
   return Object.values(groups).flat().toSorted();
 }
 
-describe("v0.9 Next adapter public API", () => {
+describe("v0.9 Next adapter promotion baseline", () => {
   it("classifies every distinct exported name exactly once", () => {
     const stable = namesBetween(
       "<!-- next-api-stable:start -->",
@@ -139,5 +133,23 @@ describe("v0.9 Next adapter public API", () => {
     expect(publicNames).toContain("useDeferredResource");
     expect(publicNames).toContain("useLiveStatus");
     expect(publicNames).not.toContain("useLiveResource");
+  });
+
+  it("retains the reviewed delta from the historical v0.8.1 baseline", () => {
+    const historical = JSON.parse(
+      fs.readFileSync(historicalBaselinePath, "utf8")
+    ) as NextBaseline;
+    const current = expectedEntries();
+    const historicalClient = entryNames(
+      historical.packages["@fluxfast/next"].entries["./client"]
+    );
+    const currentClient = entryNames(current["./client"]);
+
+    expect(currentClient.filter(name => !historicalClient.includes(name))).toEqual([
+      "LiveConnectionStatus",
+      "LiveStatusSnapshot",
+      "useLiveStatus",
+    ]);
+    expect(historicalClient.filter(name => !currentClient.includes(name))).toEqual([]);
   });
 });

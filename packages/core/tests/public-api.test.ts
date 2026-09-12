@@ -16,7 +16,7 @@ const repositoryRoot = path.resolve(import.meta.dirname, "../../..");
 const apiDocumentPath = path.join(repositoryRoot, "docs/core-api.md");
 const baselinePath = path.join(
   repositoryRoot,
-  "tests/fixtures/public-api-v0.8.1.json"
+  "tests/fixtures/public-api-v0.9.0.json"
 );
 
 function namesBetween(start: string, end: string): string[] {
@@ -42,8 +42,8 @@ function baselineNames(): string[] {
   ).flat();
 }
 
-describe("v0.9 public API classification", () => {
-  it("classifies every v0.8.1 root export exactly once", () => {
+describe("v0.9 promotion baseline classification", () => {
+  it("classifies every v0.9 root export exactly once", () => {
     const stable = namesBetween(
       "<!-- core-api-stable:start -->",
       "<!-- core-api-stable:end -->"

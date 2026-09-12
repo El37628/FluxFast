@@ -9,15 +9,27 @@ const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   ".."
 );
-const baselinePath = path.join(
+const v081BaselinePath = path.join(
   repositoryRoot,
   "tests",
   "fixtures",
   "public-api-v0.8.1.json"
 );
+const v09BaselinePath = path.join(
+  repositoryRoot,
+  "tests",
+  "fixtures",
+  "public-api-v0.9.0.json"
+);
 
-test("keeps the reviewed v0.9 JavaScript public API candidate explicit", () => {
-  const expected = JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+test("keeps the v0.9 JavaScript promotion baseline exact", () => {
+  const expected = JSON.parse(fs.readFileSync(v09BaselinePath, "utf8"));
+  assert.deepEqual(createPublicApiSnapshot(), { packages: expected.packages });
+});
+
+test("retains the historical v0.8.1 baseline and its reviewed v0.9 delta", () => {
+  const historical = JSON.parse(fs.readFileSync(v081BaselinePath, "utf8"));
+  const expected = structuredClone(historical);
   expected.packages["@fluxfast/next"].entries["./client"].typeOnly.push(
     "LiveConnectionStatus",
     "LiveStatusSnapshot"
@@ -27,5 +39,6 @@ test("keeps the reviewed v0.9 JavaScript public API candidate explicit", () => {
     "useLiveStatus"
   );
   expected.packages["@fluxfast/next"].entries["./client"].valueOnly.sort();
-  assert.deepEqual(createPublicApiSnapshot(), { packages: expected.packages });
+  const adjacent = JSON.parse(fs.readFileSync(v09BaselinePath, "utf8"));
+  assert.deepEqual(adjacent.packages, expected.packages);
 });
