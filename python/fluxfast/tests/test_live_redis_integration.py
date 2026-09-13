@@ -372,7 +372,8 @@ async def test_standalone_coordinator_publishes_background_invalidation() -> Non
 @pytest.mark.anyio
 async def test_pubsub_connection_loss_ends_stream_for_browser_resync() -> None:
     assert REDIS_URL is not None
-    subscriber = RedisLiveBroker.from_url(REDIS_URL)
+    client_name = f"fluxfast-disconnect-{uuid4()}"
+    subscriber = RedisLiveBroker.from_url(REDIS_URL, client_name=client_name)
     admin = None
     stream = subscriber.subscribe({"opaque-restart-test"})
 
@@ -390,7 +391,13 @@ async def test_pubsub_connection_loss_ends_stream_for_browser_resync() -> None:
         async with anyio.create_task_group() as tasks:
             tasks.start_soon(wait_for_stream_end, ended)
             await _wait_for_subscribers(subscriber, 1)
-            await admin.execute_command("CLIENT", "KILL", "TYPE", "PUBSUB")
+            targets = [
+                client
+                for client in await admin.client_list()
+                if client.get("name") == client_name and "P" in client.get("flags", "")
+            ]
+            assert len(targets) == 1
+            await admin.client_kill_filter(_id=targets[0]["id"])
             with anyio.fail_after(5):
                 await ended.wait()
     finally:
@@ -408,9 +415,12 @@ async def test_pubsub_connection_loss_ends_stream_for_browser_resync() -> None:
 async def test_actual_redis_restart_recovers_cache_and_fresh_subscription() -> None:
     assert REDIS_URL is not None
     assert REDIS_CONTAINER is not None
-    docker = shutil.which("docker")
-    if docker is None:
-        pytest.skip("Docker is required to restart the Redis test service")
+    engine_name = os.getenv("FLUXFAST_TEST_REDIS_CONTAINER_ENGINE", "docker")
+    if engine_name not in {"docker", "podman"}:
+        raise ValueError("Redis restart test engine must be docker or podman")
+    container_engine = shutil.which(engine_name)
+    if container_engine is None:
+        pytest.skip(f"{engine_name} is required to restart the Redis test service")
 
     from redis.asyncio import Redis
     from redis.exceptions import ConnectionError as RedisConnectionError
@@ -444,6 +454,18 @@ async def test_actual_redis_restart_recovers_cache_and_fresh_subscription() -> N
     ended = anyio.Event()
     publisher = None
     container_running = True
+    shutdown_cache = RedisResourceCache.from_url(
+        REDIS_URL, namespace=f"{namespace}-shutdown"
+    )
+    shutdown_broker = RedisLiveBroker.from_url(REDIS_URL)
+    shutdown_owner = FluxFast(FastAPI(), cache=shutdown_cache, broker=shutdown_broker)
+    shutdown_stream = shutdown_broker.subscribe({"outage-shutdown"})
+    shutdown_ended = anyio.Event()
+
+    async def wait_for_shutdown_stream_end() -> None:
+        async for _event in shutdown_stream:
+            pass
+        shutdown_ended.set()
 
     async def wait_for_stream_end() -> None:
         async for _event in stream:
@@ -451,6 +473,8 @@ async def test_actual_redis_restart_recovers_cache_and_fresh_subscription() -> N
         ended.set()
 
     try:
+        await shutdown_owner.health.startup()
+        assert await shutdown_owner.health.ready() is True
         await writer.set("rooms", initial, ttl=60)
         warm = await reader.get("rooms")
         assert warm is not None
@@ -460,14 +484,25 @@ async def test_actual_redis_restart_recovers_cache_and_fresh_subscription() -> N
 
         async with anyio.create_task_group() as tasks:
             tasks.start_soon(wait_for_stream_end)
+            tasks.start_soon(wait_for_shutdown_stream_end)
             await _wait_for_subscribers(subscriber, 1)
+            await _wait_for_subscribers(shutdown_broker, 1)
             await anyio.run_process(
-                [docker, "stop", REDIS_CONTAINER],
+                [container_engine, "stop", REDIS_CONTAINER],
                 check=True,
             )
             container_running = False
             with anyio.fail_after(10):
                 await ended.wait()
+                await shutdown_ended.wait()
+            # Owned dependency cleanup must finish while Redis is still down,
+            # not only after the recovery in the finally block.
+            with anyio.fail_after(5):
+                await shutdown_owner.close()
+            assert shutdown_cache._closed is True
+            assert shutdown_broker._closed is True
+            assert shutdown_broker.subscriber_count == 0
+            assert await shutdown_owner.health.ready() is False
         await _wait_for_subscribers(subscriber, 0)
 
         with pytest.raises(ResourceCacheUnavailableError) as get_error:
@@ -479,7 +514,7 @@ async def test_actual_redis_restart_recovers_cache_and_fresh_subscription() -> N
         assert reader.metrics.snapshot().cache_errors == 1
         assert writer.metrics.snapshot().cache_errors == 1
 
-        await anyio.run_process([docker, "start", REDIS_CONTAINER], check=True)
+        await anyio.run_process([container_engine, "start", REDIS_CONTAINER], check=True)
         container_running = True
         await wait_for_redis()
 
@@ -519,8 +554,10 @@ async def test_actual_redis_restart_recovers_cache_and_fresh_subscription() -> N
             await reconnected.aclose()
             await _wait_for_subscribers(subscriber, 0)
     finally:
+        await shutdown_owner.close()
+        await shutdown_stream.aclose()
         if not container_running:
-            await anyio.run_process([docker, "start", REDIS_CONTAINER], check=True)
+            await anyio.run_process([container_engine, "start", REDIS_CONTAINER], check=True)
             await wait_for_redis()
         await stream.aclose()
         if publisher is not None:

@@ -39,9 +39,16 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   prove the v1.0 candidate retains domain interfaces, resource maps and keys,
   validators, route and mutation helpers, component identifiers, filenames,
   and the complete generated consumer contract.
+- Re-prove distributed runtime coherence with four independent FastAPI workers,
+  supervised production browser warm hits and reconnects, authenticated
+  user/tenant isolation, and actual Redis restart/shutdown gates on both supported
+  server endpoints.
 
 ### Fixed
 
+- Preserve server-owned request state in page and mutation handlers using
+  postponed, aliased, or `Annotated` FastAPI `Request` annotations instead of
+  injecting a competing request parameter and returning 500.
 - Preserve custom FastAPI lifespan state/readiness and close owned dependencies
   after failed startup, shutdown, or cancellation; serialize concurrent cleanup
   without deadlocking reentrant close calls.

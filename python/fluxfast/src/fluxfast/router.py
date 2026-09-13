@@ -4,9 +4,10 @@ import inspect
 import time
 from collections.abc import Callable
 from functools import wraps
-from typing import Any
+from typing import Annotated, Any, get_args, get_origin
 
 from fastapi import APIRouter, Request, Response
+from fastapi.dependencies.utils import get_typed_signature
 from fastapi.responses import JSONResponse
 from starlette.responses import StreamingResponse
 
@@ -55,6 +56,19 @@ from .route_metadata import FluxRouteMetadata, mark_fluxfast_route
 from .timing import TimingMetrics
 
 _DEFAULT_CACHE = MemoryResourceCache()
+
+
+def _request_parameter(func: Callable[..., Any]) -> inspect.Parameter | None:
+    # Match FastAPI's annotation resolution (including wrapped endpoints and
+    # postponed aliases). A second Request parameter displaces the original
+    # dependency injection field and drops authenticated request state.
+    for parameter in get_typed_signature(func).parameters.values():
+        annotation = parameter.annotation
+        if get_origin(annotation) is Annotated:
+            annotation = get_args(annotation)[0]
+        if annotation is Request:
+            return parameter
+    return None
 
 
 def _get_live_coordinator(
@@ -128,7 +142,7 @@ class FluxRouter(APIRouter):
             params = list(sig.parameters.values())
 
             # Ensure 'request' is present in endpoint signature so FastAPI injects it
-            request_param = next((p for p in params if p.annotation is Request), None)
+            request_param = _request_parameter(func)
             has_request = request_param is not None
             injected_request_name = request_param.name if request_param else "_flux_request"
 
@@ -345,7 +359,7 @@ class FluxRouter(APIRouter):
             sig = inspect.signature(func)
             params = list(sig.parameters.values())
 
-            request_param = next((p for p in params if p.annotation is Request), None)
+            request_param = _request_parameter(func)
             has_request = request_param is not None
             injected_request_name = request_param.name if request_param else "_flux_request"
 
