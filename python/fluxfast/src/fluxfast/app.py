@@ -3,8 +3,10 @@
 import inspect
 import math
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from typing import Any, TypeVar
 
+import anyio
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -92,6 +94,8 @@ class FluxFast:
         self.live_max_connection_age = float(live_max_connection_age)
         self.live_heartbeat_interval = float(live_heartbeat_interval)
         self._closed = False
+        self._close_lock = anyio.Lock()
+        self._closing_task_id: int | None = None
         self.health = install_production_health(
             self.app,
             self.cache,
@@ -107,6 +111,22 @@ class FluxFast:
         self.app.state.fluxfast_live_max_connection_age = self.live_max_connection_age
         self.app.state.fluxfast_live_heartbeat_interval = self.live_heartbeat_interval
         self.app.router.add_event_handler("shutdown", self.close)
+
+        application_lifespan = self.app.router.lifespan_context
+
+        @asynccontextmanager
+        async def owned_lifespan(application: FastAPI):
+            try:
+                async with application_lifespan(application) as state:
+                    await self.health.startup()
+                    try:
+                        yield state
+                    finally:
+                        await self.health.shutdown()
+            finally:
+                await self.close()
+
+        self.app.router.lifespan_context = owned_lifespan
 
         # Setup exception handlers
         self._setup_exception_handlers()
@@ -133,18 +153,27 @@ class FluxFast:
     async def close(self) -> None:
         """Close live transport and an optionally closeable cache exactly once."""
 
-        if self._closed:
+        task_id = anyio.get_current_task().id
+        if self._closed or self._closing_task_id == task_id:
             return
-        self._closed = True
-        await self.health.shutdown()
-        try:
-            await self.live.close()
-        finally:
-            close_cache = getattr(self.cache, "close", None)
-            if callable(close_cache):
-                result = close_cache()
-                if inspect.isawaitable(result):
-                    await result
+        with anyio.CancelScope(shield=True):
+            async with self._close_lock:
+                if self._closed:
+                    return
+                self._closing_task_id = task_id
+                try:
+                    await self.health.shutdown()
+                    try:
+                        await self.live.close()
+                    finally:
+                        close_cache = getattr(self.cache, "close", None)
+                        if callable(close_cache):
+                            result = close_cache()
+                            if inspect.isawaitable(result):
+                                await result
+                finally:
+                    self._closed = True
+                    self._closing_task_id = None
 
     def _setup_exception_handlers(self) -> None:
         @self.app.exception_handler(RequestValidationError)

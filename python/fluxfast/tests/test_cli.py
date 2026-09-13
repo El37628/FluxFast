@@ -264,6 +264,37 @@ def test_dev_supervisor_injects_private_backend_and_stops_both_processes(
     assert stopped == [created[1], created[0]]
 
 
+def test_dev_cleanup_failure_still_stops_backend_and_restores_signals(tmp_path, monkeypatch) -> None:
+    import signal
+
+    (tmp_path / "package.json").write_text("{}")
+    created = []
+    stopped = []
+    previous = {signum: signal.getsignal(signum) for signum in (signal.SIGTERM, signal.SIGINT)}
+
+    class Process:
+        def __init__(self, *args, **kwargs):
+            created.append(self)
+
+        def poll(self):
+            return 7 if len(created) == 2 and self is created[1] else None
+
+    def stop(process):
+        stopped.append(process)
+        if process is created[1]:
+            raise OSError("frontend stop failed")
+
+    monkeypatch.setattr("fluxfast.cli._available_port", lambda *args: 43123)
+    monkeypatch.setattr("fluxfast.cli._frontend_command", lambda *args: ["test-only"])
+    monkeypatch.setattr("fluxfast.cli._wait_for_backend", lambda *args: None)
+    monkeypatch.setattr("fluxfast.cli.subprocess.Popen", Process)
+    monkeypatch.setattr("fluxfast.cli._stop_process", stop)
+    with pytest.raises(OSError, match="frontend stop failed"):
+        run_dev(DevConfig(app="backend:app", frontend=tmp_path))
+    assert stopped == [created[1], created[0]]
+    assert all(signal.getsignal(signum) == handler for signum, handler in previous.items())
+
+
 def test_schema_command_writes_deterministic_manifest_to_stdout(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

@@ -195,17 +195,33 @@ class ProductionSupervisor:
 
     def _stop_started_children(self) -> None:
         deadline = self._monotonic() + self.config.shutdown_timeout
+        first_error: Exception | None = None
         for child in (self.frontend, self.backend):
-            if child.process is None or child.poll() is not None:
+            if child.process is None:
                 continue
-
-            child.terminate()
-            remaining = max(0.0, deadline - self._monotonic())
             try:
-                child.wait(timeout=remaining)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait(timeout=1.0)
+                stop_tree = getattr(child, "_stop_tree", None)
+                if callable(stop_tree):
+                    stop_tree(
+                        max(0.0, deadline - self._monotonic()),
+                        monotonic=self._monotonic,
+                        sleep=self._sleep,
+                    )
+                    continue
+                if child.poll() is not None:
+                    continue
+                child.terminate()
+                remaining = max(0.0, deadline - self._monotonic())
+                try:
+                    child.wait(timeout=remaining)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait(timeout=1.0)
+            except Exception as error:  # noqa: BLE001
+                if first_error is None:
+                    first_error = error
+        if first_error is not None:
+            raise first_error
 
     def _request_shutdown(
         self,

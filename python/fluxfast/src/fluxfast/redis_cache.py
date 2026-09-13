@@ -9,6 +9,8 @@ import time
 from types import TracebackType
 from typing import Any, Final, Protocol, Self
 
+import anyio
+
 from ._redis_cache_codec import RedisCacheCodecError, RedisResourceCodec
 from ._redis_cache_keys import RedisCacheKeyspace
 from .cache import CachedResource
@@ -205,6 +207,8 @@ class RedisResourceCache:
         self.scan_count = scan_count
         self._owns_client = owns_client
         self._closed = False
+        self._close_lock = anyio.Lock()
+        self._closing_task_id: int | None = None
         self.metrics = metrics if metrics is not None else RedisCacheMetrics()
 
     @classmethod
@@ -406,14 +410,23 @@ class RedisResourceCache:
     async def close(self) -> None:
         """Close the owned Redis client idempotently."""
 
-        if self._closed:
+        task_id = anyio.get_current_task().id
+        if self._closing_task_id == task_id:
             return
-        self._closed = True
-        if self._owns_client:
-            try:
-                await self._client.aclose()
-            except Exception as error:
-                raise self._unavailable("close") from error
+        with anyio.CancelScope(shield=True):
+            async with self._close_lock:
+                if self._closed:
+                    return
+                self._closed = True
+                self._closing_task_id = task_id
+                try:
+                    if self._owns_client:
+                        try:
+                            await self._client.aclose()
+                        except Exception as error:
+                            raise self._unavailable("close") from error
+                finally:
+                    self._closing_task_id = None
 
     async def healthcheck(self) -> bool:
         """Return whether the external Redis cache is currently reachable."""

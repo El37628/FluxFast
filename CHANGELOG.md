@@ -42,6 +42,14 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Fixed
 
+- Preserve custom FastAPI lifespan state/readiness and close owned dependencies
+  after failed startup, shutdown, or cancellation; serialize concurrent cleanup
+  without deadlocking reentrant close calls.
+- Stop and reap supervised process-group descendants after parent exit, including
+  PID-1 adoption, and restore development signal handlers after cleanup failures.
+- Cancel Redis subscription I/O before shutdown to prevent a late connection
+  reconnect, clean cancelled subscriptions, and attempt every owned close even
+  when one subscription fails.
 - Bound state-only loading/error metadata and internal client race history;
   preserve stale-result rejection across eviction, recover missing navigation
   resources canonically, and release epoch state on router destruction.

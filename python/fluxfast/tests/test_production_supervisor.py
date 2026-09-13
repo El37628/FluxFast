@@ -216,6 +216,27 @@ def test_supervisor_shutdown_is_reverse_order_and_idempotent() -> None:
     ]
 
 
+def test_stop_failure_does_not_skip_the_backend_sibling() -> None:
+    events: list[str] = []
+    backend = FakeProcess("backend", events)
+    frontend = FakeProcess("frontend", events)
+    supervisor = ProductionSupervisor(
+        _config(), backend, frontend,
+        backend_ready=lambda: True, frontend_ready=lambda: True,
+    )
+    supervisor.start()
+
+    def failing_stop() -> None:
+        events.append("frontend.stop failed")
+        raise OSError("frontend stop failed")
+
+    frontend.terminate = failing_stop
+    with pytest.raises(OSError, match="frontend stop failed"):
+        supervisor.shutdown()
+    assert backend.terminate_calls == 1
+    assert backend.return_code == 0
+
+
 @pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT])
 def test_supervisor_run_handles_shutdown_signals_and_restores_handlers(
     signum: signal.Signals,
