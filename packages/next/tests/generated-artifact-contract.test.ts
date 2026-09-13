@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +18,39 @@ const ARTIFACT_NAMES = [
   "validators.generated.ts"
 ] as const;
 
+const SOURCE_ARTIFACT_NAMES = [
+  "mutations.generated.ts",
+  "pages.generated.ts",
+  "routes.generated.ts",
+  "types.generated.ts",
+  "validators.generated.ts"
+] as const;
+
+interface GeneratedSemanticExports {
+  componentRegistryIdentifiers: string[];
+  domainInterfaces: string[];
+  mutationHelpers: string[];
+  pageExports: string[];
+  resourceAliases: Record<string, string>;
+  resourceKeys: Record<string, string>;
+  resourceMap: Record<string, string>;
+  resourceMapAugmentation: Record<string, string>;
+  routeBuilders: string[];
+  validatorExports: string[];
+  validators: string[];
+}
+
+interface GeneratedContractSnapshot {
+  generatedArtifacts: string[];
+  semanticExports: GeneratedSemanticExports;
+  sourceFingerprints: Record<string, string>;
+}
+
+interface GeneratedContractBaseline extends GeneratedContractSnapshot {
+  candidatePackage: string;
+  capturedFrom: string;
+}
+
 const schemaFixture = fs.readFileSync(
   path.resolve(
     __dirname,
@@ -25,7 +59,7 @@ const schemaFixture = fs.readFileSync(
   "utf8"
 );
 
-function prepareProject(root: string): {
+function prepareProject(root: string, schemaContent = schemaFixture): {
   generatedDir: string;
   result: ReturnType<typeof generateFluxFastProject>;
 } {
@@ -42,10 +76,244 @@ function prepareProject(root: string): {
     generatedDir,
     outputFile: path.join(generatedDir, "pages.generated.ts"),
     schemaFile: path.join(generatedDir, "schema.generated.json"),
-    schemaContent: schemaFixture,
+    schemaContent,
     log: false
   });
   return { generatedDir, result };
+}
+
+function sourceTokens(source: string): string[] {
+  const tokenPattern =
+    /\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|`(?:\\[\s\S]|[^`\\])*`|[A-Za-z_$][A-Za-z0-9_$]*|(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?|./gy;
+  const tokens: string[] = [];
+  for (const match of source.matchAll(tokenPattern)) {
+    const token = match[0];
+    if (/^\s/.test(token) || token.startsWith("//") || token.startsWith("/*")) {
+      continue;
+    }
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+function sourceFingerprint(source: string): string {
+  return createHash("sha256")
+    .update(sourceTokens(source).join("\n"))
+    .digest("hex");
+}
+
+function generatedSource(generatedDir: string, name: string): string {
+  return fs.readFileSync(path.join(generatedDir, name), "utf8");
+}
+
+function decodePropertyToken(token: string): string {
+  if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(token)) return token;
+  if (token.startsWith('"')) return JSON.parse(token) as string;
+  throw new TypeError(`Unsupported generated property token ${token}`);
+}
+
+function findSequence(tokens: string[], sequence: string[]): number {
+  for (let index = 0; index <= tokens.length - sequence.length; index += 1) {
+    if (sequence.every((token, offset) => tokens[index + offset] === token)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function exportedObjectEntries(
+  source: string,
+  exportName: string
+): Array<{ key: string; valueToken: string }> {
+  const tokens = sourceTokens(source);
+  const declaration = findSequence(tokens, ["export", "const", exportName]);
+  if (declaration < 0) {
+    throw new TypeError(`Missing generated object export ${exportName}`);
+  }
+  const openingBrace = tokens.indexOf("{", declaration + 3);
+  if (openingBrace < 0) {
+    throw new TypeError(`Missing generated object body ${exportName}`);
+  }
+
+  const entries: Array<{ key: string; valueToken: string }> = [];
+  let braceDepth = 1;
+  let bracketDepth = 0;
+  let parenthesisDepth = 0;
+  let expectingProperty = true;
+  for (let index = openingBrace + 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === "{") {
+      braceDepth += 1;
+      continue;
+    }
+    if (token === "}") {
+      braceDepth -= 1;
+      if (braceDepth === 0) return entries;
+      continue;
+    }
+    if (token === "[") {
+      bracketDepth += 1;
+      continue;
+    }
+    if (token === "]") {
+      bracketDepth -= 1;
+      continue;
+    }
+    if (token === "(") {
+      parenthesisDepth += 1;
+      continue;
+    }
+    if (token === ")") {
+      parenthesisDepth -= 1;
+      continue;
+    }
+    if (braceDepth !== 1 || bracketDepth !== 0 || parenthesisDepth !== 0) {
+      continue;
+    }
+    if (token === ",") {
+      expectingProperty = true;
+      continue;
+    }
+    if (expectingProperty && tokens[index + 1] === ":") {
+      entries.push({
+        key: decodePropertyToken(token),
+        valueToken: tokens[index + 2]
+      });
+      expectingProperty = false;
+    }
+  }
+  throw new TypeError(`Unterminated generated object export ${exportName}`);
+}
+
+function objectKeys(source: string, exportName: string): string[] {
+  return exportedObjectEntries(source, exportName)
+    .map(entry => entry.key)
+    .sort();
+}
+
+function stringObject(
+  source: string,
+  exportName: string
+): Record<string, string> {
+  const entries = exportedObjectEntries(source, exportName).map(entry => {
+    if (!entry.valueToken.startsWith('"')) {
+      throw new TypeError(`Generated ${exportName} value must be a string`);
+    }
+    return [entry.key, JSON.parse(entry.valueToken) as string] as const;
+  });
+  return Object.fromEntries(
+    entries.sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
+function generatedInterfaceMap(
+  source: string,
+  interfaceName: string
+): Record<string, string> {
+  const tokens = sourceTokens(source);
+  const declaration = findSequence(tokens, ["interface", interfaceName]);
+  if (declaration < 0) {
+    throw new TypeError(`Missing generated interface ${interfaceName}`);
+  }
+  const openingBrace = tokens.indexOf("{", declaration + 2);
+  if (openingBrace < 0) {
+    throw new TypeError(`Missing generated interface body ${interfaceName}`);
+  }
+  const entries: Array<readonly [string, string]> = [];
+  let expectingProperty = true;
+  for (let index = openingBrace + 1; index < tokens.length; index += 1) {
+    if (tokens[index] === "}") break;
+    if (tokens[index] === ";") {
+      expectingProperty = true;
+      continue;
+    }
+    if (!expectingProperty || tokens[index + 1] !== ":") continue;
+    const end = tokens.indexOf(";", index + 2);
+    if (end < 0) throw new TypeError(`Unterminated ${interfaceName} member`);
+    entries.push([
+      decodePropertyToken(tokens[index]),
+      tokens.slice(index + 2, end).join("")
+    ] as const);
+    index = end - 1;
+    expectingProperty = false;
+  }
+  return Object.fromEntries(
+    entries.sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
+function pageExportNames(source: string): string[] {
+  const names: string[] = [];
+  for (const match of source.matchAll(
+    /^export\s+const\s+([A-Za-z_$][A-Za-z0-9_$]*)/gm
+  )) {
+    names.push(match[1]);
+  }
+  for (const match of source.matchAll(
+    /^export\s+function\s+([A-Za-z_$][A-Za-z0-9_$]*)/gm
+  )) {
+    names.push(match[1]);
+  }
+  if (/^export\s+default\b/m.test(source)) names.push("default");
+  return names.sort();
+}
+
+function createGeneratedContractSnapshot(
+  generatedDir: string
+): GeneratedContractSnapshot {
+  const types = generatedSource(generatedDir, "types.generated.ts");
+  const validators = generatedSource(generatedDir, "validators.generated.ts");
+  const routes = generatedSource(generatedDir, "routes.generated.ts");
+  const mutations = generatedSource(generatedDir, "mutations.generated.ts");
+  const pages = generatedSource(generatedDir, "pages.generated.ts");
+
+  const domainInterfaces = [
+    ...types.matchAll(
+      /^export\s+interface\s+([A-Za-z_$][A-Za-z0-9_$]*)/gm
+    )
+  ]
+    .map(match => match[1])
+    .filter(name => name !== "GeneratedFluxResourceMap")
+    .sort();
+  const resourceAliases = Object.fromEntries(
+    [
+      ...types.matchAll(
+        /^export\s+type\s+([A-Za-z_$][A-Za-z0-9_$]*Resource)\s*=\s*([^;]+);/gm
+      )
+    ]
+      .map(match => [match[1], match[2].replace(/\s+/g, " ").trim()] as const)
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+  const validatorExports = [
+    ...validators.matchAll(
+      /^export\s+const\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/gm
+    )
+  ]
+    .map(match => match[1])
+    .sort();
+
+  return {
+    generatedArtifacts: fs.readdirSync(generatedDir).sort(),
+    sourceFingerprints: Object.fromEntries(
+      SOURCE_ARTIFACT_NAMES.map(name => [
+        name,
+        sourceFingerprint(fs.readFileSync(path.join(generatedDir, name), "utf8"))
+      ])
+    ),
+    semanticExports: {
+      componentRegistryIdentifiers: objectKeys(pages, "fluxPages"),
+      domainInterfaces,
+      mutationHelpers: objectKeys(mutations, "mutations"),
+      pageExports: pageExportNames(pages),
+      resourceAliases,
+      resourceKeys: stringObject(types, "resourceKeys"),
+      resourceMap: generatedInterfaceMap(types, "GeneratedFluxResourceMap"),
+      resourceMapAugmentation: generatedInterfaceMap(types, "FluxResourceMap"),
+      routeBuilders: objectKeys(routes, "routes"),
+      validatorExports,
+      validators: objectKeys(validators, "validators")
+    }
+  };
 }
 
 function readArtifacts(generatedDir: string): Map<string, Buffer> {
@@ -242,6 +510,43 @@ describe("generated artifact compatibility contract", () => {
     // The compiler, rather than source formatting, proves the exported symbol,
     // registry-key, module-augmentation, and call-signature contract.
     expectGeneratedContractToTypeCheck(generatedDir);
+  });
+
+  it("matches the v0.9 generated contract for the v1 candidate", () => {
+    const baseline = JSON.parse(
+      fs.readFileSync(
+        path.resolve(
+          __dirname,
+          "../../../tests/fixtures/generated-contract-v0.9.0.json"
+        ),
+        "utf8"
+      )
+    ) as GeneratedContractBaseline;
+    expect(baseline.capturedFrom).toBe("@fluxfast/next@0.9.0");
+    expect(baseline.candidatePackage).toBe("1.0.0");
+
+    const reference = createGeneratedContractSnapshot(
+      prepareProject(temporaryProject()).generatedDir
+    );
+    expect(reference).toEqual({
+      generatedArtifacts: baseline.generatedArtifacts,
+      semanticExports: baseline.semanticExports,
+      sourceFingerprints: baseline.sourceFingerprints
+    });
+
+    const candidateManifest = JSON.parse(schemaFixture) as Record<
+      string,
+      unknown
+    >;
+    candidateManifest.producer = baseline.candidatePackage;
+    const candidate = createGeneratedContractSnapshot(
+      prepareProject(
+        temporaryProject(),
+        `${JSON.stringify(candidateManifest, null, 2)}\n`
+      ).generatedDir
+    );
+
+    expect(candidate).toEqual(reference);
   });
 
   it("is byte-for-byte deterministic for the same version and input", () => {

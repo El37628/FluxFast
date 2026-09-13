@@ -46,6 +46,10 @@ regenerate artifacts during upgrades. For one FluxFast version and identical
 input, generation remains byte-for-byte deterministic and `--check` compares
 those deterministic bytes without modifying files.
 
+The [v1.0 generated-contract proof](releases/v1.0-generated-contract.md)
+compares the candidate with a v0.9.0 semantic export and normalized-source
+baseline for the same application contract.
+
 ## Name derivation
 
 Common declarations retain predictable names:
