@@ -183,7 +183,9 @@ is not published because other workers could otherwise refresh stale state.
 ## Browser caches
 
 `ResourceStore` has a configurable LRU bound (128 by default in the Next
-adapter). Values remain until replacement, invalidation, clear, or eviction.
+adapter). Pending/loading/error metadata shares that bound with ready values,
+and metadata reads update recency too. Subscriptions do not pin cache entries.
+Values remain until replacement, invalidation, clear, or eviction.
 Browser lifetime is not server TTL: every navigation still coordinates opaque
 versions with the server.
 
@@ -202,6 +204,14 @@ prerequisite or returned resource versions have been evicted, invalidated, or
 replaced. A response that loses a per-resource race cannot overwrite the newer
 record. Prefetch may return a deferred cache hit, but it does not execute a
 deferred loader on a cache miss; the real visit schedules that pending work.
+
+Per-key race history is internally bounded without resetting forgotten authority
+to zero. Extreme identity churn may conservatively reject old responses and
+require an extra canonical resource-only load for missing navigation keys.
+An obsolete prefetch is not reusable merely because its newer version was
+evicted; rejection does not cancel unrelated prefetch-backed navigation. See
+the [v1.0 client lifecycle gate](releases/v1.0-client-lifecycle.md) for the
+repeatable stress workload and retained-state observations.
 
 Call `router.clear()` on logout. It closes the live stream, aborts pending visit,
 deferred, and prefetch transport work, and clears resource, page, and prefetch

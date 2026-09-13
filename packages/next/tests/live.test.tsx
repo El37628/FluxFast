@@ -3,7 +3,7 @@
 import React, { StrictMode, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FluxRouter,
   LiveManager,
@@ -123,6 +123,7 @@ function createLiveRouter(liveTransport: LiveTransport): FluxRouter {
 afterEach(async () => {
   for (const root of [...roots]) await unmount(root);
   document.body.replaceChildren();
+  vi.useRealTimers();
 });
 
 describe("Next live integration", () => {
@@ -181,6 +182,52 @@ describe("Next live integration", () => {
     expect(liveTransport.connections.every(connection => connection.signal.aborted))
       .toBe(true);
     router.destroy();
+  });
+
+  it("releases streams, batching timers, handlers and hook subscriptions through 100 StrictMode remounts", async () => {
+    vi.useFakeTimers();
+    function Resources() {
+      const summary = useResource<{ count: number }>("summary");
+      const state = useResourceState("summary");
+      const live = useLiveStatus();
+      return <span>{`${summary.count}:${state.status}:${live.status}`}</span>;
+    }
+    for (let cycle = 0; cycle < 100; cycle += 1) {
+      const liveTransport = new ControlledLiveTransport();
+      const router = createLiveRouter(liveTransport);
+      router.startHistory();
+      const { root, container } = await mount(
+        <StrictMode>
+          <FluxProvider router={router}><Resources /></FluxProvider>
+        </StrictMode>
+      );
+      expect(liveTransport.connections.filter(connection => !connection.signal.aborted))
+        .toHaveLength(1);
+      liveTransport.connections.at(-1)!.emit({
+        protocol: "fluxfast/1", type: "invalidate", keys: ["summary"],
+      });
+      await flushLiveEvent();
+      expect(vi.getTimerCount()).toBe(1);
+      await unmount(root);
+      container.remove();
+      expect(liveTransport.connections.every(connection => connection.signal.aborted)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      const resources = router.resourceStore as unknown as {
+        subscribers: Map<string, unknown>; globalSubscribers: Set<unknown>;
+      };
+      const live = router.liveManager as unknown as {
+        subscribers: Set<unknown>; eventSubscribers: Set<unknown>;
+        diagnosticSubscribers: Set<unknown>; stopNetworkSubscription?: unknown;
+      };
+      expect(resources.subscribers.size).toBe(0);
+      expect(resources.globalSubscribers.size).toBe(0);
+      expect(live.subscribers.size).toBe(0);
+      expect(live.stopNetworkSubscription).toBeUndefined();
+      router.destroy();
+      expect(live.eventSubscribers.size).toBe(0);
+      expect(live.diagnosticSubscribers.size).toBe(0);
+      expect((router.history as unknown as { isListening: boolean }).isListening).toBe(false);
+    }
   });
 
   it("updates useLiveStatus as the connection becomes ready and clears on logout", async () => {

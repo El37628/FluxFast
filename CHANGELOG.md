@@ -42,6 +42,14 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Fixed
 
+- Bound state-only loading/error metadata and internal client race history;
+  preserve stale-result rejection across eviction, recover missing navigation
+  resources canonically, and release epoch state on router destruction.
+- Reject obsolete prefetch envelopes without cancelling unrelated
+  prefetch-backed navigation; verify repeated StrictMode and live/history
+  cleanup in the v1.0 lifecycle gate.
+- Stop remaining page/resource settlements and diagnostics when a subscriber
+  clears or destroys the router, including already-completed prefetch work.
 - Reject late resource-only settlements and diagnostics after logout or router
   destruction, without hiding failures from their original callers.
 - Treat cached Back/Forward restoration as newer navigation when suppressing

@@ -106,7 +106,7 @@ export class ResourceStore {
 
   /** Return stable loading metadata for a resource key. */
   getStateSnapshot<T = unknown>(key: string): ResourceStateSnapshot<T> {
-    if (this.records.has(key)) this.touchLru(key);
+    if (this.records.has(key) || this.stateSnapshots.has(key)) this.touchLru(key);
     return (
       this.stateSnapshots.get(key) ?? MISSING_RESOURCE_STATE
     ) as ResourceStateSnapshot<T>;
@@ -349,6 +349,7 @@ export class ResourceStore {
 
     if (status === "missing" && data === undefined && error === null && !stale) {
       this.stateSnapshots.delete(key);
+      if (!this.records.has(key)) this.removeFromLru(key);
       return true;
     }
 
@@ -367,6 +368,8 @@ export class ResourceStore {
       error: frozenError,
       stale,
     }));
+    this.touchLru(key);
+    this.evictIfNeeded();
     return true;
   }
 
@@ -404,16 +407,15 @@ export class ResourceStore {
   }
 
   private evictIfNeeded(): void {
-    while (this.records.size > this.maxResources) {
+    while (
+      this.records.size > this.maxResources ||
+      this.stateSnapshots.size > this.maxResources
+    ) {
       const oldestKey = this.lruOrder.shift();
       if (oldestKey === undefined) {
         return;
       }
-      if (this.records.delete(oldestKey)) {
-        this.staleKeys.delete(oldestKey);
-        this.stateSnapshots.delete(oldestKey);
-        this.notify(oldestKey);
-      }
+      this.invalidate(oldestKey);
     }
   }
 }

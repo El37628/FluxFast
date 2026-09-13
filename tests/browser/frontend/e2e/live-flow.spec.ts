@@ -4,6 +4,7 @@ import {
   type Browser,
   type BrowserContext,
   type Page,
+  type Request,
   type TestInfo,
 } from "@playwright/test";
 
@@ -66,6 +67,80 @@ async function createLivePair(
 async function closeContexts(contexts: BrowserContext[]): Promise<void> {
   await Promise.all(contexts.map(context => context.close()));
 }
+
+test("StrictMode live/history cycles keep one stream and stable browser handlers", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const activeStreams = new Set<Request>();
+  const errors = observeBrowserErrors(page);
+  page.on("request", request => {
+    if (request.headers()["x-fluxfast-live"] === "1") activeStreams.add(request);
+  });
+  page.on("requestfailed", request => activeStreams.delete(request));
+  page.on("requestfinished", request => activeStreams.delete(request));
+  await page.addInitScript(() => {
+    const counts = new Map<string, Map<EventListenerOrEventListenerObject, Set<boolean>>>();
+    const tracked = new Set(["online", "offline", "popstate"]);
+    const add = window.addEventListener.bind(window);
+    const remove = window.removeEventListener.bind(window);
+    const capture = (options?: boolean | EventListenerOptions) => (
+      typeof options === "boolean" ? options : options?.capture ?? false
+    );
+    window.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions) => {
+      if (tracked.has(type)) {
+        const listeners = counts.get(type) ?? new Map();
+        const captures = listeners.get(listener) ?? new Set();
+        captures.add(capture(options));
+        listeners.set(listener, captures);
+        counts.set(type, listeners);
+      }
+      add(type, listener, options);
+    }) as typeof window.addEventListener;
+    window.removeEventListener = ((type: string, listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions) => {
+      const listeners = counts.get(type);
+      const captures = listeners?.get(listener);
+      captures?.delete(capture(options));
+      if (captures?.size === 0) listeners?.delete(listener);
+      remove(type, listener, options);
+    }) as typeof window.removeEventListener;
+    (window as unknown as { lifecycleHandlers: () => Record<string, number> }).lifecycleHandlers = () => (
+      Object.fromEntries([...tracked].map(type => [type,
+        [...(counts.get(type)?.values() ?? [])].reduce((total, values) => total + values.size, 0),
+      ]))
+    );
+  });
+  const handlers = () => page.evaluate(() => (
+    (window as unknown as { lifecycleHandlers: () => Record<string, number> }).lifecycleHandlers()
+  ));
+  await page.goto(liveUrl(uniqueRun(testInfo)));
+  await waitForLive(page);
+  await expect(page.getByTestId("live-deferred-value")).toHaveText("0");
+  await expect.poll(() => activeStreams.size).toBe(1);
+  const initial = await handlers();
+  let documents = 0;
+  page.on("request", request => {
+    if (request.resourceType() === "document") documents += 1;
+  });
+  for (let cycle = 0; cycle < 20; cycle += 1) {
+    await page.getByRole("link", { name: "Leave live dashboard" }).click();
+    await expect(page.getByRole("heading", { name: "Rooms" })).toBeVisible();
+    await expect.poll(() => activeStreams.size).toBe(0);
+    await expect.poll(handlers).toEqual({
+      online: initial.online - 1, offline: initial.offline - 1, popstate: initial.popstate,
+    });
+    await page.goBack();
+    await waitForLive(page);
+    await expect.poll(() => activeStreams.size).toBe(1);
+    await expect.poll(handlers).toEqual(initial);
+  }
+  await page.getByRole("link", { name: "Leave live dashboard" }).click();
+  await expect.poll(() => activeStreams.size).toBe(0);
+  expect(documents).toBe(0);
+  expect(errors).toEqual([]);
+});
 
 test("two clients synchronize a scoped resource without reloading", async ({
   browser,
