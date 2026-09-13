@@ -63,6 +63,19 @@ async function availablePorts(count) {
   }
 }
 
+async function portAcceptsConnections(port) {
+  return new Promise(resolve => {
+    const socket = net.connect({ host: "127.0.0.1", port });
+    const finish = accepts => {
+      socket.destroy();
+      resolve(accepts);
+    };
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+    socket.setTimeout(1_000, () => finish(false));
+  });
+}
+
 function snapshotConsumerInputs() {
   const snapshot = new Map();
 
@@ -255,6 +268,34 @@ try {
   assert.equal(new URL(protocolResponse.url).origin, new URL(frontendUrl).origin);
 
   browser = await chromium.launch({ headless: true });
+  const serverOnly = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const document = await serverOnly.newPage();
+    const documentRequests = [];
+    document.on("request", request => documentRequests.push(request));
+    const response = await document.goto(frontendUrl);
+    assert.equal(response.status(), 200);
+    assert.match(response.headers()["content-type"], /text\/html/);
+    assert.equal(
+      await document.getByTestId("navigation-value").textContent(),
+      "Primary navigation"
+    );
+    assert.equal(await document.getByTestId("live-counter-value").textContent(), "0");
+    assert.equal(
+      await document.getByTestId("consumer-page").getAttribute("data-hydrated"),
+      "false"
+    );
+    assert.equal(
+      documentRequests.every(request => request.headers()["x-fluxfast"] !== "1"),
+      true
+    );
+    assert.deepEqual(
+      [...new Set(documentRequests.map(request => new URL(request.url()).origin))],
+      [new URL(frontendUrl).origin]
+    );
+  } finally {
+    await serverOnly.close();
+  }
   const firstContext = await browser.newContext();
   const secondContext = await browser.newContext();
   const first = await firstContext.newPage();
@@ -263,10 +304,21 @@ try {
   const resourceBatches = [];
   const protocolVisits = [];
   const protocolOrigins = [];
+  const browserOrigins = new Set();
+  const documentFluxHeaders = [];
   const registrationRequests = [];
   const registrationResponses = [];
   let documentRequests = 0;
   for (const page of [first, second]) {
+    page.on("request", request => {
+      const url = new URL(request.url());
+      if (["http:", "https:", "ws:", "wss:"].includes(url.protocol)) {
+        browserOrigins.add(url.origin.replace(/^ws/, "http"));
+      }
+      if (request.resourceType() === "document") {
+        documentFluxHeaders.push(request.headers()["x-fluxfast"]);
+      }
+    });
     page.on("pageerror", error => browserErrors.push(error.message));
     page.on("console", message => {
       if (message.type() !== "error") return;
@@ -308,6 +360,7 @@ try {
   });
 
   await Promise.all([first.goto(frontendUrl), second.goto(frontendUrl)]);
+  await second.locator('[data-testid="consumer-page"][data-hydrated="true"]').waitFor();
   await second.locator("[data-testid=analytics-loading]").waitFor();
   assert.equal(
     await second.getByRole("heading", { name: "Clean live consumer" }).isVisible(),
@@ -448,6 +501,8 @@ try {
   assert.equal(documentRequests, 1);
   assert.equal(protocolOrigins.length > 0, true);
   assert.deepEqual([...new Set(protocolOrigins)], [new URL(frontendUrl).origin]);
+  assert.deepEqual([...browserOrigins], [new URL(frontendUrl).origin]);
+  assert.equal(documentFluxHeaders.every(header => header !== "1"), true);
   assert.deepEqual(browserErrors, []);
 
   console.log(
@@ -479,6 +534,16 @@ if (production) {
     `fluxfast start exited with status ${child.exitCode}\n${output}`
   );
   assert.equal(child.signalCode, null, "the production supervisor must handle SIGTERM");
+  assert.equal(
+    await portAcceptsConnections(frontendPort),
+    false,
+    "Next.js must not remain listening after shutdown"
+  );
+  assert.equal(
+    await portAcceptsConnections(backendPort),
+    false,
+    "FastAPI must not remain listening after shutdown"
+  );
   const changed = changedPaths(beforeStart, snapshotConsumerInputs());
   assert.deepEqual(
     changed,

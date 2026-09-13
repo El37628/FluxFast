@@ -1,5 +1,72 @@
 import { expect, test } from "@playwright/test";
 
+test("renders backend resources before JavaScript, then hydrates and uses the header-gated origin", async ({
+  browser,
+  page,
+  baseURL,
+}) => {
+  const origin = new URL(baseURL!).origin;
+  const requests: Array<{ origin: string; document: boolean; flux: boolean }> = [];
+  const errors: string[] = [];
+  const observe = (observed: typeof page) => {
+    observed.on("pageerror", error => errors.push(error.message));
+    observed.on("request", request => {
+      const url = new URL(request.url());
+      if (!["http:", "https:"].includes(url.protocol)) return;
+      requests.push({
+        origin: url.origin,
+        document: request.resourceType() === "document",
+        flux: request.headers()["x-fluxfast"] === "1",
+      });
+    });
+  };
+  const serverOnly = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const document = await serverOnly.newPage();
+    observe(document);
+    const response = await document.goto(baseURL!);
+    expect(response!.status()).toBe(200);
+    expect(response!.headers()["content-type"]).toContain("text/html");
+    await expect(document.getByTestId("application-name")).toHaveText("FluxFast Browser Fixture");
+    await expect(document.getByTestId("home-page")).toHaveAttribute("data-hydrated", "false");
+    expect(requests.some(request => request.flux)).toBe(false);
+  } finally {
+    await serverOnly.close();
+  }
+
+  observe(page);
+  const initial = await page.goto("/");
+  expect(await initial!.text()).toContain('data-hydrated="false"');
+  await expect(page.getByTestId("home-page")).toHaveAttribute("data-hydrated", "true");
+  const documentCount = requests.filter(request => request.document).length;
+  const transport = page.waitForResponse(response =>
+    new URL(response.url()).pathname === "/rooms" &&
+    response.request().headers()["x-fluxfast"] === "1"
+  );
+  await page.getByRole("link", { name: "Manage rooms" }).click();
+  const navigation = await transport;
+  expect(navigation.status()).toBe(200);
+  expect(navigation.request().method()).toBe("GET");
+  expect(navigation.headers()["content-type"]).toContain("json");
+  expect((await navigation.json()).page.component).toBe("rooms/index");
+  await expect(page.getByRole("heading", { name: "Rooms" })).toBeVisible();
+  expect(requests.filter(request => request.document)).toHaveLength(documentCount);
+
+  // The same public path is HTML for documents, protocol JSON only with the gate.
+  const ordinary = await page.request.get("/rooms");
+  expect(ordinary.status()).toBe(200);
+  expect(ordinary.headers()["content-type"]).toContain("text/html");
+  const protocol = await page.request.get("/rooms", {
+    headers: { "X-FluxFast": "1", "X-FluxFast-Protocol": "1" },
+  });
+  expect(protocol.status()).toBe(200);
+  expect((await protocol.json()).page.component).toBe("rooms/index");
+  expect(protocol.headers()["access-control-allow-origin"]).toBeUndefined();
+  expect([...new Set(requests.map(request => request.origin))]).toEqual([origin]);
+  expect(requests.filter(request => request.document).every(request => !request.flux)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test("uses generated types through dynamic prefetch, navigation, history, and reload", async ({
   page,
 }) => {
