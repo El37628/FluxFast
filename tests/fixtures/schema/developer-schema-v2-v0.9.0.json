@@ -1,0 +1,10 @@
+{
+  "packageBaseline": "0.9.0",
+  "candidatePackage": "1.0.0",
+  "baselineProducer": "0.9.0",
+  "candidateProducer": "1.0.0",
+  "supportedReaders": ["fluxfast-schema/1", "fluxfast-schema/2"],
+  "producedSchema": "fluxfast-schema/2",
+  "semanticFingerprint": "541a688a1f3aff53317ebdb67b10aa808479b70529f7d706b5bc9b96a2069a77",
+  "canonicalManifestSha256": "616f41057a149f798757a6ee57965eab3c490988ba12eac881cb7c724c5be7c5"
+}

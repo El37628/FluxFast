@@ -16,6 +16,12 @@ The shared fixtures are executable compatibility evidence:
   consumed by every TypeScript compiler.
 - `tests/fixtures/schema/fluxfast-schema-v1.json` is consumed by a complete
   generate, typecheck, and build test.
+- `tests/fixtures/schema/developer-schema-v2-v0.9.0.json` pins the canonical
+  v0.9.0 manifest digest, semantic fingerprint, supported readers, and v1.0.0
+  producer-only transition.
+
+The [v1.0 schema stability proof](releases/v1.0-schema-stability.md) records how
+the candidate is compared with that baseline.
 
 ## Closed schema/2 shape
 
