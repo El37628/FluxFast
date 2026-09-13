@@ -1,0 +1,74 @@
+{
+  "packageBaseline": "0.9.0",
+  "protocol": {
+    "version": "fluxfast/1",
+    "mediaType": "application/vnd.fluxfast+json"
+  },
+  "capabilities": [
+    "deferred-resources",
+    "live-resources"
+  ],
+  "headers": {
+    "accept": "Accept",
+    "fluxfast": "X-FluxFast",
+    "protocol": "X-FluxFast-Protocol",
+    "visit": "X-FluxFast-Visit",
+    "known": "X-FluxFast-Known",
+    "only": "X-FluxFast-Only",
+    "capabilities": "X-FluxFast-Capabilities",
+    "clientId": "X-FluxFast-Client-ID",
+    "live": "X-FluxFast-Live",
+    "liveKeys": "X-FluxFast-Live-Keys",
+    "liveResources": "X-FluxFast-Live-Resources"
+  },
+  "limits": {
+    "knownResources": 100,
+    "knownDecodedBytes": 16384,
+    "resourceKeyCharacters": 128,
+    "resourceVersionCharacters": 128,
+    "onlyHeaderBytes": 16384,
+    "capabilitiesHeaderBytes": 2048,
+    "capabilities": 32,
+    "capabilityCharacters": 64,
+    "liveKeysHeaderBytes": 16384,
+    "liveKeys": 100,
+    "clientIdCharacters": 64,
+    "liveEventBytes": 1048576
+  },
+  "patchOperations": [
+    "replace-resource",
+    "merge-object",
+    "replace-item",
+    "remove-item",
+    "append-item"
+  ],
+  "live": {
+    "eventName": "fluxfast",
+    "eventTypes": [
+      "ready",
+      "invalidate",
+      "patch",
+      "resync"
+    ],
+    "resyncReasons": [
+      "overflow",
+      "reconnect",
+      "broker-recovery",
+      "server"
+    ]
+  },
+  "fixtureDigests": {
+    "deferred-error.json": "ae78b70ae79c26b1fdebb0c2bf9c30ddc9b63f40546db40122256436b5524871",
+    "deferred-page.json": "7a647dbb21ec36afa07e59201d67ca19c872ae38ae44adbf2c321a3af2993cfb",
+    "external-redirect.json": "a47ae5b730499fc5a1f4307dc000e769012fffd9421d1bbba85d11db11421321",
+    "known-version-delta.json": "ee29244086cf80e75b66213e16767fc8631e4372754d9adbc79780fbd12410fb",
+    "live-page.json": "6ad93e3907098694a0e58ad38c191d6557a488aa8c93b2bf7916404aea6d6eaf",
+    "mutation-invalidation.json": "381bfbffb768cd3f94d6d02d51ef87690105f25612324381fc1e87f6c933e0a8",
+    "mutation-patch.json": "bc54c8adf72660b3175882376a49439b98626b79dbac4e9e8b81b453190148a6",
+    "normal-page.json": "9086d7197c1d0a7db3b18a47c459220afd4bdaacdf58a8b1a1a5271cce3b5622",
+    "partial-resource-load.json": "a87abb26eab51721b805f0cd9dfe8a408818d4d59a395cc745c9b4e063013b47",
+    "redirect.json": "aff8473d425341415af7e44dec589e31e92920ded944978bb6fb1cb9c1bb74df",
+    "resource-error.json": "882189ec197d4f8e4fe0189202d4a67bd69e71514ab85be5d4290474d960be30",
+    "validation-error.json": "a94aa0ab6d4b461a35f0ad4e7264da43ed92d9e2f7d742b0f1df289950cf0cce"
+  }
+}

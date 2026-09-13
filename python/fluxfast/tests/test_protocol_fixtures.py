@@ -1,5 +1,6 @@
 """Cross-language golden fixtures for the frozen fluxfast/1 contract."""
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from fluxfast.capabilities import (
     MAX_CAPABILITIES,
     MAX_CAPABILITIES_HEADER_BYTES,
     MAX_CAPABILITY_LENGTH,
+    SUPPORTED_CAPABILITIES,
 )
 from fluxfast.headers import (
     HEADER_CAPABILITIES,
@@ -21,6 +23,7 @@ from fluxfast.headers import (
     HEADER_KNOWN,
     HEADER_LIVE,
     HEADER_LIVE_KEYS,
+    HEADER_LIVE_RESOURCES,
     HEADER_ONLY,
     HEADER_PROTOCOL,
     HEADER_VISIT,
@@ -33,6 +36,17 @@ from fluxfast.headers import (
     MAX_ONLY_HEADER_BYTES,
     MAX_VERSION_LENGTH,
 )
+from fluxfast.live.events import (
+    LIVE_EVENT_NAME,
+    LIVE_RESYNC_REASONS,
+    MAX_LIVE_CLIENT_ID_LENGTH,
+    MAX_LIVE_EVENT_KEYS,
+    MAX_LIVE_RESOURCE_KEY_LENGTH,
+    LiveInvalidateEvent,
+    LivePatchEvent,
+    LiveReadyEvent,
+    LiveResyncEvent,
+)
 from fluxfast.protocol import (
     PROTOCOL_MEDIA_TYPE,
     PROTOCOL_VERSION,
@@ -44,6 +58,7 @@ from fluxfast.protocol import (
 FIXTURE_DIRECTORY = (
     Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "protocol-v1"
 )
+BASELINE_PATH = FIXTURE_DIRECTORY.parent / "protocol-v1-v0.9.0.json"
 PAGE_FIXTURES = {
     "deferred-error.json",
     "deferred-page.json",
@@ -65,9 +80,97 @@ def load_fixture(name: str) -> dict[str, Any]:
     return json.loads((FIXTURE_DIRECTORY / name).read_text(encoding="utf-8"))
 
 
+def semantic_digest(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def test_protocol_fixture_inventory_is_complete() -> None:
     actual = {path.name for path in FIXTURE_DIRECTORY.glob("*.json")}
     assert actual == PAGE_FIXTURES | MUTATION_FIXTURES | ERROR_FIXTURES
+
+
+def test_python_contract_matches_v09_semantic_baseline() -> None:
+    baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+    actual_digests = {
+        name: semantic_digest(load_fixture(name))
+        for name in sorted(PAGE_FIXTURES | MUTATION_FIXTURES | ERROR_FIXTURES)
+    }
+
+    assert baseline["packageBaseline"] == "0.9.0"
+    assert actual_digests == baseline["fixtureDigests"]
+    assert {
+        "version": PROTOCOL_VERSION,
+        "mediaType": PROTOCOL_MEDIA_TYPE,
+    } == baseline["protocol"]
+    assert sorted(SUPPORTED_CAPABILITIES) == baseline["capabilities"]
+    assert {
+        "accept": "Accept",
+        "fluxfast": HEADER_FLUXFAST,
+        "protocol": HEADER_PROTOCOL,
+        "visit": HEADER_VISIT,
+        "known": HEADER_KNOWN,
+        "only": HEADER_ONLY,
+        "capabilities": HEADER_CAPABILITIES,
+        "clientId": HEADER_CLIENT_ID,
+        "live": HEADER_LIVE,
+        "liveKeys": HEADER_LIVE_KEYS,
+        "liveResources": HEADER_LIVE_RESOURCES,
+    } == baseline["headers"]
+    assert {
+        "knownResources": MAX_KNOWN_RESOURCES,
+        "knownDecodedBytes": MAX_DECODED_BYTES,
+        "resourceKeyCharacters": MAX_KEY_LENGTH,
+        "resourceVersionCharacters": MAX_VERSION_LENGTH,
+        "onlyHeaderBytes": MAX_ONLY_HEADER_BYTES,
+        "capabilitiesHeaderBytes": MAX_CAPABILITIES_HEADER_BYTES,
+        "capabilities": MAX_CAPABILITIES,
+        "capabilityCharacters": MAX_CAPABILITY_LENGTH,
+        "liveKeysHeaderBytes": MAX_LIVE_KEYS_HEADER_BYTES,
+        "liveKeys": MAX_LIVE_KEYS,
+        "clientIdCharacters": MAX_CLIENT_ID_LENGTH,
+    } == {
+        key: value
+        for key, value in baseline["limits"].items()
+        if key != "liveEventBytes"
+    }
+    assert MAX_LIVE_EVENT_KEYS == baseline["limits"]["liveKeys"]
+    assert MAX_LIVE_RESOURCE_KEY_LENGTH == baseline["limits"]["resourceKeyCharacters"]
+    assert MAX_LIVE_CLIENT_ID_LENGTH == baseline["limits"]["clientIdCharacters"]
+    assert {
+        "eventName": LIVE_EVENT_NAME,
+        "eventTypes": [
+            model.model_fields["type"].default
+            for model in (
+                LiveReadyEvent,
+                LiveInvalidateEvent,
+                LivePatchEvent,
+                LiveResyncEvent,
+            )
+        ],
+        "resyncReasons": list(LIVE_RESYNC_REASONS),
+    } == baseline["live"]
+
+    valid_patches = {
+        "replace-resource": {"op": "replace-resource", "value": {}},
+        "merge-object": {"op": "merge-object", "value": {}},
+        "replace-item": {"op": "replace-item", "id": 1, "value": {}},
+        "remove-item": {"op": "remove-item", "id": 1},
+        "append-item": {"op": "append-item", "value": {}},
+    }
+    assert list(valid_patches) == baseline["patchOperations"]
+    for patch in valid_patches.values():
+        MutationEnvelope.model_validate(
+            {
+                "protocol": PROTOCOL_VERSION,
+                "mutation": {"patches": {"resource": [patch]}},
+            }
+        )
 
 
 @pytest.mark.parametrize(
@@ -85,10 +188,13 @@ def test_python_models_round_trip_protocol_fixtures(
     payload = load_fixture(fixture_name)
     envelope = model_type.model_validate(payload)
 
-    assert envelope.model_dump(
-        mode="json",
-        exclude_unset=True,
-    ) == payload
+    assert (
+        envelope.model_dump(
+            mode="json",
+            exclude_unset=True,
+        )
+        == payload
+    )
 
 
 def test_page_envelope_preserves_optional_app_version() -> None:

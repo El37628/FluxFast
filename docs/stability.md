@@ -70,6 +70,12 @@ contracts adopted from v0.9.0. The historical
 retained so compatibility history is not rewritten when the promotion baseline
 advances.
 
+The browser protocol has a separate semantic snapshot at
+[`tests/fixtures/protocol-v1-v0.9.0.json`](../tests/fixtures/protocol-v1-v0.9.0.json).
+It freezes canonical hashes for every shared `fluxfast/1` envelope fixture plus
+the request headers, safety limits, capabilities, patch operations, and live
+event facts that must remain independent from Python and npm package versions.
+
 The npm portion also fingerprints the complete declaration dependency graph of
 every public Core and Next entry point. The fingerprint ignores comments and
 whitespace but changes when declaration tokens, referenced public types, or
