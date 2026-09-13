@@ -31,6 +31,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Anchor `fluxfast/1` to a shared v0.9.0 semantic snapshot covering every golden
   envelope, request header and bound, capability, patch operation, and live
   event without coupling protocol interpretation to package versions.
+- Prove the v1.0 developer manifest remains the closed `fluxfast-schema/2`
+  contract, with an independently pinned v0.9.0 baseline, an exact
+  producer-only candidate delta, stable semantic fingerprint, schema/1 and
+  schema/2 readers, and explicit schema/3 rejection.
 
 ## [0.9.0] - 2026-09-10
 

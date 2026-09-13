@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -47,6 +48,20 @@ class CreateRoomInput(BaseModel):
 
 class AlternateRoomInput(BaseModel):
     label: str
+
+
+def _read_fixture(name: str) -> dict[str, Any]:
+    return json.loads((FIXTURE_ROOT / name).read_text(encoding="utf8"))
+
+
+def _canonical_sha256(value: Any) -> str:
+    canonical = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical.encode("utf8")).hexdigest()
 
 
 def _build_frozen_manifest(
@@ -112,13 +127,49 @@ def _build_frozen_manifest(
 
 
 def test_schema_v2_producer_matches_shared_golden_fixture() -> None:
-    fixture = json.loads(
-        (FIXTURE_ROOT / "fluxfast-schema-v2.json").read_text(encoding="utf8")
-    )
+    fixture = _read_fixture("fluxfast-schema-v2.json")
     manifest = _build_frozen_manifest()
 
     assert manifest.schema_version == SCHEMA_MANIFEST_V2
     assert manifest.model_dump(mode="json", by_alias=True, exclude_none=True) == fixture
+
+
+def test_v1_schema_candidate_changes_only_producer_metadata() -> None:
+    baseline = _read_fixture("developer-schema-v2-v0.9.0.json")
+    fixture = _read_fixture("fluxfast-schema-v2.json")
+    candidate = _build_frozen_manifest(
+        producer=baseline["candidateProducer"]
+    ).model_dump(mode="json", by_alias=True, exclude_none=True)
+
+    assert baseline["packageBaseline"] == baseline["baselineProducer"] == "0.9.0"
+    assert baseline["candidatePackage"] == baseline["candidateProducer"] == "1.0.0"
+    assert fixture["producer"] == baseline["baselineProducer"]
+    assert fixture["schema"] == baseline["producedSchema"]
+    assert fixture["fingerprint"] == baseline["semanticFingerprint"]
+    assert _canonical_sha256(fixture) == baseline["canonicalManifestSha256"]
+    assert candidate == {
+        **fixture,
+        "producer": baseline["candidateProducer"],
+    }
+    assert candidate["fingerprint"] == fixture["fingerprint"]
+
+
+def test_v1_schema_candidate_does_not_introduce_schema_v3() -> None:
+    baseline = _read_fixture("developer-schema-v2-v0.9.0.json")
+    candidate = _build_frozen_manifest(producer=baseline["candidateProducer"])
+
+    assert candidate.schema_version == SCHEMA_MANIFEST_V2
+    with pytest.raises(ValueError, match="schema"):
+        SchemaManifest.model_validate(
+            {
+                **candidate.model_dump(
+                    mode="json",
+                    by_alias=True,
+                    exclude_none=True,
+                ),
+                "schema": "fluxfast-schema/3",
+            }
+        )
 
 
 def test_schema_v2_model_field_inventory_is_closed() -> None:
