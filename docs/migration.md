@@ -1,4 +1,23 @@
-# Migrating to FluxFast 0.8
+# Migrating FluxFast
+
+## v0.9.x to v1.0.0
+
+FluxFast 1.0 promotes the public contract frozen in v0.9.0. Applications using
+documented v0.9 APIs, generated files, and the `fluxfast/1` protocol should not
+need a source migration. Upgrade the synchronized Python, Core, and Next
+packages, rerun `fluxfast init --yes`, regenerate typed artifacts, typecheck,
+and create a production build.
+
+The release gate tests each package side against published v0.9.0 before testing
+the matched candidate. It then reinstalls v0.9.0 in the same consumer,
+regenerates, typechecks, builds, starts the production application, and verifies
+that the initialized scaffold did not change. This rollback is an operational
+fallback during adoption; matching package versions remain the recommended
+deployment.
+
+---
+
+## v0.7.x to v0.8.0
 
 FluxFast 0.8 expands server-owned contracts into general application models
 and introduces native, dependency-free client validation.

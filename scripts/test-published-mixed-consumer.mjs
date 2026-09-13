@@ -24,7 +24,7 @@ const pairingName = process.env.FLUXFAST_PAIRING ?? "python-current";
 const pairing = resolvePublishedMixedPairing({
   pairing: pairingName,
   releaseVersion: process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion,
-  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.8.1"
+  previousVersion: process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.9.0"
 });
 const expectedPythonVersion =
   process.env.FLUXFAST_PYTHON_VERSION?.replace(/^v/, "") ?? pairing.pythonVersion;
@@ -42,7 +42,7 @@ const releaseVersion = (process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersio
   /^v/,
   ""
 );
-const previousVersion = (process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.8.1").replace(/^v/, "");
+const previousVersion = (process.env.FLUXFAST_PREVIOUS_VERSION ?? "0.9.0").replace(/^v/, "");
 const previousPythonSpec = `fluxfast[redis]==${previousVersion}`;
 const previousCoreSpec = `@fluxfast/core@${previousVersion}`;
 const previousNextSpec = `@fluxfast/next@${previousVersion}`;
@@ -363,7 +363,7 @@ function runDistributedHarness(python) {
     process.execPath,
     [path.join(repositoryRoot, "scripts", "test-next-init-distributed.mjs"), consumerRoot],
     repositoryRoot,
-    { FLUXFAST_E2E_PYTHON: python, PYTHONPATH: "" }
+    { FLUXFAST_E2E_PYTHON: python, PYTHONPATH: "", FLUXFAST_CONSUMER_PRODUCTION: "1" }
   );
 }
 
@@ -426,6 +426,7 @@ try {
   if (upgradeSequence) {
     verifyTypedConsumer(python, previousVersion);
     assertScaffoldUnchanged(initializedScaffold);
+    runDistributedHarness(python);
 
     if (pairingName === "python-current") {
       await installPythonSpec(python, pythonSpec, {
@@ -493,10 +494,11 @@ try {
     run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], consumerRoot);
     assertScaffoldUnchanged(initializedScaffold);
     run(npxCommand, ["--no-install", "fluxfast", "init", "--check"], consumerRoot);
+    runDistributedHarness(python);
 
     console.log(
-      `Upgrade and rollback sequence passed: 0.8.1 -> ${releaseVersion} ` +
-        `(${pairingName}) -> 0.8.1.`
+      `Upgrade and rollback sequence passed: ${previousVersion} -> ${releaseVersion} ` +
+        `(${pairingName}) -> ${previousVersion}.`
     );
   } else if (pairing.mode === "distributed") {
     verifyTypedConsumer(python, expectedPythonVersion);

@@ -24,14 +24,15 @@ reused from the shared cache by another, invalidated by a mutation on a third,
 synchronized over Redis Pub/Sub, and then reused at its new value without
 running another loader.
 Before publication, the release-artifact workflow creates a real consumer using
-published 0.8.1 packages. One run installs the built current Python candidate
-first while JavaScript remains at 0.8.1; a second installs the built current
-JavaScript candidate first while Python remains at 0.8.1. Both mixed states
+published 0.9.0 packages. One run installs the built current Python candidate
+first while JavaScript remains at 0.9.0; a second installs the built current
+JavaScript candidate first while Python remains at 0.9.0. Both mixed states
 must pass the full deferred, live, typed, mutation, navigation, and distributed
 Redis browser scenario before the remaining packages are upgraded. The matched
-candidate is tested again, then both sides are rolled back to 0.8.1 and must
-regenerate, typecheck, and production-build without `fluxfast init` rewriting
-the initialized scaffold.
+candidate is tested again, then both sides are rolled back to 0.9.0 and must
+regenerate, typecheck, production-build, and run without `fluxfast init`
+rewriting the initialized scaffold. The branch gate retains one current-Python
+and JavaScript 0.8.1 historical smoke; v0.8.1 is no longer the complete matrix.
 
 After registry publication, the release workflow repeats both complete upgrade
 and rollback orders using only registry packages. The GitHub release is created
@@ -149,7 +150,7 @@ security, and both CodeQL languages.
     "Distributed browser flow",
     "Clean live consumer",
     "Clean distributed consumer",
-    "v0.8.1 upgrade and rollback compatibility",
+    "v0.9.0 adjacent upgrade and rollback compatibility",
     "Docker production image",
     "Rootless Podman production image",
     "Docker Compose with Redis",

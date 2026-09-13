@@ -21,6 +21,7 @@ const localPython = path.join(repositoryRoot, ".venv", "bin", "python");
 const python = process.env.FLUXFAST_E2E_PYTHON ??
   (fs.existsSync(localPython) ? localPython : "python");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const production = process.env.FLUXFAST_CONSUMER_PRODUCTION === "1";
 const requireFromConsumer = createRequire(path.join(consumerRoot, "package.json"));
 const { chromium } = requireFromConsumer("@playwright/test");
 
@@ -201,7 +202,7 @@ try {
   const frontend = start(
     "Next.js frontend",
     npmCommand,
-    ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", String(frontendPort)],
+    ["run", production ? "start" : "dev", "--", "--hostname", "127.0.0.1", "--port", String(frontendPort)],
     { FLUXFAST_BACKEND_URL: proxyUrl }
   );
   const firstUrl = `${frontendUrl}/?${new URLSearchParams({ run, client: "a" })}`;
@@ -214,6 +215,8 @@ try {
   browser = await chromium.launch({ headless: true });
   const browserErrors = [];
   const protocolOrigins = [];
+  const validationResponses = [];
+  const validationConsoleErrors = [];
 
   function newPage() {
     return browser.newContext().then(context => {
@@ -221,11 +224,25 @@ try {
       return context.newPage().then(page => {
         page.on("pageerror", error => browserErrors.push(error.message));
         page.on("console", message => {
-          if (message.type() === "error") browserErrors.push(message.text());
+          if (message.type() !== "error") return;
+          if (/^Failed to load resource: .*\b422\b/.test(message.text())) {
+            validationConsoleErrors.push(message.text());
+            return;
+          }
+          browserErrors.push(message.text());
         });
         page.on("request", request => {
           if (request.headers()["x-fluxfast"] === "1") {
             protocolOrigins.push(new URL(request.url()).origin);
+          }
+        });
+        page.on("response", response => {
+          const request = response.request();
+          if (
+            request.method() === "POST" &&
+            new URL(response.url()).pathname.endsWith("/increment")
+          ) {
+            validationResponses.push(response.status());
           }
         });
         return page;
@@ -268,7 +285,20 @@ try {
     "0 loaded by A"
   );
 
+  const detailsResponsePromise = first.waitForResponse(response =>
+    response.request().headers()["x-fluxfast"] === "1" &&
+    new URL(response.url()).pathname === "/details"
+  );
   await first.getByRole("link", { name: "View compatibility details" }).click();
+  const detailsResponse = await detailsResponsePromise;
+  assert.equal(detailsResponse.status(), 200);
+  const detailsEnvelope = await detailsResponse.json();
+  assert.equal(detailsEnvelope.resourceKeys.includes("distributed-summary"), true);
+  assert.equal(
+    Object.hasOwn(detailsEnvelope.resources, "distributed-summary"),
+    false,
+    "the unchanged Redis summary must be omitted from the navigation delta"
+  );
   await first.getByRole("heading", { name: "Compatibility details" }).waitFor();
   assert.equal(new URL(first.url()).pathname, "/details");
   assert.equal(
@@ -284,6 +314,12 @@ try {
   diagnostics = await diagnosticsResponse.json();
   assert.deepEqual(diagnostics.records["loader:b"], []);
   assert.match(diagnostics.records["page:b"][0], /^B:\d+$/);
+
+  await first.getByRole("button", { name: "Submit invalid identity" }).click();
+  const validationAlert = first.locator('main [role="alert"]');
+  await validationAlert.waitFor();
+  assert.match(await validationAlert.textContent(), /validation/i);
+  assert.deepEqual(validationResponses, [422]);
 
   await first.getByRole("button", { name: "Increment distributed counter" }).click();
   await Promise.all(
@@ -323,6 +359,7 @@ try {
   );
   assert.equal(protocolOrigins.length > 0, true);
   assert.deepEqual([...new Set(protocolOrigins)], [new URL(frontendUrl).origin]);
+  assert.equal(validationConsoleErrors.length, 1);
   assert.deepEqual(browserErrors, []);
 
   console.log(
