@@ -93,6 +93,19 @@ test("keeps all workspace tooling and runtime resolutions on the reviewed set", 
   assert.deepEqual([...seen].sort(), Object.keys(frozen).sort());
   assert.equal(JSON.parse(read("package.json")).pnpm.overrides["@types/node"], frozen["@types/node"]);
   assert.match(lock, new RegExp(`^  rollup@${facts.javascriptTransitive.rollup}:$`, "m"));
+
+  const releaseConsumer = JSON.parse(
+    read("tests/release-consumer/next-init/package.json")
+  );
+  assert.equal(
+    releaseConsumer.devDependencies["@playwright/test"],
+    facts.javascriptTooling["@playwright/test"],
+    "the isolated release consumer must use the browser version installed by CI"
+  );
+  assert.equal(
+    releaseConsumer.devDependencies["@types/react-dom"],
+    facts.javascriptTooling["@types/react-dom"]
+  );
 });
 
 test("records the actual Python lock reference", () => {
