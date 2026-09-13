@@ -2,6 +2,9 @@
 
 import { PageEnvelope } from "./protocol.js";
 import { FluxTransport } from "./transport.js";
+import {
+  acceptPrefetchEnvelope, clearPrefetchRejections, isRejectedPrefetchEnvelope,
+} from "./prefetch-cache-policy.js";
 
 const MAX_PREFETCH_ENTRIES = 32;
 
@@ -72,6 +75,7 @@ export class PrefetchManager {
         if (generation !== this.generation || controller.signal.aborted) {
           throw prefetchCancellation();
         }
+        acceptPrefetchEnvelope(this, envelope);
         this.pruneExpired();
         this.cache.delete(url);
         this.cache.set(url, {
@@ -111,6 +115,7 @@ export class PrefetchManager {
     const entry = this.cache.get(url);
     if (!entry) return undefined;
     if (
+      isRejectedPrefetchEnvelope(this, entry.envelope) ||
       Date.now() >= entry.expiresAt ||
       !versionsStillAvailable(entry.basedOnVersions, currentVersions, entry.envelope)
     ) {
@@ -124,6 +129,7 @@ export class PrefetchManager {
 
   clear(): void {
     this.generation += 1;
+    clearPrefetchRejections(this);
     for (const controller of this.controllers.values()) controller.abort();
     this.controllers.clear();
     this.inFlight.clear();

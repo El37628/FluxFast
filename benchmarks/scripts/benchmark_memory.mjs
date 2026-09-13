@@ -278,6 +278,67 @@ async function validationCycles(cycles) {
   }
 }
 
+async function longLivedLifecycle(samples, cycles) {
+  let cycle = 0;
+  const router = new FluxRouter({
+    deferHistory: true, maxPages: 8, maxResources: 16,
+    transport: {
+      async visit(request) {
+        const key = request.only?.[0] ?? request.url;
+        return {
+          protocol: "fluxfast/1",
+          page: { component: "benchmark/index", url: request.url },
+          resourceKeys: [key],
+          ...(request.only ? {
+            resources: {}, resourceErrors: { [key]: {
+              type: "ResourceError", message: "controlled lifecycle failure",
+            } },
+          } : {
+            resources: { [key]: { version: `opaque-${cycle}`, value: cycle } },
+          }),
+        };
+      },
+      async mutate() {
+        return { protocol: "fluxfast/1", mutation: { invalidate: [`absent-${cycle}`] } };
+      },
+    },
+  });
+  const batch = async () => {
+    for (let index = 0; index < cycles; index += 1) {
+      cycle += 1;
+      await router.visit(`/lifecycle/navigation-${cycle}`, {
+        preserveState: true, usePrefetch: false,
+      });
+      await router.prefetch(`/lifecycle/prefetch-${cycle}`);
+      await router.loadResources([`failed-${cycle}`], { reason: "deferred" });
+      await router.mutate("/lifecycle/mutation");
+    }
+  };
+  try {
+    await batch();
+    const baseline = collectHeap();
+    const heap = [];
+    for (let sample = 0; sample < samples; sample += 1) {
+      await batch();
+      heap.push(collectHeap());
+      console.log(`long-lived lifecycle sample ${sample + 1}: cycles ${cycle}; resources ${privateSize(router.resourceStore, "records")}; states ${privateSize(router.resourceStore, "stateSnapshots")}; epochs ${privateSize(router, "resourceEpochs")}; heap ${(heap.at(-1) / 1024 / 1024).toFixed(2)} MiB`);
+    }
+    console.log(`long-lived lifecycle: retained ${formatBytes(heap.at(-1) - baseline)}; per-sample trend ${formatBytes(trend(heap))}`);
+    assert.equal(router.pageStore.getSnapshot().url, `/lifecycle/navigation-${cycle}`);
+    assert.ok(privateSize(router.resourceStore, "records") <= 16);
+    assert.ok(privateSize(router.resourceStore, "stateSnapshots") <= 16);
+    assert.ok(privateSize(router.resourceStore, "lruOrder") <= 16);
+    assert.ok(privateSize(router.pageCache, "entries") <= 8);
+    assert.ok(privateSize(router.prefetchManager, "cache") <= 32);
+    assert.equal(privateSize(router.prefetchManager, "inFlight"), 0);
+    assert.equal(privateSize(router.prefetchManager, "controllers"), 0);
+    assert.ok(privateSize(router, "resourceEpochs") <= 1_024);
+  } finally {
+    router.destroy();
+  }
+  assert.equal(privateSize(router, "resourceEpochs"), 0);
+}
+
 async function runBenchmark(samples, cycles) {
   assert.equal(
     typeof globalThis.gc,
@@ -301,11 +362,12 @@ async function runBenchmark(samples, cycles) {
     resourceStoreCycles(cycles)
   );
   await measureScenario("validation calls", samples, () => validationCycles(cycles));
+  await longLivedLifecycle(samples, cycles);
   console.log(
     "policy: heap values are diagnostic trend observations after forced collection, not exact-byte CI thresholds",
   );
   console.log(
-    "correctness: PASS — page/resource stores stayed capped; deferred and mutation state converged; live connections and listeners returned to zero; large stores evicted to their configured bound; all validation outcomes remained exact",
+    "correctness: PASS — page/resource stores and state-only metadata stayed capped; deferred and mutation state converged; live connections and listeners returned to zero; long-lived epoch history stayed bounded and was released on destroy; large stores evicted to their configured bound; all validation outcomes remained exact",
   );
 }
 
