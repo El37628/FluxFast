@@ -6,12 +6,13 @@ import os
 import secrets
 from contextlib import suppress
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fluxfast import (
     FluxFast,
     Page,
     RedisLiveBroker,
     RedisResourceCache,
+    derive_live_topic,
     invalidate_resource,
     mutation,
     resource,
@@ -49,6 +50,7 @@ flux = FluxFast(
     broker=RedisLiveBroker.from_url(
         REDIS_URL,
         channel_prefix=LIVE_PREFIX,
+        client_name=f"{DIAGNOSTIC_PREFIX}:broker:{os.getpid()}",
     ),
 )
 worker_command_task: asyncio.Task[None] | None = None
@@ -69,6 +71,89 @@ class CounterValue(BaseModel):
 
 DISTRIBUTED_COUNTER = flux.define_resource("distributed-counter", CounterValue)
 
+_SCOPED_SESSIONS = {
+    "session-alice": ("alice", "tenant-a"),
+    "session-bob": ("bob", "tenant-a"),
+    "session-carol": ("carol", "tenant-b"),
+}
+
+
+class ScopedMutation(BaseModel):
+    run: str = Field(min_length=1, max_length=80)
+    key: str = Field(pattern="^scoped-(user|tenant)$")
+
+
+def _scoped_identity(request: Request) -> tuple[str, str]:
+    identity = _SCOPED_SESSIONS.get(request.cookies.get("fixture-session", ""))
+    if identity is None:
+        raise HTTPException(status_code=401)
+    return identity
+
+
+def _scoped_value_key(run: str, kind: str, identity: str) -> str:
+    return f"{DIAGNOSTIC_PREFIX}:{run}:scoped:{kind}:{identity}"
+
+
+@flux.page("/distributed-scoped")
+async def distributed_scoped(request: Request) -> Page:
+    user, tenant = _scoped_identity(request)
+    run = request.query_params.get("run", "default")
+
+    def loader(kind: str, identity: str):
+        async def load() -> dict[str, str | int]:
+            key = _scoped_value_key(run, kind, identity)
+            await state.set(key, 0, ex=300, nx=True)
+            return {"owner": identity, "value": int(await state.get(key))}
+
+        return load
+
+    specs = [
+        resource(
+            "scoped-user",
+            loader("user", user),
+            scope=scope.user(f"{run}:{user}"),
+            ttl=60,
+            live=True,
+        ),
+        resource(
+            "scoped-tenant",
+            loader("tenant", tenant),
+            scope=scope.tenant(f"{run}:{tenant}"),
+            ttl=60,
+            live=True,
+        ),
+    ]
+    if tenant == "tenant-a":
+        specs.append(
+            resource(
+                "scoped-secret",
+                lambda: "tenant-a only",
+                scope=scope.tenant(f"{run}:{tenant}"),
+                ttl=60,
+                live=True,
+            )
+        )
+    return Page("distributed-live/index", specs)
+
+
+@flux.mutation("/distributed-scoped/increment")
+async def scoped_increment(request: Request, command: ScopedMutation):
+    user, tenant = _scoped_identity(request)
+    if command.key == "scoped-user":
+        kind, identity, resource_scope = (
+            "user",
+            user,
+            scope.user(f"{command.run}:{user}"),
+        )
+    else:
+        kind, identity, resource_scope = (
+            "tenant",
+            tenant,
+            scope.tenant(f"{command.run}:{tenant}"),
+        )
+    await state.incr(_scoped_value_key(command.run, kind, identity))
+    return mutation(invalidate=[invalidate_resource(command.key, scope=resource_scope)])
+
 
 def _state_key(run: str) -> str:
     return f"{DIAGNOSTIC_PREFIX}:{run}:state"
@@ -80,6 +165,10 @@ def _record_key(run: str, role: str) -> str:
 
 def _claim_key(run: str, role: str) -> str:
     return f"{DIAGNOSTIC_PREFIX}:{run}:claim:{role}"
+
+
+def _calls_key(run: str, role: str) -> str:
+    return f"{DIAGNOSTIC_PREFIX}:{run}:calls:{role}"
 
 
 def _mutation_key(run: str) -> str:
@@ -106,6 +195,9 @@ async def _record(run: str, role: str) -> None:
     key = _record_key(run, role)
     await state.sadd(key, _worker_identity())
     await state.expire(key, 300)
+    calls_key = _calls_key(run, role)
+    await state.incr(calls_key)
+    await state.expire(calls_key, 300)
 
 
 async def _claim_distinct_worker(run: str, role: str) -> bool:
@@ -113,8 +205,7 @@ async def _claim_distinct_worker(run: str, role: str) -> bool:
 
     identity = _worker_identity()
     loader_workers = {
-        value.decode()
-        for value in await state.smembers(_record_key(run, "loader:a"))
+        value.decode() for value in await state.smembers(_record_key(run, "loader:a"))
     }
     if identity in loader_workers:
         return False
@@ -316,17 +407,54 @@ _DIAGNOSTIC_ROLES = (
 @app.get("/distributed-live/diagnostics")
 async def diagnostics(run: str) -> dict[str, object]:
     records: dict[str, list[str]] = {}
+    calls: dict[str, int] = {}
     for role in _DIAGNOSTIC_ROLES:
         values = await state.smembers(_record_key(run, role))
         records[role] = sorted(value.decode() for value in values)
+        calls[role] = int(await state.get(_calls_key(run, role)) or 0)
     raw_value = await state.get(_state_key(run))
+    # Observe real Redis subscribe ACKs, rather than treating the asynchronously
+    # emitted SSE ready frame as proof the broker has established every topic.
+    expected = {}
+    for user, tenant in _SCOPED_SESSIONS.values():
+        user_topic = LIVE_PREFIX + derive_live_topic(
+            scope.user(f"{run}:{user}"), "scoped-user"
+        )
+        tenant_topic = LIVE_PREFIX + derive_live_topic(
+            scope.tenant(f"{run}:{tenant}"), "scoped-tenant"
+        )
+        expected[user_topic] = 1
+        expected[tenant_topic] = expected.get(tenant_topic, 0) + 1
+    actual = {
+        channel.decode(): count
+        for channel, count in await state.pubsub_numsub(*expected)
+    }
     return {
         "records": records,
+        "calls": calls,
+        "scopedReady": actual == expected,
         "state": None if raw_value is None else int(raw_value),
         "workers": sorted(
             value.decode() for value in await state.smembers(_workers_key())
         ),
     }
+
+
+@app.post("/distributed-live/disconnect")
+async def disconnect_after_missed_update(run: str) -> dict[str, int]:
+    """Miss a signal, then drop only this isolated fixture's Pub/Sub clients."""
+
+    await state.incr(_state_key(run))
+    await cache.delete(
+        f"{scope.custom('browser-distributed', run).fingerprint()}::distributed-counter"
+    )
+    disconnected = 0
+    for client in await state.client_list():
+        if client.get("name", "").startswith(
+            f"{DIAGNOSTIC_PREFIX}:broker:"
+        ) and "P" in client.get("flags", ""):
+            disconnected += await state.client_kill_filter(_id=client["id"])
+    return {"disconnected": disconnected}
 
 
 @app.delete("/distributed-live/diagnostics")
@@ -338,10 +466,23 @@ async def clear_diagnostics(run: str) -> dict[str, bool]:
         _mutation_ack_key(run),
     ]
     keys.extend(_record_key(run, role) for role in _DIAGNOSTIC_ROLES)
+    keys.extend(_calls_key(run, role) for role in _DIAGNOSTIC_ROLES)
+    for user, tenant in _SCOPED_SESSIONS.values():
+        keys.extend(
+            [
+                _scoped_value_key(run, "user", user),
+                _scoped_value_key(run, "tenant", tenant),
+            ]
+        )
+        for key, resource_scope in [
+            ("scoped-user", scope.user(f"{run}:{user}")),
+            ("scoped-tenant", scope.tenant(f"{run}:{tenant}")),
+            ("scoped-secret", scope.tenant(f"{run}:{tenant}")),
+        ]:
+            await cache.delete(f"{resource_scope.fingerprint()}::{key}")
     await state.delete(*keys)
     await cache.delete(
-        f'{scope.custom("browser-distributed", run).fingerprint()}'
-        "::distributed-counter"
+        f"{scope.custom('browser-distributed', run).fingerprint()}::distributed-counter"
     )
     return {"cleared": True}
 

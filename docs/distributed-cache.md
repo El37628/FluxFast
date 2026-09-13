@@ -96,7 +96,7 @@ lines are not claimed until they join the compatibility matrix. Follow the
 [Redis version lifecycle](https://redis.io/docs/latest/operate/oss_and_stack/install/version-mgmt/)
 and use a supported patch release in production.
 
-The Python optional dependency currently allows `redis-py` 5.x through 7.x.
+The Python optional dependency currently allows `redis-py` 5.x through 8.x.
 That client version is separate from the Redis server version.
 
 ## Scopes, TTL, and loader behavior
