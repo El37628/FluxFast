@@ -143,12 +143,23 @@ resource keys that have not advanced since it began, and its cached envelope is
 rejected once any prerequisite or returned version conflicts with current
 state.
 
+Per-key epochs distinguish speculative prefetch completions from authoritative
+mutation, resource-load, and live work. A full navigation response still owns
+its page shell, but does not overwrite resource state that became authoritative
+after the visit began. Speculative prefetch cannot veto canonical navigation.
+
 Logout/session clear advances a lifecycle generation before clearing client
 state. Mutation responses from the earlier generation are returned to their
 caller but cannot patch the new session or trigger navigation. A mutation
 redirect is likewise ignored if the user has begun a newer navigation while
 that mutation was pending; its cache invalidation and resource effects remain
 eligible because the server-side mutation may already have committed.
+
+Cached Back/Forward restoration advances navigation authority too, so a late
+mutation redirect cannot jump over it. Resource-only requests capture the same
+lifecycle generation as mutations: late responses cannot write state or emit
+diagnostics after logout or destruction, while failures remain visible to their
+original caller. See the [v1.0 concurrency gate](releases/v1.0-client-authority.md).
 
 ## Live lifecycle
 

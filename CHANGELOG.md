@@ -40,6 +40,16 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   validators, route and mutation helpers, component identifiers, filenames,
   and the complete generated consumer contract.
 
+### Fixed
+
+- Reject late resource-only settlements and diagnostics after logout or router
+  destruction, without hiding failures from their original callers.
+- Treat cached Back/Forward restoration as newer navigation when suppressing
+  obsolete mutation redirects.
+- Preserve newer mutation and refresh resource authority when an older full
+  navigation response arrives, without letting speculative prefetch suppress
+  canonical navigation; stress all ten v1.0 concurrency combinations.
+
 ## [0.9.0] - 2026-09-10
 
 ### Added
