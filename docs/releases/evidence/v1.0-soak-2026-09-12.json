@@ -1,0 +1,3516 @@
+{
+  "status": "passed",
+  "startedAt": "2026-09-12T14:25:15.310Z",
+  "consumerShape": "operations-board-single-worker-memory",
+  "deploymentCount": 1,
+  "requested": {
+    "cyclesPerStart": 200,
+    "starts": 3
+  },
+  "versions": {
+    "node": "v24.19.0",
+    "python": "3.13.14",
+    "sqlite": "3.45.1",
+    "packages": {
+      "h11": "0.16.0",
+      "anyio": "4.15.1",
+      "fluxfast": "0.9.0",
+      "starlette": "1.6.0",
+      "uvicorn": "0.52.4",
+      "pydantic": "2.13.5",
+      "pydantic_core": "2.46.5",
+      "typing-inspection": "0.4.4",
+      "click": "8.5.0",
+      "annotated-doc": "0.0.5",
+      "typing_extensions": "4.16.0",
+      "pip": "26.1.2",
+      "idna": "3.19",
+      "annotated-types": "0.8.0",
+      "fastapi": "0.141.1"
+    },
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "playwright": "1.62.1"
+  },
+  "counts": {
+    "starts": 3,
+    "cycles": 600,
+    "navigations": 1829,
+    "historyRestores": 1200,
+    "successfulMutations": 3610,
+    "nativeValidationBlocks": 3,
+    "expectedServerValidationRejections": 6,
+    "prefetchRequests": 1834,
+    "resourceOnlyRequests": 7302,
+    "knownVersionRequests": 9739,
+    "omittedKnownResources": 12807,
+    "authTransitions": 15,
+    "crossTenantChecks": 603
+  },
+  "phases": [
+    {
+      "index": 0,
+      "startedAt": "2026-09-12T14:25:15.409Z",
+      "cycles": 200,
+      "streams": {
+        "alice": 1211,
+        "bob": 105,
+        "carol": 103
+      },
+      "staticCarolStreamOpens": 100,
+      "memory": [
+        {
+          "cycle": 0,
+          "elapsedMs": 6787,
+          "totalRssKiB": 351564,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "R",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 53408
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 179888
+            }
+          ]
+        },
+        {
+          "cycle": 10,
+          "elapsedMs": 23103,
+          "totalRssKiB": 334568,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 54744
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 161556
+            }
+          ]
+        },
+        {
+          "cycle": 20,
+          "elapsedMs": 35623,
+          "totalRssKiB": 361820,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55004
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 188548
+            }
+          ]
+        },
+        {
+          "cycle": 30,
+          "elapsedMs": 49530,
+          "totalRssKiB": 391124,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55040
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 217816
+            }
+          ]
+        },
+        {
+          "cycle": 40,
+          "elapsedMs": 61847,
+          "totalRssKiB": 418228,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55116
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 244844
+            }
+          ]
+        },
+        {
+          "cycle": 50,
+          "elapsedMs": 74380,
+          "totalRssKiB": 358684,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55136
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 185280
+            }
+          ]
+        },
+        {
+          "cycle": 60,
+          "elapsedMs": 89673,
+          "totalRssKiB": 389224,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55164
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 215792
+            }
+          ]
+        },
+        {
+          "cycle": 70,
+          "elapsedMs": 102226,
+          "totalRssKiB": 410824,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55244
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 237312
+            }
+          ]
+        },
+        {
+          "cycle": 80,
+          "elapsedMs": 116700,
+          "totalRssKiB": 449192,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55260
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 275664
+            }
+          ]
+        },
+        {
+          "cycle": 90,
+          "elapsedMs": 129183,
+          "totalRssKiB": 462572,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55328
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 288976
+            }
+          ]
+        },
+        {
+          "cycle": 100,
+          "elapsedMs": 141716,
+          "totalRssKiB": 463208,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55352
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 289588
+            }
+          ]
+        },
+        {
+          "cycle": 110,
+          "elapsedMs": 156548,
+          "totalRssKiB": 463456,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55376
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 289812
+            }
+          ]
+        },
+        {
+          "cycle": 120,
+          "elapsedMs": 168997,
+          "totalRssKiB": 463708,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55388
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 290052
+            }
+          ]
+        },
+        {
+          "cycle": 130,
+          "elapsedMs": 183542,
+          "totalRssKiB": 463752,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55400
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 290084
+            }
+          ]
+        },
+        {
+          "cycle": 140,
+          "elapsedMs": 196060,
+          "totalRssKiB": 463880,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55412
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 290200
+            }
+          ]
+        },
+        {
+          "cycle": 150,
+          "elapsedMs": 208474,
+          "totalRssKiB": 464728,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46376
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55400
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69972
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 291060
+            }
+          ]
+        },
+        {
+          "cycle": 160,
+          "elapsedMs": 223022,
+          "totalRssKiB": 464340,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46212
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55416
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69808
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1756
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 291148
+            }
+          ]
+        },
+        {
+          "cycle": 170,
+          "elapsedMs": 235567,
+          "totalRssKiB": 464336,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46212
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55412
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69808
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1756
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 291148
+            }
+          ]
+        },
+        {
+          "cycle": 180,
+          "elapsedMs": 248156,
+          "totalRssKiB": 464344,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46212
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55404
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69808
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1756
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 291164
+            }
+          ]
+        },
+        {
+          "cycle": 190,
+          "elapsedMs": 262759,
+          "totalRssKiB": 464400,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46212
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55408
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69808
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1756
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 291216
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 275187,
+          "totalRssKiB": 464484,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46212
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55408
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69808
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1756
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 291300
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 278777,
+          "totalRssKiB": 464552,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46212
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55404
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69808
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1756
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 291372
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 278859,
+          "totalRssKiB": 464556,
+          "processes": [
+            {
+              "pid": 370943,
+              "parent": 370868,
+              "born": "10810368",
+              "state": "S",
+              "rssKiB": 46212
+            },
+            {
+              "pid": 371008,
+              "parent": 370943,
+              "born": "10810421",
+              "state": "S",
+              "rssKiB": 55404
+            },
+            {
+              "pid": 371119,
+              "parent": 370943,
+              "born": "10810495",
+              "state": "S",
+              "rssKiB": 69808
+            },
+            {
+              "pid": 371130,
+              "parent": 371119,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 1756
+            },
+            {
+              "pid": 371131,
+              "parent": 371130,
+              "born": "10810507",
+              "state": "S",
+              "rssKiB": 291376
+            }
+          ]
+        }
+      ],
+      "browserHeap": [
+        {
+          "cycle": 10,
+          "usedJSHeapSize": 7497010
+        },
+        {
+          "cycle": 20,
+          "usedJSHeapSize": 9503043
+        },
+        {
+          "cycle": 30,
+          "usedJSHeapSize": 11164971
+        },
+        {
+          "cycle": 40,
+          "usedJSHeapSize": 15743654
+        },
+        {
+          "cycle": 50,
+          "usedJSHeapSize": 10538454
+        },
+        {
+          "cycle": 60,
+          "usedJSHeapSize": 10685976
+        },
+        {
+          "cycle": 70,
+          "usedJSHeapSize": 19173697
+        },
+        {
+          "cycle": 80,
+          "usedJSHeapSize": 36217179
+        },
+        {
+          "cycle": 90,
+          "usedJSHeapSize": 12180405
+        },
+        {
+          "cycle": 100,
+          "usedJSHeapSize": 33034843
+        },
+        {
+          "cycle": 110,
+          "usedJSHeapSize": 12333560
+        },
+        {
+          "cycle": 120,
+          "usedJSHeapSize": 20251418
+        },
+        {
+          "cycle": 130,
+          "usedJSHeapSize": 21502965
+        },
+        {
+          "cycle": 140,
+          "usedJSHeapSize": 10604386
+        },
+        {
+          "cycle": 150,
+          "usedJSHeapSize": 12080278
+        },
+        {
+          "cycle": 160,
+          "usedJSHeapSize": 36797927
+        },
+        {
+          "cycle": 170,
+          "usedJSHeapSize": 24262092
+        },
+        {
+          "cycle": 180,
+          "usedJSHeapSize": 10072593
+        },
+        {
+          "cycle": 190,
+          "usedJSHeapSize": 28020931
+        },
+        {
+          "cycle": 200,
+          "usedJSHeapSize": 27770412
+        }
+      ],
+      "shutdown": {
+        "elapsedMs": 320,
+        "outcome": {
+          "code": 0,
+          "signal": null
+        },
+        "orphans": []
+      },
+      "startupMs": 1963,
+      "hydrationProbe": {
+        "beforeHydration": "bob",
+        "submittedAccount": "alice",
+        "canonicalAccount": "alice",
+        "displayedName": "Alice"
+      },
+      "identities": [
+        {
+          "requested": "alice",
+          "backend": {
+            "user_id": "alice",
+            "tenant_id": "alpha",
+            "name": "Alice",
+            "email": "alice@soak.invalid",
+            "role": "admin"
+          },
+          "displayed": "Alice"
+        },
+        {
+          "requested": "bob",
+          "backend": {
+            "user_id": "bob",
+            "tenant_id": "alpha",
+            "name": "Bob",
+            "email": "bob@soak.invalid",
+            "role": "member"
+          },
+          "displayed": "Bob"
+        },
+        {
+          "requested": "carol",
+          "backend": {
+            "user_id": "carol",
+            "tenant_id": "beta",
+            "name": "Carol",
+            "email": "carol@soak.invalid",
+            "role": "admin"
+          },
+          "displayed": "Carol"
+        }
+      ],
+      "contextCleanupErrors": [],
+      "serverDiagnostics": {
+        "lines": [],
+        "truncated": false
+      },
+      "elapsedMs": 279182,
+      "runtimeLog": {
+        "sha256": "dcbc178cff2feef44d078c0e23463f249e1272782542e3bb585242de9c5ae133",
+        "bytes": 342673
+      }
+    },
+    {
+      "index": 1,
+      "startedAt": "2026-09-12T14:29:54.591Z",
+      "cycles": 200,
+      "streams": {
+        "alice": 1210,
+        "bob": 105,
+        "carol": 104
+      },
+      "staticCarolStreamOpens": 101,
+      "memory": [
+        {
+          "cycle": 0,
+          "elapsedMs": 8776,
+          "totalRssKiB": 346892,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 46384
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 53540
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 175268
+            }
+          ]
+        },
+        {
+          "cycle": 10,
+          "elapsedMs": 22344,
+          "totalRssKiB": 381888,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 46384
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54520
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 209284
+            }
+          ]
+        },
+        {
+          "cycle": 20,
+          "elapsedMs": 34997,
+          "totalRssKiB": 427044,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 46384
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54972
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 253988
+            }
+          ]
+        },
+        {
+          "cycle": 30,
+          "elapsedMs": 49656,
+          "totalRssKiB": 338664,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 46384
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 55048
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 165532
+            }
+          ]
+        },
+        {
+          "cycle": 40,
+          "elapsedMs": 62235,
+          "totalRssKiB": 362364,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 46384
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 55080
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 189200
+            }
+          ]
+        },
+        {
+          "cycle": 50,
+          "elapsedMs": 77000,
+          "totalRssKiB": 386316,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54416
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 214840
+            }
+          ]
+        },
+        {
+          "cycle": 60,
+          "elapsedMs": 89564,
+          "totalRssKiB": 412732,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54440
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 241232
+            }
+          ]
+        },
+        {
+          "cycle": 70,
+          "elapsedMs": 101980,
+          "totalRssKiB": 335016,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54452
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 163504
+            }
+          ]
+        },
+        {
+          "cycle": 80,
+          "elapsedMs": 117125,
+          "totalRssKiB": 356756,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54512
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 185184
+            }
+          ]
+        },
+        {
+          "cycle": 90,
+          "elapsedMs": 129876,
+          "totalRssKiB": 386824,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54556
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 215208
+            }
+          ]
+        },
+        {
+          "cycle": 100,
+          "elapsedMs": 145802,
+          "totalRssKiB": 415008,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54584
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 243364
+            }
+          ]
+        },
+        {
+          "cycle": 110,
+          "elapsedMs": 158635,
+          "totalRssKiB": 443356,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54624
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 271672
+            }
+          ]
+        },
+        {
+          "cycle": 120,
+          "elapsedMs": 171269,
+          "totalRssKiB": 443940,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54652
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 272228
+            }
+          ]
+        },
+        {
+          "cycle": 130,
+          "elapsedMs": 186293,
+          "totalRssKiB": 444068,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54668
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 272340
+            }
+          ]
+        },
+        {
+          "cycle": 140,
+          "elapsedMs": 198619,
+          "totalRssKiB": 444192,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54692
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 272440
+            }
+          ]
+        },
+        {
+          "cycle": 150,
+          "elapsedMs": 211183,
+          "totalRssKiB": 445372,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54776
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 273536
+            }
+          ]
+        },
+        {
+          "cycle": 160,
+          "elapsedMs": 226303,
+          "totalRssKiB": 445396,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54776
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 273560
+            }
+          ]
+        },
+        {
+          "cycle": 170,
+          "elapsedMs": 239087,
+          "totalRssKiB": 445428,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54780
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 273588
+            }
+          ]
+        },
+        {
+          "cycle": 180,
+          "elapsedMs": 253984,
+          "totalRssKiB": 446016,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54780
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 274176
+            }
+          ]
+        },
+        {
+          "cycle": 190,
+          "elapsedMs": 266466,
+          "totalRssKiB": 446020,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54780
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 274180
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 278899,
+          "totalRssKiB": 446092,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54780
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 274252
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 284923,
+          "totalRssKiB": 446516,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54780
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 274676
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 284997,
+          "totalRssKiB": 446516,
+          "processes": [
+            {
+              "pid": 372897,
+              "parent": 370868,
+              "born": "10836622",
+              "state": "S",
+              "rssKiB": 45360
+            },
+            {
+              "pid": 372898,
+              "parent": 372897,
+              "born": "10836698",
+              "state": "S",
+              "rssKiB": 54780
+            },
+            {
+              "pid": 372915,
+              "parent": 372897,
+              "born": "10836768",
+              "state": "S",
+              "rssKiB": 69780
+            },
+            {
+              "pid": 372926,
+              "parent": 372915,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 1920
+            },
+            {
+              "pid": 372927,
+              "parent": 372926,
+              "born": "10836783",
+              "state": "S",
+              "rssKiB": 274676
+            }
+          ]
+        }
+      ],
+      "browserHeap": [
+        {
+          "cycle": 10,
+          "usedJSHeapSize": 10332310
+        },
+        {
+          "cycle": 20,
+          "usedJSHeapSize": 9847743
+        },
+        {
+          "cycle": 30,
+          "usedJSHeapSize": 19954373
+        },
+        {
+          "cycle": 40,
+          "usedJSHeapSize": 12939314
+        },
+        {
+          "cycle": 50,
+          "usedJSHeapSize": 16859845
+        },
+        {
+          "cycle": 60,
+          "usedJSHeapSize": 17640532
+        },
+        {
+          "cycle": 70,
+          "usedJSHeapSize": 17658257
+        },
+        {
+          "cycle": 80,
+          "usedJSHeapSize": 11899858
+        },
+        {
+          "cycle": 90,
+          "usedJSHeapSize": 17890854
+        },
+        {
+          "cycle": 100,
+          "usedJSHeapSize": 19266519
+        },
+        {
+          "cycle": 110,
+          "usedJSHeapSize": 16168901
+        },
+        {
+          "cycle": 120,
+          "usedJSHeapSize": 32849567
+        },
+        {
+          "cycle": 130,
+          "usedJSHeapSize": 35493720
+        },
+        {
+          "cycle": 140,
+          "usedJSHeapSize": 36634792
+        },
+        {
+          "cycle": 150,
+          "usedJSHeapSize": 15817813
+        },
+        {
+          "cycle": 160,
+          "usedJSHeapSize": 18702550
+        },
+        {
+          "cycle": 170,
+          "usedJSHeapSize": 15478956
+        },
+        {
+          "cycle": 180,
+          "usedJSHeapSize": 17759670
+        },
+        {
+          "cycle": 190,
+          "usedJSHeapSize": 14784103
+        },
+        {
+          "cycle": 200,
+          "usedJSHeapSize": 18300411
+        }
+      ],
+      "shutdown": {
+        "elapsedMs": 258,
+        "outcome": {
+          "code": 0,
+          "signal": null
+        },
+        "orphans": []
+      },
+      "startupMs": 2238,
+      "identities": [
+        {
+          "requested": "alice",
+          "backend": {
+            "user_id": "alice",
+            "tenant_id": "alpha",
+            "name": "Alice release 1",
+            "email": "alice@soak.invalid",
+            "role": "admin"
+          },
+          "displayed": "Alice release 1"
+        },
+        {
+          "requested": "bob",
+          "backend": {
+            "user_id": "bob",
+            "tenant_id": "alpha",
+            "name": "Bob",
+            "email": "bob@soak.invalid",
+            "role": "member"
+          },
+          "displayed": "Bob"
+        },
+        {
+          "requested": "carol",
+          "backend": {
+            "user_id": "carol",
+            "tenant_id": "beta",
+            "name": "Carol",
+            "email": "carol@soak.invalid",
+            "role": "admin"
+          },
+          "displayed": "Carol"
+        }
+      ],
+      "contextCleanupErrors": [],
+      "serverDiagnostics": {
+        "lines": [],
+        "truncated": false
+      },
+      "elapsedMs": 285256,
+      "runtimeLog": {
+        "sha256": "fb254b16f28dd82dc5582887fac1e446930457948361d0033292e55fd878d030",
+        "bytes": 343098
+      }
+    },
+    {
+      "index": 2,
+      "startedAt": "2026-09-12T14:34:39.847Z",
+      "cycles": 200,
+      "streams": {
+        "alice": 1209,
+        "bob": 105,
+        "carol": 104
+      },
+      "staticCarolStreamOpens": 101,
+      "memory": [
+        {
+          "cycle": 0,
+          "elapsedMs": 5468,
+          "totalRssKiB": 346704,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 53148
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 175556
+            }
+          ]
+        },
+        {
+          "cycle": 10,
+          "elapsedMs": 19825,
+          "totalRssKiB": 379340,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 53740
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 207600
+            }
+          ]
+        },
+        {
+          "cycle": 20,
+          "elapsedMs": 34703,
+          "totalRssKiB": 387160,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 53844
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 215316
+            }
+          ]
+        },
+        {
+          "cycle": 30,
+          "elapsedMs": 47269,
+          "totalRssKiB": 354004,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 53916
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 182088
+            }
+          ]
+        },
+        {
+          "cycle": 40,
+          "elapsedMs": 59668,
+          "totalRssKiB": 386584,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54132
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 214452
+            }
+          ]
+        },
+        {
+          "cycle": 50,
+          "elapsedMs": 74972,
+          "totalRssKiB": 406588,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54308
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 234280
+            }
+          ]
+        },
+        {
+          "cycle": 60,
+          "elapsedMs": 87539,
+          "totalRssKiB": 449000,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54324
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 276676
+            }
+          ]
+        },
+        {
+          "cycle": 70,
+          "elapsedMs": 99905,
+          "totalRssKiB": 451900,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54364
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 279536
+            }
+          ]
+        },
+        {
+          "cycle": 80,
+          "elapsedMs": 114777,
+          "totalRssKiB": 354868,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54572
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 182296
+            }
+          ]
+        },
+        {
+          "cycle": 90,
+          "elapsedMs": 127665,
+          "totalRssKiB": 386088,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54676
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 213412
+            }
+          ]
+        },
+        {
+          "cycle": 100,
+          "elapsedMs": 141852,
+          "totalRssKiB": 392660,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54680
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 219980
+            }
+          ]
+        },
+        {
+          "cycle": 110,
+          "elapsedMs": 154136,
+          "totalRssKiB": 438684,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54696
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 265988
+            }
+          ]
+        },
+        {
+          "cycle": 120,
+          "elapsedMs": 166540,
+          "totalRssKiB": 439116,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54732
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 266384
+            }
+          ]
+        },
+        {
+          "cycle": 130,
+          "elapsedMs": 181166,
+          "totalRssKiB": 439364,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54800
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 266564
+            }
+          ]
+        },
+        {
+          "cycle": 140,
+          "elapsedMs": 193801,
+          "totalRssKiB": 439464,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54804
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 266660
+            }
+          ]
+        },
+        {
+          "cycle": 150,
+          "elapsedMs": 208594,
+          "totalRssKiB": 439944,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54812
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 267132
+            }
+          ]
+        },
+        {
+          "cycle": 160,
+          "elapsedMs": 221360,
+          "totalRssKiB": 440172,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54820
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 267352
+            }
+          ]
+        },
+        {
+          "cycle": 170,
+          "elapsedMs": 233893,
+          "totalRssKiB": 440192,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54820
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 267372
+            }
+          ]
+        },
+        {
+          "cycle": 180,
+          "elapsedMs": 246492,
+          "totalRssKiB": 440328,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54828
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 267500
+            }
+          ]
+        },
+        {
+          "cycle": 190,
+          "elapsedMs": 262441,
+          "totalRssKiB": 440420,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54844
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 267576
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 274927,
+          "totalRssKiB": 440468,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54844
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 267624
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 277876,
+          "totalRssKiB": 440928,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54844
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 268084
+            }
+          ]
+        },
+        {
+          "cycle": 200,
+          "elapsedMs": 277919,
+          "totalRssKiB": 440928,
+          "processes": [
+            {
+              "pid": 375015,
+              "parent": 370868,
+              "born": "10862982",
+              "state": "S",
+              "rssKiB": 46140
+            },
+            {
+              "pid": 375016,
+              "parent": 375015,
+              "born": "10863034",
+              "state": "S",
+              "rssKiB": 54844
+            },
+            {
+              "pid": 375017,
+              "parent": 375015,
+              "born": "10863093",
+              "state": "S",
+              "rssKiB": 69936
+            },
+            {
+              "pid": 375028,
+              "parent": 375017,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 1924
+            },
+            {
+              "pid": 375029,
+              "parent": 375028,
+              "born": "10863105",
+              "state": "S",
+              "rssKiB": 268084
+            }
+          ]
+        }
+      ],
+      "browserHeap": [
+        {
+          "cycle": 10,
+          "usedJSHeapSize": 14094146
+        },
+        {
+          "cycle": 20,
+          "usedJSHeapSize": 13441885
+        },
+        {
+          "cycle": 30,
+          "usedJSHeapSize": 19297959
+        },
+        {
+          "cycle": 40,
+          "usedJSHeapSize": 16635260
+        },
+        {
+          "cycle": 50,
+          "usedJSHeapSize": 17404739
+        },
+        {
+          "cycle": 60,
+          "usedJSHeapSize": 19523054
+        },
+        {
+          "cycle": 70,
+          "usedJSHeapSize": 15123435
+        },
+        {
+          "cycle": 80,
+          "usedJSHeapSize": 25786878
+        },
+        {
+          "cycle": 90,
+          "usedJSHeapSize": 9414283
+        },
+        {
+          "cycle": 100,
+          "usedJSHeapSize": 18356785
+        },
+        {
+          "cycle": 110,
+          "usedJSHeapSize": 18737916
+        },
+        {
+          "cycle": 120,
+          "usedJSHeapSize": 9833653
+        },
+        {
+          "cycle": 130,
+          "usedJSHeapSize": 11844020
+        },
+        {
+          "cycle": 140,
+          "usedJSHeapSize": 20048266
+        },
+        {
+          "cycle": 150,
+          "usedJSHeapSize": 19036303
+        },
+        {
+          "cycle": 160,
+          "usedJSHeapSize": 20299828
+        },
+        {
+          "cycle": 170,
+          "usedJSHeapSize": 11795549
+        },
+        {
+          "cycle": 180,
+          "usedJSHeapSize": 12019667
+        },
+        {
+          "cycle": 190,
+          "usedJSHeapSize": 11509675
+        },
+        {
+          "cycle": 200,
+          "usedJSHeapSize": 10106267
+        }
+      ],
+      "shutdown": {
+        "elapsedMs": 292,
+        "outcome": {
+          "code": 0,
+          "signal": null
+        },
+        "orphans": []
+      },
+      "startupMs": 1890,
+      "identities": [
+        {
+          "requested": "alice",
+          "backend": {
+            "user_id": "alice",
+            "tenant_id": "alpha",
+            "name": "Alice release 2",
+            "email": "alice@soak.invalid",
+            "role": "admin"
+          },
+          "displayed": "Alice release 2"
+        },
+        {
+          "requested": "bob",
+          "backend": {
+            "user_id": "bob",
+            "tenant_id": "alpha",
+            "name": "Bob",
+            "email": "bob@soak.invalid",
+            "role": "member"
+          },
+          "displayed": "Bob"
+        },
+        {
+          "requested": "carol",
+          "backend": {
+            "user_id": "carol",
+            "tenant_id": "beta",
+            "name": "Carol",
+            "email": "carol@soak.invalid",
+            "role": "admin"
+          },
+          "displayed": "Carol"
+        }
+      ],
+      "contextCleanupErrors": [],
+      "serverDiagnostics": {
+        "lines": [],
+        "truncated": false
+      },
+      "elapsedMs": 278212,
+      "runtimeLog": {
+        "sha256": "4cfeed9dcaa3d8441e8f27b81a10d6ad1092f78a294efce70e3107e03b9b4c97",
+        "bytes": 347739
+      }
+    }
+  ],
+  "browserExceptions": [],
+  "consoleMessages": [
+    {
+      "phase": 0,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 0,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 1,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 1,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 2,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 2,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    }
+  ],
+  "unexpectedResponses": [],
+  "generatedInputChanges": [],
+  "generatedInputs": {
+    "src/.fluxfast/mutations.generated.ts": "db1ecb905a3b7b9d0f91210dc86d8b8faeba4dba68fcf45ddb4e5bfe83da5a5d",
+    "src/.fluxfast/pages.generated.ts": "6c392e15000413c1bddd817db2d324e9ffc24f58464a4428ee5e01ddc5ea70dd",
+    "src/.fluxfast/routes.generated.ts": "e7c5e92852310c76230b4f5b384597e28ff0445c5529b7cbc119642b3d56fc8e",
+    "src/.fluxfast/schema.generated.json": "541269c2e44703e34ee28b0cb3a1603c0ce36342c4995c30a8a3fed6864314fa",
+    "src/.fluxfast/types.generated.ts": "3e4822770a772c7e4ff11ff702409e7c0b8590fff9945ed5a571322e22eed1bf",
+    "src/.fluxfast/validators.generated.ts": "182b9214ef84e2724259d46bb7e9d8f12a05f4064ecf3d424080ce3d83d6a94c"
+  },
+  "runtime": {
+    "fluxfast": "0.9.0",
+    "python": "3.13.14",
+    "sqlite": "3.45.1",
+    "deployment": "single-worker-memory"
+  },
+  "expectedValidationDiagnostics": [
+    {
+      "phase": 0,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 0,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 1,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 1,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 2,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    },
+    {
+      "phase": 2,
+      "user": "alice",
+      "type": "error",
+      "message": "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)",
+      "path": "/tasks"
+    }
+  ],
+  "unexpectedConsoleMessages": [],
+  "endedAt": "2026-09-12T14:39:18.101Z",
+  "elapsedMs": 842791,
+  "provenance": {
+    "applicationCommit": "e1c401999c7b080890df3feefb44fd99e877c227",
+    "rawReportSha256": "29194662b18e734b065beb6e0fa67be800b54f2207b2b3225c78f36d32df635e",
+    "omissions": "Runtime log tails and machine-local paths omitted; complete measurement arrays retained."
+  }
+}

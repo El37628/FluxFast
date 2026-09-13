@@ -28,7 +28,9 @@ jobs:
           python -m ruff check python/fluxfast
           tests/release-consumer/next-init/backend.py
           tests/release-artifacts
+          tests/soak
           scripts/verify_release_artifacts.py
       - run: >-
           python -m pytest -q python/fluxfast/tests
           tests/release-artifacts
+          tests/soak/test_board.py
