@@ -22,7 +22,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Add an isolated, SQLite-backed Operations Board for published v0.9 soak
   evidence, with multi-identity browser workflows, restart persistence,
   reconnect/memory/file-integrity observations, and regression tests for the
-  application and evidence collector. Full soak acceptance remains pending.
+  application and evidence collector. Record the completed 600-cycle production
+  workload, its incidents, measured results, and duration/memory limitations.
 
 ## [0.9.0] - 2026-09-10
 
