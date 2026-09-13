@@ -1,0 +1,51 @@
+{
+  "capturedFrom": "@fluxfast/next@0.9.0",
+  "candidatePackage": "1.0.0",
+  "generatedArtifacts": [
+    "mutations.generated.ts",
+    "pages.generated.ts",
+    "routes.generated.ts",
+    "schema.generated.json",
+    "types.generated.ts",
+    "validators.generated.ts"
+  ],
+  "sourceFingerprints": {
+    "mutations.generated.ts": "503b4db51555e0e348b196fffe6881a31e76df2299ffda5770569c1a94892cd9",
+    "pages.generated.ts": "78e158ea79b436dc6d4ca050e9cfa8c2dfd9d9201528e1e3f0c46a59d4b13bbd",
+    "routes.generated.ts": "2a94771773c24f3e1cf2e192b2bb470f587fb91ceac525e16dbba8c6582ef18f",
+    "types.generated.ts": "0446efada1522767a25145c09bf35d3faddb46367d0b8ef17e28a4a1208d3950",
+    "validators.generated.ts": "2242dc5141661ed04f700c1c1baa45d7f7539cdb57475ec7593530079336de8e"
+  },
+  "semanticExports": {
+    "domainInterfaces": [
+      "CreateRoomInput",
+      "Room",
+      "UpdateRoomBody",
+      "User"
+    ],
+    "resourceAliases": {
+      "RoomsResource": "Room[]"
+    },
+    "resourceKeys": {
+      "rooms": "rooms"
+    },
+    "resourceMap": {
+      "rooms": "RoomsResource"
+    },
+    "resourceMapAugmentation": {
+      "rooms": "RoomsResource"
+    },
+    "validatorExports": [
+      "CreateRoomInputValidator",
+      "UpdateRoomBodyValidator",
+      "UserValidator",
+      "validatorDiagnostics",
+      "validators"
+    ],
+    "validators": ["CreateRoomInput", "UpdateRoomBody", "User"],
+    "routeBuilders": ["hotelRooms"],
+    "mutationHelpers": ["updateRoom"],
+    "componentRegistryIdentifiers": ["hotel_rooms/index"],
+    "pageExports": ["FluxApplication", "default", "fluxPages"]
+  }
+}

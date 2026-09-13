@@ -35,6 +35,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   contract, with an independently pinned v0.9.0 baseline, an exact
   producer-only candidate delta, stable semantic fingerprint, schema/1 and
   schema/2 readers, and explicit schema/3 rejection.
+- Freeze v0.9.0 generated TypeScript fingerprints and semantic exports, then
+  prove the v1.0 candidate retains domain interfaces, resource maps and keys,
+  validators, route and mutation helpers, component identifiers, filenames,
+  and the complete generated consumer contract.
 
 ## [0.9.0] - 2026-09-10
 
