@@ -70,6 +70,7 @@ test("keeps all workspace tooling and runtime resolutions on the reviewed set", 
   assert.deepEqual(Object.keys(facts.javascriptRuntime).sort(), [
     "next", "react", "react-dom",
   ]);
+  assert.deepEqual(facts.javascriptTransitive, { rollup: "4.63.2" });
   const frozen = { ...facts.javascriptTooling, ...facts.javascriptRuntime };
   const seen = new Set();
   const lock = read("pnpm-lock.yaml");
@@ -91,6 +92,7 @@ test("keeps all workspace tooling and runtime resolutions on the reviewed set", 
   }
   assert.deepEqual([...seen].sort(), Object.keys(frozen).sort());
   assert.equal(JSON.parse(read("package.json")).pnpm.overrides["@types/node"], frozen["@types/node"]);
+  assert.match(lock, new RegExp(`^  rollup@${facts.javascriptTransitive.rollup}:$`, "m"));
 });
 
 test("records the actual Python lock reference", () => {
