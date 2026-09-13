@@ -141,6 +141,15 @@ contracts and code generation](type-safety.md), [General Application
 Contracts](contracts.md), the [Migration Guide](migration.md), and [the release
 guide](releasing.md) for clean-consumer requirements.
 
+The 1.0 promotion gate advances the adjacent baseline to v0.9.0. It exercises
+current-source Python with published v0.9 JavaScript, current-source JavaScript
+with published v0.9 Python, the matched current-source candidate, and a complete
+rollback to published v0.9.0. Every state regenerates and typechecks contracts,
+builds and runs the Next.js production server, and verifies SSR, navigation,
+resource-delta reuse, server validation, mutations, deferred/live resources,
+and Redis behavior across independent workers. A single-direction v0.8.1 smoke
+remains as inexpensive historical evidence; it is no longer the adjacent gate.
+
 ## Production runtime compatibility
 
 FluxFast 0.7 adds production orchestration without changing the `fluxfast/1`

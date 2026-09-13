@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Link,
   useDeferredResource,
@@ -51,6 +51,16 @@ export default function HomePage() {
   const identity = useMemo(() => identityFromUrl(page.url), [page.url]);
   const summary = useResource(resourceKeys.distributedSummary);
   const counter = useDeferredResource(resourceKeys.distributedCounter);
+  const [validationError, setValidationError] = useState<string>();
+
+  async function submitInvalidIdentity() {
+    try {
+      await router.mutate("/increment", { run: "", client: "invalid" });
+      setValidationError("Invalid identity was unexpectedly accepted");
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : "Validation failed");
+    }
+  }
 
   if (counter.data) verifySchemaTwoImports(counter.data, summary);
 
@@ -74,6 +84,10 @@ export default function HomePage() {
       >
         Increment distributed counter
       </button>
+      <button type="button" onClick={() => void submitInvalidIdentity()}>
+        Submit invalid identity
+      </button>
+      {validationError ? <p role="alert">{validationError}</p> : null}
       <Link
         href={`/details?${new URLSearchParams({
           run: identity.run,

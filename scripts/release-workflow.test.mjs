@@ -144,12 +144,17 @@ test("runs the full packed v0.9 release-candidate consumer", () => {
   assert.match(runtime, /FLUXFAST_CONSUMER_PRODUCTION/);
 });
 
-test("v0.9 compatibility gates exercise both v0.8.1 upgrade orders and rollback", () => {
+test("v1.0 compatibility gates exercise both v0.9.0 upgrade orders and rollback", () => {
   const branchSmoke = jobBlock(readWorkflow("release-smoke.yml"), "mixed-version-consumers");
-  assert.match(branchSmoke, /name: v0\.8\.1 upgrade and rollback compatibility/);
+  assert.match(branchSmoke, /name: v0\.9\.0 adjacent upgrade and rollback compatibility/);
+  assert.equal(
+    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.9\.0/g)?.length,
+    2
+  );
+  assert.match(branchSmoke, /Verify historical Python candidate with JavaScript 0\.8\.1/);
   assert.equal(
     branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.8\.1/g)?.length,
-    2
+    1
   );
   assert.equal(branchSmoke.match(/FLUXFAST_UPGRADE_SEQUENCE: "1"/g)?.length, 2);
   assert.equal(branchSmoke.match(/FLUXFAST_CURRENT_PYTHON_SPEC=/g)?.length, 2);
@@ -163,14 +168,15 @@ test("v0.9 compatibility gates exercise both v0.8.1 upgrade orders and rollback"
   );
   assert.match(
     publishedSmoke,
-    /Verify published v0\.9\/0\.8\.1 upgrade and rollback/
+    /Verify published v1\.0\/v0\.9\.0 upgrade and rollback/
   );
   assert.equal(
-    publishedSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.8\.1/g)?.length,
+    publishedSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.9\.0/g)?.length,
     2
   );
+  assert.match(publishedSmoke, /playwright@1\.63\.0/);
   assert.equal(publishedSmoke.match(/FLUXFAST_UPGRADE_SEQUENCE: "1"/g)?.length, 2);
-  assert.doesNotMatch(publishedSmoke, /0\.8\.0/);
+  assert.doesNotMatch(publishedSmoke, /0\.8\.1/);
 });
 
 test("freezes the v0.9 runtime support matrix in metadata and CI", () => {

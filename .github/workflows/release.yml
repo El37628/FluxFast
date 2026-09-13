@@ -259,7 +259,7 @@ jobs:
           publish_package "@fluxfast/next" "${GITHUB_REF_NAME#v}" "${next_tarballs[0]}"
 
   verify-published-mixed-version:
-    name: Verify published v0.9/0.8.1 upgrade and rollback
+    name: Verify published v1.0/v0.9.0 upgrade and rollback
     needs: [publish-pypi, publish-npm]
     runs-on: ubuntu-latest
     services:
@@ -286,13 +286,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Chromium
-        run: npx --yes playwright@1.62.1 install --with-deps chromium
+        run: npx --yes playwright@1.63.0 install --with-deps chromium
       - name: Verify current Python with previous JavaScript packages
         env:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PAIRING: python-current
           FLUXFAST_RELEASE_VERSION: ${{ github.ref_name }}
-          FLUXFAST_PREVIOUS_VERSION: 0.8.1
+          FLUXFAST_PREVIOUS_VERSION: 0.9.0
           FLUXFAST_UPGRADE_SEQUENCE: "1"
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
         run: node scripts/test-published-mixed-consumer.mjs
@@ -301,7 +301,7 @@ jobs:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PAIRING: javascript-current
           FLUXFAST_RELEASE_VERSION: ${{ github.ref_name }}
-          FLUXFAST_PREVIOUS_VERSION: 0.8.1
+          FLUXFAST_PREVIOUS_VERSION: 0.9.0
           FLUXFAST_UPGRADE_SEQUENCE: "1"
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
         run: node scripts/test-published-mixed-consumer.mjs
