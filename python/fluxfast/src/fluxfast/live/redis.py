@@ -92,7 +92,11 @@ class RedisLiveBroker:
         self.max_message_bytes = max_message_bytes
         self._owns_client = owns_client
         self._lock = anyio.Lock()
+        self._close_lock = anyio.Lock()
+        self._closing_task_id: int | None = None
         self._subscriptions: set[_RedisPubSub] = set()
+        self._pending_subscriptions: set[_RedisPubSub] = set()
+        self._subscription_io: dict[_RedisPubSub, anyio.CancelScope] = {}
         self._closed = False
 
     @classmethod
@@ -143,24 +147,46 @@ class RedisLiveBroker:
         normalized_topics = _validate_topics(topics)
         channels = tuple(self._channel(topic) for topic in normalized_topics)
         pubsub = self._client.pubsub(ignore_subscribe_messages=True)
-        async with self._lock:
-            if self._closed:
-                await pubsub.aclose()
-                raise RuntimeError("live broker is closed")
-
+        subscribed = False
         try:
-            await pubsub.subscribe(*channels)
+            # Cancel only I/O, never a scope spanning an async-generator yield.
+            # redis-py may reconnect a local connection after aclose released
+            # it to the pool unless its concurrent read/handshake stops first.
+            with anyio.CancelScope() as handshake:
+                async with self._lock:
+                    if self._closed:
+                        raise RuntimeError("live broker is closed")
+                    self._pending_subscriptions.add(pubsub)
+                    self._subscription_io[pubsub] = handshake
+                try:
+                    await pubsub.subscribe(*channels)
+                finally:
+                    self._subscription_io.pop(pubsub, None)
+            if handshake.cancel_called:
+                return
+            subscribed = True
             async with self._lock:
+                self._pending_subscriptions.discard(pubsub)
                 if self._closed:
                     return
                 self._subscriptions.add(pubsub)
 
             while True:
                 try:
-                    message = await pubsub.get_message(
-                        ignore_subscribe_messages=True,
-                        timeout=1.0,
-                    )
+                    with anyio.CancelScope() as reading:
+                        async with self._lock:
+                            if self._closed:
+                                return
+                            self._subscription_io[pubsub] = reading
+                        try:
+                            message = await pubsub.get_message(
+                                ignore_subscribe_messages=True,
+                                timeout=1.0,
+                            )
+                        finally:
+                            self._subscription_io.pop(pubsub, None)
+                    if reading.cancel_called:
+                        return
                 # redis-py and provider transports expose several exception
                 # families; every disconnect follows the same safe recovery.
                 except Exception as error:  # noqa: BLE001
@@ -193,28 +219,53 @@ class RedisLiveBroker:
                 except ValidationError as error:
                     raise ValueError("Redis live message is not a valid event") from error
         finally:
-            async with self._lock:
-                self._subscriptions.discard(pubsub)
             with anyio.CancelScope(shield=True):
-                with suppress(Exception):
-                    await pubsub.unsubscribe(*channels)
-                await pubsub.aclose()
+                async with self._lock:
+                    self._subscriptions.discard(pubsub)
+                    self._pending_subscriptions.discard(pubsub)
+                try:
+                    if subscribed and not self._closed:
+                        with suppress(Exception):
+                            await pubsub.unsubscribe(*channels)
+                finally:
+                    await pubsub.aclose()
 
     async def close(self) -> None:
         """Close subscriptions and the owned Redis client idempotently."""
 
-        async with self._lock:
-            if self._closed:
-                return
-            self._closed = True
-            subscriptions = tuple(self._subscriptions)
-            self._subscriptions.clear()
-
-        for pubsub in subscriptions:
-            with anyio.CancelScope(shield=True):
-                await pubsub.aclose()
-        if self._owns_client:
-            await self._client.aclose()
+        task_id = anyio.get_current_task().id
+        if self._closing_task_id == task_id:
+            return
+        with anyio.CancelScope(shield=True):
+            async with self._close_lock:
+                self._closing_task_id = task_id
+                try:
+                    async with self._lock:
+                        if self._closed:
+                            return
+                        self._closed = True
+                        for pending_io in tuple(self._subscription_io.values()):
+                            pending_io.cancel()
+                        subscriptions = tuple(self._subscriptions | self._pending_subscriptions)
+                        self._subscriptions.clear()
+                        self._pending_subscriptions.clear()
+                    first_error: Exception | None = None
+                    for pubsub in subscriptions:
+                        try:
+                            await pubsub.aclose()
+                        except Exception as error:  # noqa: BLE001
+                            if first_error is None:
+                                first_error = error
+                    if self._owns_client:
+                        try:
+                            await self._client.aclose()
+                        except Exception as error:  # noqa: BLE001
+                            if first_error is None:
+                                first_error = error
+                    if first_error is not None:
+                        raise first_error
+                finally:
+                    self._closing_task_id = None
 
     async def healthcheck(self) -> bool:
         """Return whether the external Redis broker is currently reachable."""

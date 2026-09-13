@@ -228,6 +228,24 @@ and kills a child that does not exit. A requested clean shutdown exits `0`. If
 either child exits unexpectedly, FluxFast stops its sibling and exits non-zero;
 it never intentionally leaves half of the application running.
 
+Shutdown covers descendants in the owned process groups even when their direct
+parent has already exited. They share the existing graceful deadline and bounded
+kill/reap fallback. When FluxFast is PID 1 or a subreaper, it also reaps adopted
+descendants from those groups; it does not reap unrelated application children.
+Development supervision restores both SIGTERM and SIGINT handlers and continues
+sibling cleanup if one stop operation fails.
+
+FluxFast composes the application's existing FastAPI lifespan, preserving its
+yielded state and closing owned broker/cache dependencies after application
+teardown, including failed startup or teardown. Readiness stops before teardown.
+Concurrent `close()` callers wait for the same cleanup; reentrant calls from
+that cleanup do not deadlock. AnyIO cancellation does not skip dependency
+cleanup, and externally supplied Redis clients remain application-owned. This
+does not extend the process supervisor's shutdown deadline: forced termination
+remains the fallback for an application or dependency that will not stop.
+See the [v1.0 server lifecycle gate](releases/v1.0-server-lifecycle.md) for
+repeatable real-process and real-Redis coverage.
+
 Common `fluxfast start` status codes are:
 
 | Status | Meaning |

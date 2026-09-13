@@ -18,6 +18,7 @@ from types import FrameType
 from fastapi import FastAPI
 
 from . import __version__
+from ._process_lifecycle import stop_process_tree
 from .application_import import ApplicationImportError, load_fastapi_application
 from .production import (
     ManagedProcessError,
@@ -170,20 +171,9 @@ def _process_kwargs() -> dict[str, object]:
 
 
 def _stop_process(process: subprocess.Popen[bytes] | None) -> None:
-    if process is None or process.poll() is not None:
+    if process is None:
         return
-    if os.name == "posix":
-        os.killpg(process.pid, signal.SIGTERM)
-    else:
-        process.terminate()
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        if os.name == "posix":
-            os.killpg(process.pid, signal.SIGKILL)
-        else:
-            process.kill()
-        process.wait(timeout=5)
+    stop_process_tree(process, 5, kill_timeout=5)
 
 
 def _wait_for_backend(
@@ -247,12 +237,19 @@ def run_dev(config: DevConfig) -> int:
 
     backend_process: subprocess.Popen[bytes] | None = None
     frontend_process: subprocess.Popen[bytes] | None = None
-    previous_sigterm = signal.getsignal(signal.SIGTERM)
+    handled_signals = (signal.SIGTERM, signal.SIGINT)
+    previous_handlers = {signum: signal.getsignal(signum) for signum in handled_signals}
+    shutdown_requested = False
 
     def request_shutdown(_signum: int, _frame: FrameType | None) -> None:
+        nonlocal shutdown_requested
+        if shutdown_requested:
+            return
+        shutdown_requested = True
         raise KeyboardInterrupt
 
-    signal.signal(signal.SIGTERM, request_shutdown)
+    for signum in handled_signals:
+        signal.signal(signum, request_shutdown)
     try:
         backend_process = subprocess.Popen(backend_command, **_process_kwargs())
         _wait_for_backend(
@@ -279,9 +276,15 @@ def run_dev(config: DevConfig) -> int:
     except KeyboardInterrupt:
         return 0
     finally:
-        _stop_process(frontend_process)
-        _stop_process(backend_process)
-        signal.signal(signal.SIGTERM, previous_sigterm)
+        shutdown_requested = True
+        try:
+            _stop_process(frontend_process)
+        finally:
+            try:
+                _stop_process(backend_process)
+            finally:
+                for signum, handler in previous_handlers.items():
+                    signal.signal(signum, handler)
 
 
 def _load_schema_app(app_import: str) -> FastAPI:

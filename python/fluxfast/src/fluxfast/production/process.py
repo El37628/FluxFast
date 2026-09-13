@@ -5,8 +5,11 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+
+from .._process_lifecycle import signal_process_tree, stop_process_tree
 
 
 class ManagedProcessError(RuntimeError):
@@ -90,16 +93,13 @@ class ManagedProcess:
 
     def _signal_process_group(self, signum: signal.Signals) -> None:
         process = self._require_started()
-        if process.poll() is not None:
-            return
+        signal_process_tree(process, signum)
 
-        try:
-            if os.name == "posix":
-                os.killpg(process.pid, signum)
-            elif signum == signal.SIGTERM:
-                process.terminate()
-            else:
-                process.kill()
-        except ProcessLookupError:
-            # The child can exit between poll() and signal delivery.
-            return
+    def _stop_tree(
+        self,
+        timeout: float,
+        *,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        stop_process_tree(self._require_started(), timeout, monotonic=monotonic, sleep=sleep)

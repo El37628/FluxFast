@@ -185,7 +185,7 @@ def test_managed_process_terminates_and_kills_the_posix_process_group(
     assert signals == [(process.pid, 15), (process.pid, 9)]
 
 
-def test_managed_process_does_not_signal_an_exited_child(
+def test_managed_process_tolerates_an_exited_empty_process_group(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     process = FakeProcess(["server"])
@@ -194,15 +194,19 @@ def test_managed_process_does_not_signal_an_exited_child(
         "fluxfast.production.process.subprocess.Popen",
         lambda *_args, **_kwargs: process,
     )
-    monkeypatch.setattr(
-        "fluxfast.production.process.os.killpg",
-        lambda *_args: pytest.fail("exited child must not be signalled"),
-    )
+    attempts: list[int] = []
+
+    def missing_group(_pid: int, signum: int) -> None:
+        attempts.append(signum)
+        raise ProcessLookupError
+
+    monkeypatch.setattr("fluxfast.production.process.os.killpg", missing_group)
     managed = ManagedProcess("FastAPI", ["server"])
     managed.start()
 
     managed.terminate()
     managed.kill()
+    assert attempts == [signal.SIGTERM, signal.SIGKILL]
 
 
 def test_managed_process_tolerates_exit_during_signal_delivery(

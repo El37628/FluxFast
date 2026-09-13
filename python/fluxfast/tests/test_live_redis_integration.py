@@ -52,6 +52,49 @@ async def _wait_for_subscribers(broker: RedisLiveBroker, count: int) -> None:
 
 
 @pytest.mark.anyio
+async def test_16_application_shutdown_cycles_release_actual_redis_connections() -> None:
+    import redis.asyncio as redis
+
+    assert REDIS_URL is not None
+    prefix = f"fluxfast-lifecycle-{uuid4()}"
+    admin = redis.Redis.from_url(REDIS_URL)
+    try:
+        for cycle in range(16):
+            name = f"{prefix}-{cycle}"
+            cache = RedisResourceCache.from_url(REDIS_URL, namespace=name, client_name=f"{name}-cache")
+            broker = RedisLiveBroker.from_url(REDIS_URL, channel_prefix=f"{name}:", client_name=f"{name}-broker")
+            app = FastAPI()
+            flux = FluxFast(app, cache=cache, broker=broker)
+            try:
+                async with anyio.create_task_group() as tasks, app.router.lifespan_context(app):
+                    tasks.start_soon(_consume_until_closed, broker.subscribe({"lifecycle"}))
+                    await _wait_for_subscribers(broker, 1)
+                    assert await flux.health.ready() is True
+                    clients = await admin.client_list()
+                    assert sum(client.get("name", "").startswith(name) for client in clients) >= 3
+                for _ in range(3):
+                    await flux.close()
+                    await broker.close()
+                    await cache.close()
+                assert broker.subscriber_count == 0
+                assert not broker._pending_subscriptions
+                assert not broker._subscription_io
+                assert await flux.health.ready() is False
+                with anyio.fail_after(5):
+                    while any(client.get("name", "").startswith(name) for client in await admin.client_list()):
+                        await anyio.sleep(0.01)
+            finally:
+                await flux.close()
+    finally:
+        await admin.aclose()
+
+
+async def _consume_until_closed(stream: AsyncIterator[LiveEvent]) -> None:
+    async for _ in stream:
+        pass
+
+
+@pytest.mark.anyio
 async def test_events_cross_worker_brokers_and_remain_tenant_isolated() -> None:
     assert REDIS_URL is not None
     publisher = RedisLiveBroker.from_url(REDIS_URL)

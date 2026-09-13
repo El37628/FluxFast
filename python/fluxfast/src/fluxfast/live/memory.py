@@ -66,6 +66,7 @@ class MemoryLiveBroker:
             raise ValueError("max_queue_size must be a positive integer")
         self.max_queue_size = max_queue_size
         self._lock = anyio.Lock()
+        self._close_lock = anyio.Lock()
         self._subscribers: set[_Subscriber] = set()
         self._closed = False
         self._queue_overflow_count = 0
@@ -161,15 +162,16 @@ class MemoryLiveBroker:
     async def close(self) -> None:
         """Stop all subscriptions. Calling close more than once is safe."""
 
-        async with self._lock:
-            if self._closed:
-                return
-            self._closed = True
-            subscribers = tuple(self._subscribers)
-            self._subscribers.clear()
-
-        for subscriber in subscribers:
-            async with subscriber.condition:
-                subscriber.closed = True
-                subscriber.events.clear()
-                subscriber.condition.notify_all()
+        with anyio.CancelScope(shield=True):
+            async with self._close_lock:
+                async with self._lock:
+                    if self._closed:
+                        return
+                    self._closed = True
+                    subscribers = tuple(self._subscribers)
+                    self._subscribers.clear()
+                for subscriber in subscribers:
+                    async with subscriber.condition:
+                        subscriber.closed = True
+                        subscriber.events.clear()
+                        subscriber.condition.notify_all()
