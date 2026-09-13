@@ -1,8 +1,29 @@
 # Agent Rules
 
+## Working approach
+
+Complete the requested outcome: inspect relevant code, implement, verify, review
+and fix issues caused by the change, then prepare the Git handoff. Make routine,
+reversible local decisions without approval, including edits, development
+commands, tests, builds, and fixes. Prefer existing patterns and dependencies;
+avoid unrelated refactoring.
+
+Ask only when intent cannot reasonably be inferred for a materially ambiguous
+product, architecture, or external-contract decision, or before consequential
+actions not already authorized: production deployment, destructive data changes,
+credential operations, or irreversible infrastructure changes. The Git rules
+below remain explicit boundaries for repository operations.
+
+Read context on demand, starting with the owning layer and nearby tests. No
+mandatory full-repository exploration or plan is needed for routine work. For
+long tasks, retain concise findings, decisions, verification, and remaining work
+so continuation does not require restarting the investigation.
+
 ## Architecture
 
-FastAPI owns application routing and resource definitions.
+FastAPI owns application routing, resource definitions, authentication,
+authorization, and runtime validation. The frontend registry maps server-selected
+component identifiers to allowlisted UI modules.
 
 `packages/core` is framework-neutral. `packages/next` may depend on React and
 Next.js. Never make `packages/core` import React, Next.js, Vue, Svelte, or Solid.
@@ -13,11 +34,35 @@ Read `docs/protocol.md` before modifying wire types. Do not make incompatible
 protocol changes without documenting and versioning them. Protocol versions are
 independent of package versions.
 
-## Bug Fixes
+## Context and verification
 
-Add a regression test before or alongside every non-trivial bug fix. Fix the
-owning layer: backend engine, wire protocol, framework-neutral core, adapter, or
-consumer application.
+Use these references when the task touches their subject, not as a reading list:
+
+- Ownership and cross-layer behavior: `docs/architecture.md` and the relevant
+  record in `docs/decisions/`.
+- Wire changes: `docs/protocol.md`; developer schema/code generation:
+  `docs/developer-schema.md`, `docs/generated-artifacts.md`, `docs/type-safety.md`.
+- Cache isolation and workers: `docs/caching.md`, `docs/distributed-cache.md`;
+  live synchronization: `docs/live-resources.md`, `docs/live-deployment.md`.
+- Adapter integration: `docs/nextjs-adapter.md`; deployment/runtime:
+  `docs/production.md`, `docs/containers.md`.
+- Public compatibility and releases: `docs/stability.md`, `docs/versioning.md`,
+  `docs/releasing.md`. The local, ignored `NEXT_PHASE.md`, when present, is a
+  v1.0 release work plan; consult its relevant phase only for release work.
+- Setup and focused commands: `CONTRIBUTING.md`. Package scripts, Python config,
+  TypeScript config, and `.github/workflows/` define tooling and CI requirements.
+
+Fix the owning layer: backend engine, wire protocol, framework-neutral core,
+adapter, or consumer application. Add a regression test before or alongside
+every non-trivial bug fix; do not add tests for trivial implementation details.
+Start with focused checks and broaden for shared infrastructure, cross-layer
+contracts, risky behavior, failures, or unresolved uncertainty. Documentation-only
+changes need reference and diff review, not runtime suites. Local test selection
+does not waive required CI or release gates.
+
+Completion includes relevant passing checks (or an explicit blocker), review of
+the final diff for unintended behavior and compatibility changes, and a concise
+handoff stating what changed, verification, and any remaining limitations.
 
 ## Git Handoff
 
@@ -58,25 +103,9 @@ Never cache user or tenant resources without an explicit cache scope. Consider
 public, per-user, per-tenant, anonymous/authenticated transitions, logout, and
 multiple FastAPI workers for every cache change.
 
-## Commands
-
-```bash
-# Python
-./.venv/bin/python -m pytest -q python/fluxfast/tests
-./.venv/bin/ruff check python/fluxfast
-
-# JavaScript/TypeScript
-pnpm install
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm test:e2e
-
-# Controlled benchmark
-pnpm benchmark
-```
-
 ## Generated Files
 
-Do not manually edit `src/.fluxfast/pages.generated.ts` in consuming projects.
-Run `fluxfast generate`.
+Do not manually edit consuming projects' `.fluxfast` generated artifacts,
+including `src/.fluxfast/pages.generated.ts`. Change the authoritative inputs
+or generator and regenerate with `fluxfast generate` or the project's generation
+script; use `docs/generated-artifacts.md` for typed artifacts and drift checks.
