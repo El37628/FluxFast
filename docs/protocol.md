@@ -9,6 +9,14 @@ FluxFast 0.9 treats this document and the shared fixtures in
 1.0. This freeze does not create `fluxfast/2` and does not make the protocol
 version follow package versions.
 
+The machine-readable
+[`protocol-v1-v0.9.0.json`](../tests/fixtures/protocol-v1-v0.9.0.json)
+snapshot anchors that promise to the v0.9.0 payload semantics, header names and
+bounds, capabilities, patch operations, and live-event contract. Python and
+Core consume the same snapshot. Fixture digests canonicalize object keys while
+preserving array order, so formatting changes do not masquerade as semantic
+wire changes.
+
 ## Evolution rules
 
 A compatible `fluxfast/1` change may add optional ignorable metadata, a new

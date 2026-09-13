@@ -28,6 +28,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   candidate, covering both upgrade orders, matched packages, production
   rollback, Redis workers, validation, resource deltas, and a lighter v0.8.1
   historical smoke.
+- Anchor `fluxfast/1` to a shared v0.9.0 semantic snapshot covering every golden
+  envelope, request header and bound, capability, patch operation, and live
+  event without coupling protocol interpretation to package versions.
 
 ## [0.9.0] - 2026-09-10
 
