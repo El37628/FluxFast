@@ -3,7 +3,7 @@
 ## Working approach
 
 Complete the requested outcome: inspect relevant code, implement, verify, review
-and fix issues caused by the change, then prepare the Git handoff. Make routine,
+and fix issues caused by the change, then complete the Git workflow. Make routine,
 reversible local decisions without approval, including edits, development
 commands, tests, builds, and fixes. Prefer existing patterns and dependencies;
 avoid unrelated refactoring.
@@ -64,10 +64,12 @@ Completion includes relevant passing checks (or an explicit blocker), review of
 the final diff for unintended behavior and compatibility changes, and a concise
 handoff stating what changed, verification, and any remaining limitations.
 
-## Git Handoff
+## Git Workflow
 
-For every completed task that changes this repository, prepare a local Git
-handoff unless the user explicitly asks otherwise:
+For every task that changes this repository, complete the commit, push, pull
+request, checks, merge, and local synchronization workflow unless the user
+explicitly asks otherwise. These routine Git actions are authorized; do not stop
+for separate confirmation at each step:
 
 - Inspect the branch and worktree before making Git changes. Preserve all
   pre-existing user changes and never stage unrelated files.
@@ -79,18 +81,21 @@ handoff unless the user explicitly asks otherwise:
   staged diff, and commit with a concise Conventional Commit message.
 - Do not amend, rebase, reset, stash, tag, or otherwise rewrite history unless
   the user explicitly requests it.
-- Never push commits or branches. Leave Git pushes to the user and report the
-  branch name, commit hash, verification performed, remaining worktree changes,
-  and suggested `git push -u origin <branch>` command.
-- After the user confirms the branch is pushed, open a pull request against the
-  default branch with a concise summary and verification notes. Monitor every
+- Push the task branch with upstream tracking and open or update its pull
+  request against the default branch with a concise summary and verification
+  notes. Review the complete PR diff before publishing; do not include unrelated
+  work. Never force-push or push directly to the default branch. Monitor every
   required check and do not bypass branch protection or merge while a required
   check is queued, running, skipped, cancelled, or failing.
 - When all required checks pass, merge the pull request using the repository's
   normal merge strategy unless the user asks to merge it themselves. Then
   switch to the default branch, update it with `git pull --ff-only`, and report
   the merged pull request and synchronized commit. If a check fails, diagnose
-  it and prepare the fix on the task branch instead of merging.
+  it, fix issues caused by the task, commit and push the fix, and monitor again.
+- If permissions, required reviews, external failures, or conflicts that cannot
+  be safely resolved block completion, report the concrete blocker and PR status.
+  Never bypass protections. Final handoff includes the PR, branch/commit,
+  verification, merge/synchronization status, and remaining worktree changes.
 
 ## Performance
 
