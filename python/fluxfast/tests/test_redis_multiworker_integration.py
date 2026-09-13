@@ -145,6 +145,24 @@ async def _wait_for_worker_subscription(client: httpx2.AsyncClient, url: str) ->
             await anyio.sleep(0.01)
 
 
+async def _read_after_connection_drop(
+    client: httpx2.AsyncClient, url: str, admin, load_key: str
+) -> httpx2.Response:
+    # Supported redis-py retry defaults differ. Every unsuccessful GET remains
+    # a strict transport error, with no loader/local-memory fallback, until a
+    # bounded caller-initiated retry re-establishes the connection.
+    previous_loads = await admin.get(load_key)
+    with anyio.fail_after(5):
+        while True:
+            response = await client.get(url, headers=_FLUXFAST_HEADERS)
+            if response.status_code == 200:
+                return response
+            assert response.status_code == 500
+            assert response.json()["error"]["type"] == "ResourceCacheUnavailableError"
+            assert await admin.get(load_key) == previous_loads
+            await anyio.sleep(0.01)
+
+
 @asynccontextmanager
 async def _gate_workers(overrides: dict[str, str] | None = None):
     """Own three real workers and only this run's Redis keys/namespace."""
@@ -423,10 +441,9 @@ async def test_real_redis_command_and_publish_failure_recover_without_local_fall
             for connection in await admin.client_list():
                 if connection.get("user") == cache_user:
                     await admin.client_kill_filter(_id=connection["id"])
-            recovered = await client.get(
-                f"{urls[1]}/counter", headers=_FLUXFAST_HEADERS
+            recovered = await _read_after_connection_drop(
+                client, f"{urls[1]}/counter", state, f"{prefix}:loads"
             )
-            recovered.raise_for_status()
             assert (
                 recovered.json()["resources"]["counter"]
                 == first.json()["resources"]["counter"]
@@ -457,8 +474,11 @@ async def test_real_redis_command_and_publish_failure_recover_without_local_fall
             published_failure.raise_for_status()
             metrics = (await client.get(f"{urls[2]}/metrics")).json()
             assert metrics["live"]["live_publish_errors"] == 1
-            fresh = await client.get(f"{urls[0]}/counter", headers=_FLUXFAST_HEADERS)
-            fresh.raise_for_status()
+            # A's earlier idle cache connection was killed too; prove it can
+            # recover independently when it finally requests the fresh state.
+            fresh = await _read_after_connection_drop(
+                client, f"{urls[0]}/counter", state, f"{prefix}:loads"
+            )
             assert fresh.json()["resources"]["counter"]["value"] == {"value": 4}
             assert (
                 fresh.json()["resources"]["counter"]["version"]
