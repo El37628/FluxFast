@@ -103,6 +103,12 @@ upgrades are deferred; security and necessary compatibility corrections remain
 eligible after validation. A green dependency PR alone is not a reason to
 change the stable candidate's test environment.
 
+The [v1.0 supply-chain gate](releases/v1.0-supply-chain-gate.md) audits the
+workspace lock and Python base, Redis, and dev dependency groups in both PR and
+tag-release workflows. Audit-service errors fail the gate; they are never
+treated as evidence of a clean dependency set. Every external workflow action
+must retain a full commit-SHA pin.
+
 The active `Protect main` ruleset requires an up-to-date pull request, resolved
 review threads, and the following merge checks. The list covers every supported
 Python and Node.js runtime, protocol and browser integration, representative

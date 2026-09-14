@@ -49,6 +49,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Fixed
 
+- Fail dependency-security gates on audit-service outages instead of accepting
+  an unavailable scan, and audit Python Redis/dev extras in both PR and release
+  workflows while enforcing full-SHA action pins across every workflow.
 - Treat deeply nested known-version headers as a safe cache-hint fallback on
   supported Python decoders that reject the input instead of returning 500.
 - Confine initial SSR HTTP redirects to the configured backend origin, retaining

@@ -26,7 +26,9 @@ jobs:
           package-manager-cache: false
       - run: npm install --global pnpm@10.15.0
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --audit-level high --ignore-registry-errors
+      - name: Audit JavaScript dependencies
+        timeout-minutes: 5
+        run: pnpm audit --audit-level high
 
   python-audit:
     name: pip-audit
@@ -39,7 +41,9 @@ jobs:
         with:
           python-version: "3.14"
       - run: python -m pip install pip-audit==2.10.1
-      - run: python -m pip_audit python/fluxfast --strict --progress-spinner off
+      - name: Audit Python runtime and optional dependencies
+        timeout-minutes: 5
+        run: python -m pip_audit --strict --progress-spinner off -r scripts/security-requirements.txt
 
   dependency-review:
     name: Dependency review

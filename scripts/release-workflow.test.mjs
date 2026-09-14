@@ -229,16 +229,11 @@ test("freezes the v0.9 runtime support matrix in metadata and CI", () => {
   );
 });
 
-test("audit steps ignore upstream registry outages in CI", () => {
+test("audit steps fail closed on upstream registry outages in CI", () => {
   const security = readWorkflow("security.yml");
-  assert.match(
-    security,
-    /pnpm audit --audit-level high --ignore-registry-errors/
-  );
-
   const release = readWorkflow("release.yml");
-  assert.match(
-    release,
-    /pnpm audit --audit-level high --ignore-registry-errors/
-  );
+  for (const source of [security, release]) {
+    assert.match(source, /pnpm audit --audit-level high/);
+    assert.doesNotMatch(source, /--ignore-registry-errors/);
+  }
 });
