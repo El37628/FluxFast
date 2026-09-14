@@ -71,7 +71,9 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm build
-          pnpm audit --audit-level high --ignore-registry-errors
+      - name: Audit JavaScript dependencies
+        timeout-minutes: 5
+        run: pnpm audit --audit-level high
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -86,7 +88,9 @@ jobs:
             tests/release-consumer/next-init/distributed_proxy.py \
             scripts/verify_release_artifacts.py
           python -m pytest -q python/fluxfast/tests tests/release-artifacts
-          python -m pip_audit python/fluxfast --strict --progress-spinner off
+      - name: Audit Python runtime and optional dependencies
+        timeout-minutes: 5
+        run: python -m pip_audit --strict --progress-spinner off -r scripts/security-requirements.txt
       - name: Test same-origin browser integration
         run: |
           pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium

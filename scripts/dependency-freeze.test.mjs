@@ -125,7 +125,7 @@ test("records the actual Python lock reference", () => {
 test("retains security audit thresholds and the documented freeze policy", () => {
   const security = read(".github/workflows/security.yml");
   assert.match(security, /pnpm audit --audit-level high/);
-  assert.match(security, /pip_audit python\/fluxfast --strict/);
+  assert.match(security, /pip_audit --strict --progress-spinner off -r scripts\/security-requirements\.txt/);
   assert.match(security, /fail-on-severity: moderate/);
   assert.match(security, /schedule:\n    - cron:/);
   assert.match(read("docs/releasing.md"), /releases\/v1\.0-dependency-freeze\.md/);
