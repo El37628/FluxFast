@@ -127,7 +127,7 @@ def parse_known_header(header_val: str | None) -> dict[str, str]:
             ):
                 result[k] = v
         return result
-    except (ValueError, UnicodeError, binascii.Error) as e:
+    except (ValueError, UnicodeError, binascii.Error, RecursionError) as e:
         logger.debug("Failed to decode X-FluxFast-Known header: %s", e)
         return {}
 

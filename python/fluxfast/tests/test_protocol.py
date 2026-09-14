@@ -14,6 +14,7 @@ from starlette.requests import Request
 from fluxfast.errors import ProtocolError
 from fluxfast.headers import (
     HEADER_PROTOCOL,
+    MAX_DECODED_BYTES,
     MAX_ENCODED_CHARS,
     MAX_KNOWN_RESOURCES,
     MAX_ONLY_HEADER_BYTES,
@@ -181,6 +182,25 @@ def test_known_header_invalid():
     assert parse_known_header("") == {}
     assert parse_known_header("invalid base64 %%%") == {}
     assert parse_known_header("a" * (MAX_ENCODED_CHARS + 1)) == {}
+
+
+@pytest.mark.parametrize(
+    "nested",
+    [
+        b"[" * 2_048 + b"0" + b"]" * 2_048,
+        b'{"x":' * 2_048 + b"0" + b"}" * 2_048,
+    ],
+    ids=["deep-array", "deep-object"],
+)
+def test_known_header_deep_json_falls_back_without_recursion_failure(nested):
+    raw = b'{"rooms":"v1","extra":' + nested + b"}"
+    encoded = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    assert len(raw) < MAX_DECODED_BYTES
+    assert len(encoded) < MAX_ENCODED_CHARS
+
+    # Decoders with iterative traversal can retain the valid shallow entry;
+    # older supported Python decoders may reject this nesting. Neither throws.
+    assert parse_known_header(encoded) in ({}, {"rooms": "v1"})
 
 
 def test_known_header_rejects_non_base64url_and_duplicate_json_keys():

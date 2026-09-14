@@ -156,10 +156,12 @@ function assertGeneratedOutputPath(
     );
   }
   let current = resolvedTrustedRoot;
-  for (const segment of path
+  // Include the boundary itself: otherwise a symlinked project root can
+  // redirect every apparently-contained artifact to a different tree.
+  for (const segment of ["", ...path
     .relative(resolvedTrustedRoot, resolvedGeneratedDir)
     .split(path.sep)
-    .filter(Boolean)) {
+    .filter(Boolean)]) {
     current = path.join(current, segment);
     try {
       if (fs.lstatSync(current).isSymbolicLink()) {

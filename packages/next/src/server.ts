@@ -89,7 +89,7 @@ async function requestInitialEnvelope({
     throw new TypeError("FluxFast initial paths must be origin-relative");
   }
   const fullUrl = `${backendUrl.replace(/\/$/, "")}${path}`;
-  const response = await fetch(fullUrl, {
+  const requestInit: RequestInit = {
     method: "GET",
     headers: {
       ...headers,
@@ -100,7 +100,35 @@ async function requestInitialEnvelope({
       [HEADER_CAPABILITIES]: serializeCapabilities(),
     },
     cache: "no-store",
-  });
+    redirect: "manual",
+  };
+  const backendOrigin = new URL(fullUrl).origin;
+  let requestUrl = fullUrl;
+  let response: Response;
+  for (let redirects = 0; ; redirects++) {
+    response = await fetch(requestUrl, requestInit);
+    const location = response.headers.get("location");
+    if (![301, 302, 303, 307, 308].includes(response.status) || location === null) {
+      break;
+    }
+    // Release each discarded response before following or rejecting its target.
+    await response.body?.cancel();
+    if (redirects >= 20) {
+      throw new TransportError("Initial FluxFast response exceeded the redirect limit", response.status);
+    }
+    let destination: URL;
+    try {
+      destination = new URL(location, requestUrl);
+    } catch {
+      throw new TransportError("Initial FluxFast response has an invalid redirect", response.status);
+    }
+    if (destination.origin !== backendOrigin || destination.username || destination.password) {
+      throw new TransportError("Initial FluxFast response redirects outside the configured backend origin", response.status);
+    }
+    // Preserve ordinary FastAPI canonical-path redirects without allowing an
+    // upstream response to choose a different destination for SSR credentials.
+    requestUrl = destination.href;
+  }
 
   let data: unknown;
   try {
@@ -168,9 +196,12 @@ export function createFluxNextPage(config: FluxNextConfig) {
       ...DEFAULT_FORWARDED_HEADERS,
       ...(config.forwardHeaders ?? []).map(name => name.toLowerCase()),
     ]);
+    const connectionHeaders = new Set(
+      (incomingHeaders.get("connection") ?? "").split(",").map(name => name.trim().toLowerCase())
+    );
     const forwarded: Record<string, string> = {};
     for (const name of allowed) {
-      if (NEVER_FORWARD.has(name) || !/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)) continue;
+      if (NEVER_FORWARD.has(name) || connectionHeaders.has(name) || !/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)) continue;
       const value = incomingHeaders.get(name);
       if (value !== null) forwarded[name] = value;
     }

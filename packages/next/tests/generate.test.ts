@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
+  checkFluxFastProject,
   generateFluxFastProject,
   generatePagesRegistry
 } from "../src/generate";
@@ -95,6 +96,98 @@ describe("Pages Registry Generator", () => {
       /Page path contains unsupported characters/
     );
     expect(fs.existsSync(outputFile)).toBe(false);
+  });
+
+  it.each(["file", "symlink"])(
+    "does not overwrite or remove a pre-existing temporary %s",
+    kind => {
+      const pagesDir = path.join(tmpDir, "src/flux-pages");
+      const outputFile = path.join(tmpDir, "src/.fluxfast/pages.generated.ts");
+      const outsideFile = path.join(tmpDir, "outside.ts");
+      fs.mkdirSync(path.dirname(outputFile), { recursive: true });
+      fs.writeFileSync(outputFile, "previous complete registry");
+      fs.writeFileSync(outsideFile, "untouched outside file");
+      const originalOpen = fs.openSync;
+      let temporaryPath = "";
+      const open = vi.spyOn(fs, "openSync").mockImplementationOnce((file, flags, mode) => {
+        temporaryPath = String(file);
+        if (kind === "symlink") {
+          fs.symlinkSync(outsideFile, temporaryPath);
+        } else {
+          const descriptor = originalOpen(temporaryPath, "wx");
+          fs.writeFileSync(descriptor, "pre-existing collision");
+          fs.closeSync(descriptor);
+        }
+        return originalOpen(file, flags, mode);
+      });
+
+      expect(() => generatePagesRegistry({ pagesDir, outputFile, log: false }))
+        .toThrow(/EEXIST/);
+      expect(open.mock.calls[0][1]).toBe("wx");
+      expect(fs.readFileSync(outputFile, "utf8")).toBe("previous complete registry");
+      expect(fs.readFileSync(outsideFile, "utf8")).toBe("untouched outside file");
+      expect(fs.lstatSync(temporaryPath).isSymbolicLink()).toBe(kind === "symlink");
+      expect(fs.readFileSync(temporaryPath, "utf8")).toBe(
+        kind === "symlink" ? "untouched outside file" : "pre-existing collision"
+      );
+    }
+  );
+
+  it.each(["pages", "project"])(
+    "rejects a symlink at the configured project boundary during %s generation",
+    mode => {
+      const outside = path.join(tmpDir, "outside-project");
+      const linkedRoot = path.join(tmpDir, "linked-project");
+      fs.mkdirSync(path.join(outside, "src/.fluxfast"), { recursive: true });
+      const outsideFile = path.join(outside, "src/.fluxfast/pages.generated.ts");
+      fs.writeFileSync(outsideFile, "untouched outside registry");
+      fs.symlinkSync(outside, linkedRoot, "dir");
+      const options = {
+        pagesDir: path.join(linkedRoot, "src/flux-pages"),
+        outputFile: path.join(linkedRoot, "src/.fluxfast/pages.generated.ts"),
+        log: false,
+      };
+
+      expect(() => mode === "pages"
+        ? generatePagesRegistry(options)
+        : generateFluxFastProject({ ...options, schemaContent: schemaManifest() }))
+        .toThrow(/must not traverse the symbolic link/);
+      expect(fs.readFileSync(outsideFile, "utf8")).toBe("untouched outside registry");
+      expect(fs.readdirSync(path.dirname(outsideFile))).toEqual(["pages.generated.ts"]);
+    }
+  );
+
+  it("keeps a failed artifact intact and converges after a partial filesystem failure", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const generatedDir = path.join(tmpDir, "src/.fluxfast");
+    const outputFile = path.join(generatedDir, "pages.generated.ts");
+    fs.mkdirSync(generatedDir, { recursive: true });
+    fs.writeFileSync(outputFile, "previous complete registry");
+    const originalRename = fs.renameSync;
+    let replacements = 0;
+    const rename = vi.spyOn(fs, "renameSync").mockImplementation((source, destination) => {
+      if (++replacements === 2) {
+        throw Object.assign(new Error("later replacement failed"), { code: "EACCES" });
+      }
+      originalRename(source, destination);
+    });
+    const options = { pagesDir, generatedDir, outputFile, schemaContent: schemaManifest(), log: false };
+
+    expect(() => generateFluxFastProject(options)).toThrow("later replacement failed");
+    expect(fs.readFileSync(outputFile, "utf8")).toBe("previous complete registry");
+    expect(fs.readFileSync(path.join(generatedDir, "schema.generated.json"), "utf8"))
+      .toBe(options.schemaContent);
+    expect(fs.readdirSync(generatedDir).sort()).toEqual([
+      "pages.generated.ts", "schema.generated.json",
+    ]);
+
+    rename.mockRestore();
+    const result = generateFluxFastProject(options);
+    for (const file of result.generatedFiles) {
+      expect(fs.readFileSync(file, "utf8")).not.toBe("previous complete registry");
+    }
+    expect(fs.readdirSync(generatedDir).some(name => name.endsWith(".tmp"))).toBe(false);
+    expect(checkFluxFastProject(options).current).toBe(true);
   });
 
   it("rejects duplicate identifiers from TypeScript and JavaScript pages", () => {

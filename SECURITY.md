@@ -39,3 +39,6 @@ Generated files are confined to the configured project output tree and reject
 symlink traversal. Internal mutation redirects accept only safe origin-relative
 paths; use `flux_external_redirect()` when full-browser external navigation is
 intentional.
+
+The [v1.0 security release audit](docs/releases/v1.0-security-audit.md) records
+the reviewed boundaries, corrective fixes, regression coverage, and limitations.

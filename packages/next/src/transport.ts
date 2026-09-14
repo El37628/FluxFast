@@ -44,9 +44,19 @@ function safePath(segments: string[] | undefined): string | undefined {
   return `/${segments.map(encodeURIComponent).join("/")}`;
 }
 
+function removeHopByHopHeaders(headers: Headers): void {
+  // Connection can nominate additional per-hop fields beyond the standard set.
+  // Read it before deleting the header, and ignore malformed field names.
+  for (const token of (headers.get("connection") ?? "").split(",")) {
+    const name = token.trim();
+    if (/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(name)) headers.delete(name);
+  }
+  for (const name of HOP_BY_HOP_HEADERS) headers.delete(name);
+}
+
 function forwardedHeaders(request: Request): Headers {
   const headers = new Headers(request.headers);
-  for (const name of HOP_BY_HOP_HEADERS) headers.delete(name);
+  removeHopByHopHeaders(headers);
   // Let the server-side fetch implementation negotiate an encoding that it
   // can forward without mismatched compression metadata.
   headers.delete("accept-encoding");
@@ -55,7 +65,7 @@ function forwardedHeaders(request: Request): Headers {
 
 function responseHeaders(upstream: Response): Headers {
   const headers = new Headers(upstream.headers);
-  for (const name of HOP_BY_HOP_HEADERS) headers.delete(name);
+  removeHopByHopHeaders(headers);
   return headers;
 }
 
