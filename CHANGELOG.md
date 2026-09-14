@@ -43,6 +43,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   supervised production browser warm hits and reconnects, authenticated
   user/tenant isolation, and actual Redis restart/shutdown gates on both supported
   server endpoints.
+- Gate production topology with JavaScript-disabled SSR, hydration and
+  header-gated same-origin navigation from installed artifacts, and run live
+  synchronization/reconnect coverage in both Docker and rootless Podman images.
 
 ### Fixed
 

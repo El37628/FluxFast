@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Link,
   useForm,
@@ -19,6 +20,8 @@ import { UserCard } from "@/components/UserCard";
 import { featuredUser } from "@/lib/users";
 
 export default function HomePage() {
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const analytics = useDeferredResource(resourceKeys.analytics);
   const navigation = useResource(resourceKeys.navigation);
   const counter = useResource(resourceKeys.liveCounter);
@@ -35,7 +38,7 @@ export default function HomePage() {
   );
 
   return (
-    <main>
+    <main data-testid="consumer-page" data-hydrated={hydrated ? "true" : "false"}>
       <h1>Clean live consumer</h1>
       <p data-testid="navigation-value">{navigation.label}</p>
       <UserCard user={featuredUser} />

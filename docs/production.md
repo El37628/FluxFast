@@ -37,6 +37,8 @@ Normal document requests are not sent through the header-gated client rewrite.
 The browser does not receive or configure the private backend port. Changing
 the standard topology to two public application services, requiring a browser
 backend URL, or requiring CORS would be a breaking production-contract change.
+The [v1.0 production topology gate](releases/v1.0-production-topology.md) records
+repeatable installed-artifact and OCI image checks for this boundary.
 
 ## v0.9 Python CLI contract
 

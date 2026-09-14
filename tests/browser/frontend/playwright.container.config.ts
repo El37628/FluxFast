@@ -7,7 +7,7 @@ if (!baseURL) {
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "critical-flow.spec.ts",
+  testMatch: ["critical-flow.spec.ts", "live-flow.spec.ts"],
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",

@@ -290,6 +290,7 @@ function runBrowser(baseURL) {
       env: {
         ...process.env,
         FLUXFAST_CONTAINER_BASE_URL: baseURL,
+        FLUXFAST_E2E_PRODUCTION: "1",
       },
     },
   );
