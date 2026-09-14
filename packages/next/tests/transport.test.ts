@@ -6,6 +6,35 @@ function context(path?: string[]) {
 }
 
 describe("production runtime transport handler", () => {
+  it("removes Connection-nominated headers in both proxy directions", async () => {
+    const fetchMock = vi.fn(async () => new Response("ok", {
+      headers: {
+        connection: "X-Response-Hop",
+        "x-response-hop": "must-not-forward",
+        "x-response-end-to-end": "retained",
+      },
+    }));
+    const handler = createFluxTransportHandler({ backendUrl: "http://127.0.0.1:8123", fetch: fetchMock });
+    const response = await handler(new Request("https://app.example/_fluxfast/transport/", {
+      headers: {
+        "x-fluxfast": "1",
+        connection: "X-Request-Hop, Authorization",
+        "x-request-hop": "must-not-forward",
+        authorization: "must-not-forward",
+        "x-request-end-to-end": "retained",
+      },
+    }), context());
+    const forwarded = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(forwarded.get("connection")).toBeNull();
+    expect(forwarded.get("x-request-hop")).toBeNull();
+    expect(forwarded.get("authorization")).toBeNull();
+    expect(forwarded.get("x-request-end-to-end")).toBe("retained");
+    expect(response.headers.get("connection")).toBeNull();
+    expect(response.headers.get("x-response-hop")).toBeNull();
+    expect(response.headers.get("x-response-end-to-end")).toBe("retained");
+    expect(await response.text()).toBe("ok");
+  });
+
   it("resolves the private backend per request and preserves path and query", async () => {
     const fetchMock = vi.fn(async () => new Response(
       JSON.stringify({ protocol: "fluxfast/1" }),

@@ -1,5 +1,8 @@
 """End-to-end integration tests for FastAPI routing, shared resource reuse, and mutations."""
 
+import base64
+
+import pytest
 from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
@@ -156,6 +159,28 @@ def create_test_app() -> tuple[FastAPI, dict[str, int]]:
 
     app.include_router(router)
     return app, loader_counts
+
+
+@pytest.mark.parametrize(
+    "nested",
+    [
+        b"[" * 2_048 + b"0" + b"]" * 2_048,
+        b'{"x":' * 2_048 + b"0" + b"}" * 2_048,
+    ],
+    ids=["deep-array", "deep-object"],
+)
+def test_deep_known_header_cannot_crash_a_page_request(nested):
+    app, loader_counts = create_test_app()
+    raw = b'{"rooms":"v1","extra":' + nested + b"}"
+    with TestClient(app) as client:
+        response = client.get("/rooms", headers={
+            HEADER_FLUXFAST: "1",
+            HEADER_KNOWN: base64.urlsafe_b64encode(raw).decode().rstrip("="),
+        })
+    assert response.status_code == 200
+    assert response.json()["page"]["component"] == "rooms/index"
+    assert "rooms" in response.json()["resources"]
+    assert loader_counts["rooms"] == 1
 
 
 def test_required_performance_cross_page_reuse_scenario():

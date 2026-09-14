@@ -184,6 +184,11 @@ export default createFluxNextPage(fluxConfig);
 The helper reconstructs the path and repeated search parameters, forwards only
 cookie, authorization, accept-language, user-agent, and explicitly configured
 safe headers, and never forwards hop-by-hop headers.
+Initial SSR fetches follow at most 20 HTTP redirects within the configured
+backend origin, preserving FastAPI canonical-path redirects. Redirects to another
+origin, credential-bearing URLs, and malformed targets fail without forwarding
+another request. This server-side HTTP boundary does not change the browser's
+explicit FluxFast mutation redirect and external-navigation envelopes.
 
 `backendUrl` is server-visible and normally comes from the development
 supervisor. `clientUrl` is the browser transport base; omit it for the default

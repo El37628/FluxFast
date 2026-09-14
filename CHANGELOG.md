@@ -49,6 +49,14 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Fixed
 
+- Treat deeply nested known-version headers as a safe cache-hint fallback on
+  supported Python decoders that reject the input instead of returning 500.
+- Confine initial SSR HTTP redirects to the configured backend origin, retaining
+  canonical-path redirects and authentication without contacting another origin.
+- Reject generated writes through a symlink at the configured project boundary,
+  and retain regression coverage for temporary collisions and partial failures.
+- Remove dynamically named hop-by-hop headers from SSR forwarding and both
+  directions of the production proxy, not just the standard header names.
 - Preserve server-owned request state in page and mutation handlers using
   postponed, aliased, or `Annotated` FastAPI `Request` annotations instead of
   injecting a competing request parameter and returning 500.
