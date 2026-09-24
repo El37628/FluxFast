@@ -15,6 +15,9 @@ import {
 import { compileFluxFastValidatorsWithDiagnostics } from "../src/validator-compiler";
 
 const fixtureRoot = path.resolve(__dirname, "../../../tests/fixtures/schema");
+const packageVersion = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8")
+).version as string;
 
 function readFixture(name: string): Record<string, unknown> {
   return JSON.parse(
@@ -110,6 +113,7 @@ describe("developer schema compatibility freeze", () => {
 
   it("keeps the reader set at schema/1 and schema/2 for the v1 candidate", () => {
     const baseline = readFixture("developer-schema-v2-v0.9.0.json");
+    expect(packageVersion).toBe(baseline.candidatePackage);
 
     expect([FLUXFAST_SCHEMA_MANIFEST_V1, FLUXFAST_SCHEMA_MANIFEST_V2]).toEqual(
       baseline.supportedReaders

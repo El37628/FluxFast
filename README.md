@@ -83,7 +83,7 @@ fluxfast types backend.main:app --frontend frontend --check
 
 ## General Contracts & Native Validation
 
-FluxFast 0.8 allows defining server-owned contracts reusable throughout frontend
+FluxFast supports server-owned contracts reusable throughout frontend
 components, forms, utilities, and state stores, backed by a dependency-free
 native validation engine:
 
@@ -348,6 +348,7 @@ guidance.
 - [Production](docs/production.md)
 - [Distributed Redis](docs/distributed-cache.md)
 - [Stability / Versioning](docs/stability.md)
+- [FluxFast 1.0 Release Notes](docs/releases/v1.0.0.md)
 - [v0.9 → v1.0 Upgrade Guide](docs/upgrade-v1.md)
 
 ## Development

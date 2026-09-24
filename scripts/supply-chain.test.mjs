@@ -10,6 +10,18 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const workflowDirectory = path.join(root, ".github/workflows");
 const read = name => fs.readFileSync(path.join(root, name), "utf8");
 
+function tomlArray(table, key) {
+  const source = read("python/fluxfast/pyproject.toml");
+  const tableStart = source.indexOf(`[${table}]`);
+  assert.notEqual(tableStart, -1, `missing TOML table: ${table}`);
+  const remainder = source.slice(tableStart + table.length + 2);
+  const nextTable = remainder.search(/\n\[/);
+  const body = nextTable === -1 ? remainder : remainder.slice(0, nextTable);
+  const match = body.match(new RegExp(`(?:^|\\n)${key}\\s*=\\s*\\[([\\s\\S]*?)\\]`));
+  assert.ok(match, `missing TOML array: ${table}.${key}`);
+  return [...match[1].matchAll(/"([^"]+)"/g)].map(item => item[1]);
+}
+
 function actionReferences(source) {
   return source.split("\n").flatMap(line => {
     const match = line.match(/^\s*(?:-\s+)?uses:\s*(.*?)\s*(?:\s+#.*)?$/);
@@ -52,7 +64,16 @@ test("PR and release audits retain mandatory full-dependency scans without suppr
     assert.match(source, /python -m pip_audit --strict --progress-spinner off -r scripts\/security-requirements\.txt/);
     assert.doesNotMatch(source, /--ignore(?:-registry-errors|-unfixable|-vuln)?\b|--no-deps|--no-optional|--dry-run|continue-on-error:\s*true|\|\|\s*true/);
   }
-  assert.equal(read("scripts/security-requirements.txt").trim(), "./python/fluxfast[redis,dev]");
+  const auditedRequirements = read("scripts/security-requirements.txt")
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line && !line.startsWith("#"));
+  assert.deepEqual(auditedRequirements, [
+    ...tomlArray("project", "dependencies"),
+    ...tomlArray("project.optional-dependencies", "redis"),
+    ...tomlArray("project.optional-dependencies", "dev"),
+  ]);
+  assert.ok(auditedRequirements.every(requirement => !requirement.startsWith(".")));
   const security = read(".github/workflows/security.yml");
   assert.match(security, /fail-on-severity: moderate/);
   const codeql = read(".github/workflows/codeql.yml");

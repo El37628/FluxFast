@@ -2,9 +2,10 @@
 
 ## Supported versions
 
-The latest minor release receives security fixes. Before 1.0, upgrade to the
-latest `0.x` minor before reporting an issue unless the vulnerability prevents
-that upgrade.
+The latest FluxFast 1.x minor line receives security fixes. Pre-1.0 releases are
+unsupported after the stable 1.0 release. Upgrade to the latest compatible
+release before reporting an issue unless the vulnerability prevents that
+upgrade.
 
 ## Reporting a vulnerability
 

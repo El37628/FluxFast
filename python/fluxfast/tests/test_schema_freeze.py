@@ -12,7 +12,7 @@ import pytest
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 
-from fluxfast import ContractMode, FluxFast, Page
+from fluxfast import ContractMode, FluxFast, Page, __version__
 from fluxfast.schema_export import build_app_schema_manifest, build_schema_manifest
 from fluxfast.schema_manifest import (
     SCHEMA_MANIFEST_V2,
@@ -138,11 +138,12 @@ def test_v1_schema_candidate_changes_only_producer_metadata() -> None:
     baseline = _read_fixture("developer-schema-v2-v0.9.0.json")
     fixture = _read_fixture("fluxfast-schema-v2.json")
     candidate = _build_frozen_manifest(
-        producer=baseline["candidateProducer"]
+        producer=__version__
     ).model_dump(mode="json", by_alias=True, exclude_none=True)
 
     assert baseline["packageBaseline"] == baseline["baselineProducer"] == "0.9.0"
     assert baseline["candidatePackage"] == baseline["candidateProducer"] == "1.0.0"
+    assert __version__ == baseline["candidatePackage"]
     assert fixture["producer"] == baseline["baselineProducer"]
     assert fixture["schema"] == baseline["producedSchema"]
     assert fixture["fingerprint"] == baseline["semanticFingerprint"]
