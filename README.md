@@ -1,13 +1,14 @@
 # FluxFast
 
-FluxFast is a server-driven application runtime for FastAPI. FastAPI owns
-routing, validation, authentication, and data loading; frontend adapters render
-the interface.
+FluxFast is a server-driven application runtime for FastAPI with reactive
+resource synchronization. FastAPI owns routing, validation, authentication,
+authorization, and data loading; frontend adapters render the interface.
 
-Unlike page-prop synchronization systems, FluxFast synchronizes independently
-versioned resources. Shared resources can be reused across pages, cached with
-explicit security scopes, resolved concurrently, and selectively invalidated
-after mutations. The frontend adapter targets the Next.js 16 App Router.
+Inertia synchronizes pages and props. FluxFast treats application data as
+independently versioned, cached, progressively loaded, and live resources.
+Shared resources can be reused across pages, cached with explicit security
+scopes, resolved concurrently, and selectively invalidated after mutations.
+The frontend adapter targets the Next.js 16 App Router.
 
 ## Quickstart
 
@@ -328,6 +329,23 @@ guidance.
 - `packages/next`: Next.js 16 App Router adapter, onboarding CLI, form hooks,
   and contract/registry generator.
 
+## Documentation
+
+- [Getting Started](#quickstart)
+- [Architecture](docs/architecture.md)
+- [Resources](#resources)
+- [Mutations](docs/mutations.md)
+- [Caching](docs/caching.md)
+- [Deferred Resources](docs/deferred-resources.md)
+- [Live Resources](docs/live-resources.md)
+- [Generated Contracts](docs/type-safety.md)
+- [Validation](docs/validation.md)
+- [Next.js Adapter](docs/nextjs-adapter.md)
+- [Production](docs/production.md)
+- [Distributed Redis](docs/distributed-cache.md)
+- [Stability / Versioning](docs/stability.md)
+- [v0.9 → v1.0 Upgrade Guide](docs/upgrade-v1.md)
+
 ## Development
 
 ```bash
@@ -356,10 +374,10 @@ deployment boundary. The [compatibility and versioning
 policy](docs/versioning.md) lists supported runtimes and release rules; the
 [stability contract](docs/stability.md) defines the public boundary,
 compatibility meaning, and deprecation policy; the [Python public API
-freeze](docs/python-api.md) classifies every
+contract](docs/python-api.md) classifies every
 official top-level export, and the [`@fluxfast/core` API
-freeze](docs/core-api.md) classifies the framework-neutral runtime. The
-[`@fluxfast/next` API freeze](docs/next-api.md) defines the supported adapter
+contract](docs/core-api.md) classifies the framework-neutral runtime. The
+[`@fluxfast/next` API contract](docs/next-api.md) defines the supported adapter
 exports and package paths. Maintainers
 can find the registry and tag procedure in the [release guide](docs/releasing.md).
 

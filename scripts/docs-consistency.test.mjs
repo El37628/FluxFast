@@ -245,3 +245,86 @@ test("keeps public package entry points aligned with manifests and API docs", ()
     nextEntryPointsFromDocumentation()
   );
 });
+
+test("documents the stable 1.x contract and complete v1 upgrade path", () => {
+  const stability = read("docs/stability.md");
+  const versioning = read("docs/versioning.md");
+  const upgrade = read("docs/upgrade-v1.md");
+  const migrationV1 = read("docs/migration.md").split("\n---\n", 1)[0];
+  const readme = read("README.md");
+
+  assert.match(stability, /FluxFast 1\.x follows semantic versioning\./);
+  assert.match(stability, /### Patch releases: 1\.0\.x/);
+  assert.match(stability, /### Minor releases: 1\.x\.0/);
+  assert.match(stability, /### Major releases: 2\.0\.0/);
+  assert.match(
+    stability,
+    /Package v2 does not automatically imply `fluxfast\/2`, and `fluxfast\/2` does\s+not automatically imply package v2\./
+  );
+  assert.match(
+    stability,
+    /FluxFast 1\.x may continue using\s+`fluxfast-schema\/2` for the entire major line/
+  );
+  assert.match(versioning, /Patch releases such as `1\.0\.x`/);
+  assert.match(versioning, /Minor releases such as `1\.x\.0`/);
+  assert.match(versioning, /major release such as `2\.0\.0`/);
+
+  const publicApiDocs = [
+    stability,
+    versioning,
+    read("docs/python-api.md"),
+    read("docs/core-api.md"),
+    read("docs/next-api.md"),
+    read("docs/caching.md"),
+    read("docs/deferred-resources.md"),
+    read("docs/live-resources.md"),
+    read("docs/generated-artifacts.md"),
+    read("docs/production.md"),
+    read("docs/validation.md"),
+  ].join("\n");
+  assert.doesNotMatch(publicApiDocs, /\bstable candidates?\b/i);
+
+  assert.match(upgrade, /^No application rewrite is required\./m);
+  assert.match(
+    upgrade,
+    /python -m pip install --upgrade "fluxfast==1\.0\.0"/
+  );
+  assert.match(
+    upgrade,
+    /npm install @fluxfast\/core@1\.0\.0 @fluxfast\/next@1\.0\.0/
+  );
+  assert.match(
+    upgrade,
+    /fluxfast types backend\.main:app --frontend frontend\n/
+  );
+  assert.match(upgrade, /fluxfast doctor --production \\\n/);
+  assert.match(upgrade, /Do not run `fluxfast init`/);
+  assert.doesNotMatch(migrationV1, /fluxfast init --yes/);
+
+  assert.match(
+    readme,
+    /server-driven application runtime for FastAPI with reactive\s+resource synchronization/
+  );
+  assert.match(
+    readme,
+    /Inertia synchronizes pages and props\. FluxFast treats application data as\s+independently versioned, cached, progressively loaded, and live resources\./
+  );
+  for (const target of [
+    "#quickstart",
+    "docs/architecture.md",
+    "#resources",
+    "docs/mutations.md",
+    "docs/caching.md",
+    "docs/deferred-resources.md",
+    "docs/live-resources.md",
+    "docs/type-safety.md",
+    "docs/validation.md",
+    "docs/nextjs-adapter.md",
+    "docs/production.md",
+    "docs/distributed-cache.md",
+    "docs/stability.md",
+    "docs/upgrade-v1.md",
+  ]) {
+    assert.ok(readme.includes(`](${target})`), `missing README documentation path: ${target}`);
+  }
+});

@@ -3,9 +3,9 @@
 Live Resources keep an ordinary FluxFast resource synchronized after hydration.
 They do not introduce another frontend store or a special live hook.
 
-## v0.9 stability contract
+## Stable 1.x contract
 
-Live-resource behavior from v0.8.1 is a 1.0 stable candidate:
+Live-resource behavior frozen against v0.9.0 is stable throughout 1.x:
 
 | Surface | Frozen behavior |
 | --- | --- |

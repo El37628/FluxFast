@@ -4,9 +4,14 @@
 
 FluxFast 1.0 promotes the public contract frozen in v0.9.0. Applications using
 documented v0.9 APIs, generated files, and the `fluxfast/1` protocol should not
-need a source migration. Upgrade the synchronized Python, Core, and Next
-packages, rerun `fluxfast init --yes`, regenerate typed artifacts, typecheck,
-and create a production build.
+need an application rewrite. Upgrade the synchronized Python, Core, and Next
+packages, regenerate typed artifacts, review the semantic diff, typecheck,
+create a production build, run the production doctor, and deploy.
+
+Do not rerun `fluxfast init` for an application already initialized with v0.9.
+The initializer is for creating or repairing the adapter scaffold, not a routine
+version upgrade. Follow the dedicated [v0.9 → v1.0 upgrade
+guide](upgrade-v1.md) for commands, checks, and rollback guidance.
 
 The release gate tests each package side against published v0.9.0 before testing
 the matched candidate. It then reinstalls v0.9.0 in the same consumer,

@@ -66,7 +66,7 @@ The CLI finds the nearest parent `package.json`, then detects TypeScript versus
 JavaScript and root versus `src/` layout. v0.9 has no public project-root,
 language, or layout override flags; run the command from within the intended
 project. Command names, the options above, their major semantics, success as
-exit `0`, and failure as nonzero are stable candidates through 1.0. Exact
+exit `0`, and failure as nonzero are stable throughout 1.x. Exact
 diagnostic wording is not frozen.
 
 ## Typed contract generation

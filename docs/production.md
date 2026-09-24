@@ -22,7 +22,7 @@ standard topology needs neither a second public port nor CORS configuration.
 See [ADR-0007](decisions/0007-production-runtime.md) for the architectural
 decision.
 
-## v0.9 topology contract
+## Stable topology contract
 
 The supported application boundary is one FluxFast application, one public
 browser port, a public Next.js runtime, and a private FastAPI runtime. The two
@@ -40,10 +40,10 @@ backend URL, or requiring CORS would be a breaking production-contract change.
 The [v1.0 production topology gate](releases/v1.0-production-topology.md) records
 repeatable installed-artifact and OCI image checks for this boundary.
 
-## v0.9 Python CLI contract
+## Stable Python CLI contract
 
 These command names, option names, positional inputs, and major default
-semantics are stable candidates through 1.0:
+semantics are stable throughout 1.x:
 
 | Command | Supported public inputs | Major semantics |
 | --- | --- | --- |
