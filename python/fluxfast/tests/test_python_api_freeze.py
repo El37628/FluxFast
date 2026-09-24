@@ -1,4 +1,4 @@
-"""v0.9 Python public-API classification and behavior freeze."""
+"""Stable Python public-API classification and behavior contract."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ _TABLE_START = "<!-- python-api-export-table:start -->"
 _TABLE_END = "<!-- python-api-export-table:end -->"
 _CLASSIFICATION_ROW = re.compile(
     r"^\| `(?P<name>[^`]+)` \| "
-    r"(?P<classification>Stable Candidate|Advanced Stable Candidate|Deprecated) \|"
+    r"(?P<classification>Stable|Advanced Stable|Deprecated) \|"
 )
 
 
@@ -58,13 +58,13 @@ def _documented_classifications() -> dict[str, str]:
     return {row["name"]: row["classification"] for row in rows}
 
 
-def test_every_top_level_export_has_one_v09_classification() -> None:
+def test_every_top_level_export_has_one_stable_classification() -> None:
     classifications = _documented_classifications()
 
     assert set(classifications) == set(fluxfast.__all__)
     assert set(classifications.values()) == {
-        "Stable Candidate",
-        "Advanced Stable Candidate",
+        "Stable",
+        "Advanced Stable",
         "Deprecated",
     }
     assert all(hasattr(fluxfast, name) for name in classifications)
@@ -93,16 +93,16 @@ def test_low_level_and_compatibility_exports_are_intentionally_classified() -> N
             "HEADER_CAPABILITIES",
         )
     } == {
-        "LiveCoordinator": "Advanced Stable Candidate",
-        "derive_live_topic": "Advanced Stable Candidate",
-        "encode_sse_event": "Advanced Stable Candidate",
-        "iter_live_events": "Advanced Stable Candidate",
-        "LiveSubscription": "Advanced Stable Candidate",
-        "PageEnvelope": "Advanced Stable Candidate",
-        "RedisCacheMetrics": "Advanced Stable Candidate",
-        "RedisCacheMetricsSnapshot": "Advanced Stable Candidate",
-        "PROTOCOL_VERSION": "Advanced Stable Candidate",
-        "HEADER_CAPABILITIES": "Advanced Stable Candidate",
+        "LiveCoordinator": "Advanced Stable",
+        "derive_live_topic": "Advanced Stable",
+        "encode_sse_event": "Advanced Stable",
+        "iter_live_events": "Advanced Stable",
+        "LiveSubscription": "Advanced Stable",
+        "PageEnvelope": "Advanced Stable",
+        "RedisCacheMetrics": "Advanced Stable",
+        "RedisCacheMetricsSnapshot": "Advanced Stable",
+        "PROTOCOL_VERSION": "Advanced Stable",
+        "HEADER_CAPABILITIES": "Advanced Stable",
     }
 
 

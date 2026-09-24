@@ -6,7 +6,7 @@ are the checked, local TypeScript representation consumed by application code.
 
 ## Stable filenames
 
-The following names are stable candidates through FluxFast 1.0:
+The following names are stable throughout FluxFast 1.x:
 
 ```text
 schema.generated.json
@@ -47,8 +47,8 @@ input, generation remains byte-for-byte deterministic and `--check` compares
 those deterministic bytes without modifying files.
 
 The [v1.0 generated-contract proof](releases/v1.0-generated-contract.md)
-compares the candidate with a v0.9.0 semantic export and normalized-source
-baseline for the same application contract.
+records the promotion comparison with a v0.9.0 semantic export and
+normalized-source baseline for the same application contract.
 
 ## Name derivation
 

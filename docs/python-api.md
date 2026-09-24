@@ -1,13 +1,12 @@
 # Python public API
 
-FluxFast 0.9 classifies every name exported from the official top-level
-`fluxfast` package before the 1.0 API freeze. A stable candidate is the common
-application-author surface. An advanced stable candidate is intended for
-cache, live-resource, protocol, or framework integrations. Both categories are
-supported public API and follow the same compatibility policy; "advanced" does
-not mean experimental.
+FluxFast 1.x classifies every name exported from the official top-level
+`fluxfast` package. A stable API is the common application-author surface. An
+advanced stable API is intended for cache, live-resource, protocol, or framework
+integrations. Both categories are supported public API and follow the same
+compatibility policy; "advanced" does not mean experimental.
 
-Deprecated names remain importable through 1.0 unless a security or protocol
+Deprecated names remain importable throughout 1.x unless a security or protocol
 correctness issue makes that impossible. FluxFast does not emit warnings merely
 because the package is imported or an application starts. Names absent from
 `fluxfast.__all__`, including underscore-prefixed implementation details and
@@ -20,93 +19,93 @@ This table is the authoritative Python export inventory. CI verifies that it
 contains every `fluxfast.__all__` name exactly once.
 
 <!-- python-api-export-table:start -->
-| Symbol | 1.0 classification | Supported role |
+| Symbol | 1.x classification | Supported role |
 | --- | --- | --- |
-| `CAPABILITY_DEFERRED_RESOURCES` | Advanced Stable Candidate | Deferred-resource capability token. |
-| `CAPABILITY_LIVE_RESOURCES` | Advanced Stable Candidate | Live-resource capability token. |
-| `CacheScope` | Stable Candidate | Immutable cache-scope descriptor. |
-| `CachedResource` | Advanced Stable Candidate | Cache-backend value contract. |
-| `ContractMode` | Stable Candidate | General contract schema mode. |
-| `DEFAULT_LIVE_HEARTBEAT_INTERVAL` | Advanced Stable Candidate | Default SSE heartbeat interval. |
-| `DEFAULT_LIVE_MAX_CONNECTION_AGE` | Advanced Stable Candidate | Default live connection lifetime. |
-| `DEFAULT_LIVE_QUEUE_SIZE` | Advanced Stable Candidate | Default in-memory broker queue bound. |
-| `DEFAULT_REDIS_CHANNEL_PREFIX` | Advanced Stable Candidate | Default Redis live channel prefix. |
-| `DEFAULT_REDIS_MAX_MESSAGE_BYTES` | Advanced Stable Candidate | Default Redis live-message bound. |
-| `DEFAULT_REDIS_MAX_VALUE_BYTES` | Advanced Stable Candidate | Default Redis cache-value bound. |
-| `DEFAULT_REDIS_SCAN_COUNT` | Advanced Stable Candidate | Default Redis cache scan batch size. |
-| `ErrorDetail` | Advanced Stable Candidate | Protocol error payload model. |
-| `ErrorEnvelope` | Advanced Stable Candidate | Protocol error envelope model. |
-| `FluxFast` | Stable Candidate | FastAPI application integrator. |
-| `FluxFastError` | Stable Candidate | Base FluxFast exception. |
-| `FluxFastLiveScopeError` | Stable Candidate | Invalid live-resource scope error. |
-| `FluxRouter` | Advanced Stable Candidate | Standalone FastAPI router integration. |
-| `HEADER_CAPABILITIES` | Advanced Stable Candidate | Capability-negotiation header name. |
-| `InvalidateResource` | Stable Candidate | Scoped invalidation descriptor. |
-| `LIVE_EVENT_NAME` | Advanced Stable Candidate | SSE event name. |
-| `LIVE_HEARTBEAT` | Advanced Stable Candidate | SSE heartbeat frame. |
-| `LIVE_RESYNC_REASONS` | Advanced Stable Candidate | Supported live resynchronization reasons. |
-| `LiveBroker` | Advanced Stable Candidate | Live fan-out protocol. |
-| `LiveCoordinator` | Advanced Stable Candidate | Scoped live invalidation and patch coordinator. |
-| `LiveEvent` | Advanced Stable Candidate | Discriminated live-event type. |
-| `LiveInvalidateEvent` | Advanced Stable Candidate | Live invalidation event model. |
-| `LiveMetrics` | Advanced Stable Candidate | Process-local live metrics collector. |
-| `LiveMetricsSnapshot` | Advanced Stable Candidate | Immutable live metrics snapshot. |
-| `LivePatchEvent` | Advanced Stable Candidate | Live patch event model. |
-| `LiveReadyEvent` | Advanced Stable Candidate | Live stream ready event model. |
-| `LiveResyncEvent` | Advanced Stable Candidate | Live resynchronization event model. |
-| `LiveResyncReason` | Advanced Stable Candidate | Live resynchronization reason type. |
-| `LiveSubscription` | Advanced Stable Candidate | Authorized live subscription descriptor. |
-| `MemoryLiveBroker` | Advanced Stable Candidate | Single-process live broker. |
-| `MemoryResourceCache` | Advanced Stable Candidate | Single-process resource cache. |
-| `MutationEnvelope` | Advanced Stable Candidate | Protocol mutation envelope model. |
-| `MutationPayload` | Advanced Stable Candidate | Protocol mutation payload model. |
-| `MutationResult` | Stable Candidate | Server mutation result descriptor. |
-| `PROTOCOL_MEDIA_TYPE` | Advanced Stable Candidate | FluxFast JSON media type. |
-| `PROTOCOL_VERSION` | Advanced Stable Candidate | Browser wire-protocol identifier. |
-| `Page` | Stable Candidate | Server-driven page descriptor. |
-| `PageDescriptor` | Advanced Stable Candidate | Protocol page descriptor model. |
-| `PageEnvelope` | Advanced Stable Candidate | Protocol page envelope model. |
+| `CAPABILITY_DEFERRED_RESOURCES` | Advanced Stable | Deferred-resource capability token. |
+| `CAPABILITY_LIVE_RESOURCES` | Advanced Stable | Live-resource capability token. |
+| `CacheScope` | Stable | Immutable cache-scope descriptor. |
+| `CachedResource` | Advanced Stable | Cache-backend value contract. |
+| `ContractMode` | Stable | General contract schema mode. |
+| `DEFAULT_LIVE_HEARTBEAT_INTERVAL` | Advanced Stable | Default SSE heartbeat interval. |
+| `DEFAULT_LIVE_MAX_CONNECTION_AGE` | Advanced Stable | Default live connection lifetime. |
+| `DEFAULT_LIVE_QUEUE_SIZE` | Advanced Stable | Default in-memory broker queue bound. |
+| `DEFAULT_REDIS_CHANNEL_PREFIX` | Advanced Stable | Default Redis live channel prefix. |
+| `DEFAULT_REDIS_MAX_MESSAGE_BYTES` | Advanced Stable | Default Redis live-message bound. |
+| `DEFAULT_REDIS_MAX_VALUE_BYTES` | Advanced Stable | Default Redis cache-value bound. |
+| `DEFAULT_REDIS_SCAN_COUNT` | Advanced Stable | Default Redis cache scan batch size. |
+| `ErrorDetail` | Advanced Stable | Protocol error payload model. |
+| `ErrorEnvelope` | Advanced Stable | Protocol error envelope model. |
+| `FluxFast` | Stable | FastAPI application integrator. |
+| `FluxFastError` | Stable | Base FluxFast exception. |
+| `FluxFastLiveScopeError` | Stable | Invalid live-resource scope error. |
+| `FluxRouter` | Advanced Stable | Standalone FastAPI router integration. |
+| `HEADER_CAPABILITIES` | Advanced Stable | Capability-negotiation header name. |
+| `InvalidateResource` | Stable | Scoped invalidation descriptor. |
+| `LIVE_EVENT_NAME` | Advanced Stable | SSE event name. |
+| `LIVE_HEARTBEAT` | Advanced Stable | SSE heartbeat frame. |
+| `LIVE_RESYNC_REASONS` | Advanced Stable | Supported live resynchronization reasons. |
+| `LiveBroker` | Advanced Stable | Live fan-out protocol. |
+| `LiveCoordinator` | Advanced Stable | Scoped live invalidation and patch coordinator. |
+| `LiveEvent` | Advanced Stable | Discriminated live-event type. |
+| `LiveInvalidateEvent` | Advanced Stable | Live invalidation event model. |
+| `LiveMetrics` | Advanced Stable | Process-local live metrics collector. |
+| `LiveMetricsSnapshot` | Advanced Stable | Immutable live metrics snapshot. |
+| `LivePatchEvent` | Advanced Stable | Live patch event model. |
+| `LiveReadyEvent` | Advanced Stable | Live stream ready event model. |
+| `LiveResyncEvent` | Advanced Stable | Live resynchronization event model. |
+| `LiveResyncReason` | Advanced Stable | Live resynchronization reason type. |
+| `LiveSubscription` | Advanced Stable | Authorized live subscription descriptor. |
+| `MemoryLiveBroker` | Advanced Stable | Single-process live broker. |
+| `MemoryResourceCache` | Advanced Stable | Single-process resource cache. |
+| `MutationEnvelope` | Advanced Stable | Protocol mutation envelope model. |
+| `MutationPayload` | Advanced Stable | Protocol mutation payload model. |
+| `MutationResult` | Stable | Server mutation result descriptor. |
+| `PROTOCOL_MEDIA_TYPE` | Advanced Stable | FluxFast JSON media type. |
+| `PROTOCOL_VERSION` | Advanced Stable | Browser wire-protocol identifier. |
+| `Page` | Stable | Server-driven page descriptor. |
+| `PageDescriptor` | Advanced Stable | Protocol page descriptor model. |
+| `PageEnvelope` | Advanced Stable | Protocol page envelope model. |
 | `PageNotFoundError` | Deprecated | Compatibility-only exception; FluxFast does not raise it. |
-| `ProtocolError` | Advanced Stable Candidate | Wire-protocol constraint error. |
-| `RedisCacheMetrics` | Advanced Stable Candidate | Redis cache metrics collector. |
-| `RedisCacheMetricsSnapshot` | Advanced Stable Candidate | Immutable Redis cache metrics snapshot. |
-| `RedisLiveBroker` | Advanced Stable Candidate | Multi-worker Redis live broker. |
-| `RedisResourceCache` | Advanced Stable Candidate | Multi-worker Redis resource cache. |
-| `ResourceCacheBackend` | Advanced Stable Candidate | Resource cache backend protocol. |
-| `ResourceCacheError` | Advanced Stable Candidate | Base resource-cache failure. |
-| `ResourceCacheSerializationError` | Advanced Stable Candidate | Cache serialization failure. |
-| `ResourceCacheUnavailableError` | Advanced Stable Candidate | Cache availability failure. |
-| `ResourceContract` | Stable Candidate | Typed logical resource contract. |
-| `ResourceContractError` | Stable Candidate | Typed resource validation or serialization error. |
-| `ResourceError` | Stable Candidate | Resource resolution error. |
-| `ResourceErrorDetail` | Advanced Stable Candidate | Per-resource protocol error model. |
-| `ResourceLoader` | Stable Candidate | Sync-or-async resource loader type. |
-| `ResourceSpec` | Stable Candidate | Resource loading and caching descriptor. |
-| `ResourceWireRecord` | Advanced Stable Candidate | Versioned protocol resource model. |
-| `ScopeError` | Stable Candidate | Invalid cache-scope error. |
-| `ScopeType` | Stable Candidate | Cache-scope kind enumeration. |
-| `TypeContract` | Stable Candidate | General application type contract. |
+| `ProtocolError` | Advanced Stable | Wire-protocol constraint error. |
+| `RedisCacheMetrics` | Advanced Stable | Redis cache metrics collector. |
+| `RedisCacheMetricsSnapshot` | Advanced Stable | Immutable Redis cache metrics snapshot. |
+| `RedisLiveBroker` | Advanced Stable | Multi-worker Redis live broker. |
+| `RedisResourceCache` | Advanced Stable | Multi-worker Redis resource cache. |
+| `ResourceCacheBackend` | Advanced Stable | Resource cache backend protocol. |
+| `ResourceCacheError` | Advanced Stable | Base resource-cache failure. |
+| `ResourceCacheSerializationError` | Advanced Stable | Cache serialization failure. |
+| `ResourceCacheUnavailableError` | Advanced Stable | Cache availability failure. |
+| `ResourceContract` | Stable | Typed logical resource contract. |
+| `ResourceContractError` | Stable | Typed resource validation or serialization error. |
+| `ResourceError` | Stable | Resource resolution error. |
+| `ResourceErrorDetail` | Advanced Stable | Per-resource protocol error model. |
+| `ResourceLoader` | Stable | Sync-or-async resource loader type. |
+| `ResourceSpec` | Stable | Resource loading and caching descriptor. |
+| `ResourceWireRecord` | Advanced Stable | Versioned protocol resource model. |
+| `ScopeError` | Stable | Invalid cache-scope error. |
+| `ScopeType` | Stable | Cache-scope kind enumeration. |
+| `TypeContract` | Stable | General application type contract. |
 | `ValidationError` | Deprecated | Compatibility-only exception; FluxFast does not raise it. |
-| `append_item` | Stable Candidate | Append-item mutation patch builder. |
-| `client_supports` | Advanced Stable Candidate | Request capability lookup helper. |
-| `derive_live_topic` | Advanced Stable Candidate | Opaque scoped live-topic derivation. |
-| `encode_sse_event` | Advanced Stable Candidate | Validated live-event SSE encoder. |
-| `flux_external_redirect` | Stable Candidate | External browser redirect result builder. |
-| `flux_redirect` | Stable Candidate | Internal navigation redirect result builder. |
-| `invalidate_resource` | Stable Candidate | Scoped invalidation builder. |
-| `iter_live_events` | Advanced Stable Candidate | Live SSE stream iterator. |
-| `merge_object` | Stable Candidate | Merge-object mutation patch builder. |
-| `mutation` | Stable Candidate | Mutation result builder. |
-| `remove_item` | Stable Candidate | Remove-item mutation patch builder. |
-| `replace_item` | Stable Candidate | Replace-item mutation patch builder. |
-| `replace_resource` | Stable Candidate | Replace-resource mutation patch builder. |
-| `resource` | Stable Candidate | Page resource builder. |
-| `scope` | Stable Candidate | Cache-scope factory. |
+| `append_item` | Stable | Append-item mutation patch builder. |
+| `client_supports` | Advanced Stable | Request capability lookup helper. |
+| `derive_live_topic` | Advanced Stable | Opaque scoped live-topic derivation. |
+| `encode_sse_event` | Advanced Stable | Validated live-event SSE encoder. |
+| `flux_external_redirect` | Stable | External browser redirect result builder. |
+| `flux_redirect` | Stable | Internal navigation redirect result builder. |
+| `invalidate_resource` | Stable | Scoped invalidation builder. |
+| `iter_live_events` | Advanced Stable | Live SSE stream iterator. |
+| `merge_object` | Stable | Merge-object mutation patch builder. |
+| `mutation` | Stable | Mutation result builder. |
+| `remove_item` | Stable | Remove-item mutation patch builder. |
+| `replace_item` | Stable | Replace-item mutation patch builder. |
+| `replace_resource` | Stable | Replace-resource mutation patch builder. |
+| `resource` | Stable | Page resource builder. |
+| `scope` | Stable | Cache-scope factory. |
 <!-- python-api-export-table:end -->
 
-## Signature decisions
+## Stable signatures
 
-The v0.8.1 call shapes are suitable for 1.0 and remain frozen in v0.9:
+The v0.9.0 call shapes are stable throughout 1.x:
 
 - `FluxFast` continues accepting the documented `broker=` argument and the
   existing `live_broker=` compatibility spelling. Passing both remains an
@@ -120,8 +119,8 @@ The v0.8.1 call shapes are suitable for 1.0 and remain frozen in v0.9:
   through `namespace=` and, where deployments share Redis, an intentionally
   selected `channel_prefix=`.
 
-These compatibility spellings are frozen rather than reordered or removed:
-the small aesthetic improvement would not justify migration work before 1.0.
+These compatibility spellings are stable rather than reordered or removed:
+the small aesthetic improvement does not justify a breaking change.
 
 ## Deprecated exports
 
@@ -134,13 +133,13 @@ since the first release and are not raised by the FluxFast runtime.
 - For missing routes, use FastAPI/Starlette's ordinary 404 handling or raise
   `fastapi.HTTPException(status_code=404)` in application code.
 
-Existing imports keep working through 1.0. New applications should not depend
+Existing imports keep working throughout 1.x. New applications should not depend
 on either deprecated class.
 
-## What this freeze does not cover
+## What this contract does not cover
 
 The Python export classification does not independently redefine the browser
 wire protocol, protocol headers, capability negotiation, developer schema, or
-generated files. Those contracts are versioned and frozen in their dedicated
-v0.9 reviews. See [versioning and compatibility](versioning.md) and the
+generated files. Those contracts are versioned and stabilized in their
+dedicated proofs. See [versioning and compatibility](versioning.md) and the
 [wire protocol](protocol.md).

@@ -9,39 +9,41 @@ import { performance } from "node:perf_hooks";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-const require = createRequire(import.meta.url);
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = path.resolve(scriptDirectory, "../..");
+const repositoryRoot = process.env.FLUXFAST_BENCHMARK_REPOSITORY_ROOT
+  ? path.resolve(process.env.FLUXFAST_BENCHMARK_REPOSITORY_ROOT)
+  : path.resolve(scriptDirectory, "../..");
+const require = createRequire(path.join(repositoryRoot, "package.json"));
 const localPython = path.join(repositoryRoot, ".venv", "bin", "python");
 const python = process.env.FLUXFAST_BENCHMARK_PYTHON ?? (
   fs.existsSync(localPython) ? localPython : "python"
 );
-const corePackage = require("../../packages/core/package.json");
-const nextPackage = require("../../packages/next/package.json");
+const corePackage = require("./packages/core/package.json");
+const nextPackage = require("./packages/next/package.json");
 
 const {
   compileFluxFastMutations,
-} = require("../../packages/next/dist/mutation-compiler.js");
+} = require("./packages/next/dist/mutation-compiler.js");
 const {
   compileFluxFastPageRoutes,
-} = require("../../packages/next/dist/route-compiler.js");
+} = require("./packages/next/dist/route-compiler.js");
 const {
   compileFluxFastResourceTypes,
-} = require("../../packages/next/dist/schema-compiler.js");
+} = require("./packages/next/dist/schema-compiler.js");
 const {
   compileFluxFastValidators,
-} = require("../../packages/next/dist/validator-compiler.js");
+} = require("./packages/next/dist/validator-compiler.js");
 const {
   parseFluxFastSchemaManifest,
-} = require("../../packages/next/dist/schema-manifest.js");
+} = require("./packages/next/dist/schema-manifest.js");
 const {
   generateFluxFastProject,
-} = require("../../packages/next/dist/generate.js");
-const { runCli } = require("../../packages/next/dist/cli/index.js");
+} = require("./packages/next/dist/generate.js");
+const { runCli } = require("./packages/next/dist/cli/index.js");
 const {
   renderHealthRoute,
   renderTransportRoute,
-} = require("../../packages/next/dist/cli/files.js");
+} = require("./packages/next/dist/cli/files.js");
 
 function parseArguments(argv) {
   const arguments_ = { samples: 5 };
@@ -419,7 +421,7 @@ function runBenchmark(samples) {
 
     console.log("FluxFast controlled schema-codegen benchmark");
     console.log(
-      `environment: Python ${summary.python}; Node ${process.versions.node}; ${summary.platform}`,
+      `environment: Python ${summary.python}; Node ${process.versions.node}; ${summary.platform}; packages ${repositoryRoot}`,
     );
     console.log(
       `workload: 10/100/500/1000 explicit contracts plus legacy resource/route/mutation/nesting cases; ${samples} measured samples after one untimed warm-up per Node operation; no timing thresholds`,

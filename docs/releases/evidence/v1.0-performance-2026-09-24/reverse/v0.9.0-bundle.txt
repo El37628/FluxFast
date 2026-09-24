@@ -1,0 +1,10 @@
+FluxFast controlled production-bundle benchmark
+environment: Node 24.19.0; Next.js 16.3.4; packages /tmp/fluxfast-v1-perf-Tw04uS/v090
+workload: five clean production builds generated from 100 contracts; no timing or byte thresholds
+minimal-core: / first-load 448.0 KiB (458729 B); all client chunks 557.9 KiB (571323 B) (0 B vs minimal-core, -45.0 KiB (-46043 B) vs no-validators); validator chunks 0 B; build 5206.309 ms; retained plans 0; retained runtime markers 0
+minimal-next: / first-load 491.1 KiB (502867 B); all client chunks 601.0 KiB (615461 B) (43.1 KiB (44138 B) vs minimal-core, -1.9 KiB (-1905 B) vs no-validators); validator chunks 0 B; build 5131.208 ms; retained plans 0; retained runtime markers 0
+no-validators: / first-load 492.9 KiB (504772 B); all client chunks 602.9 KiB (617366 B) (45.0 KiB (46043 B) vs minimal-core, 0 B vs no-validators); validator chunks 0 B; build 5116.016 ms; retained plans 0; retained runtime markers 0
+one-validator: / first-load 520.8 KiB (533293 B); all client chunks 630.7 KiB (645887 B) (72.8 KiB (74564 B) vs minimal-core, 27.9 KiB (28521 B) vs no-validators); validator chunks 78.2 KiB (80038 B); build 5138.972 ms; retained plans 1; retained runtime markers 2
+realistic-validators-live-forms: / first-load 522.1 KiB (534666 B); all client chunks 632.1 KiB (647260 B) (74.2 KiB (75937 B) vs minimal-core, 29.2 KiB (29894 B) vs no-validators); validator chunks 79.5 KiB (81411 B); build 5264.409 ms; retained plans 10; retained runtime markers 2
+tradeoff: dual ESM/CommonJS package output preserves require() compatibility while allowing production bundlers to omit the framework-neutral validation runtime until a validator is imported; aggregate .next chunk totals include framework chunks and are comparison data, not a package-size guarantee
+correctness: PASS — all five production consumers rendered; validator-free Core, Next, and application builds retained neither generated plans nor validation-runtime markers, while the single-validator and realistic application builds retained exactly one and ten plans plus the runtime

@@ -1,8 +1,8 @@
 # `@fluxfast/core` public API
 
-FluxFast 0.9 freezes the framework-neutral runtime exported from the official
-`@fluxfast/core` package root. The package intentionally has one public import
-path:
+FluxFast 1.x treats the framework-neutral runtime exported from
+the official `@fluxfast/core` package root as stable. The package intentionally
+has one public import path:
 
 ```ts
 import { FluxRouter, createValidator } from "@fluxfast/core";
@@ -13,15 +13,15 @@ CommonJS entry points expose the same named API.
 
 ## Classification
 
-A stable candidate is part of the ordinary application or adapter-author API.
-An advanced stable candidate supports lower-level transport, cache, live,
-protocol, or generated-validation integrations. Both classifications are
-supported compatibility-sensitive API; advanced does not mean experimental.
+A stable API is part of the ordinary application or adapter-author surface. An
+advanced stable API supports lower-level transport, cache, live, protocol, or
+generated-validation integrations. Both classifications are supported
+compatibility-sensitive API; advanced does not mean experimental.
 
-The following inventory is machine-checked against the v0.8.1 declaration
+The following inventory is machine-checked against the v0.9.0 declaration
 snapshot. Every exported name must appear exactly once.
 
-### Stable candidates
+### Stable
 
 <!-- core-api-stable:start -->
 ```text
@@ -77,7 +77,7 @@ refineValidator
 ```
 <!-- core-api-stable:end -->
 
-### Advanced stable candidates
+### Advanced stable
 
 <!-- core-api-advanced:start -->
 ```text
@@ -212,10 +212,10 @@ dependencies on React, Next.js, Vue, Svelte, and Solid. Browser platform types
 and APIs such as `fetch`, `AbortController`, `history`, and `ReadableStream`
 remain allowed; adapters supply framework-specific rendering.
 
-## Freeze boundaries
+## Contract boundaries
 
 This classification does not itself change the `fluxfast/1` protocol,
 capability tokens, validation semantics, or mutation behavior. Dedicated v0.9
-reviews freeze those contracts independently. See [architecture](architecture.md),
+reviews document those contracts independently. See [architecture](architecture.md),
 [versioning](versioning.md), [protocol](protocol.md), and [native client
 validation](validation.md).

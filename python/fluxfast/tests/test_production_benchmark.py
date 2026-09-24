@@ -1,5 +1,6 @@
 """Regression tests for production lifecycle benchmark instrumentation."""
 
+from benchmarks.scripts import benchmark_production
 from benchmarks.scripts.benchmark_production import (
     ProcessSnapshot,
     _observe_next_start,
@@ -38,3 +39,28 @@ def test_next_observation_waits_for_process_and_backend_marker() -> None:
 
     assert _observe_next_start({7231: process}, 5.0, None, clock=lambda: 6.0) is None
     assert _observe_next_start({}, None, None, clock=lambda: 6.0) is None
+
+
+def test_clean_frontend_is_generated_before_production_validation(monkeypatch) -> None:
+    """A fresh checkout has no ignored registry until its generator runs."""
+
+    commands: list[list[str]] = []
+    monkeypatch.setattr(benchmark_production, "run_checked", commands.append)
+    benchmark_production.prepare_frontend()
+
+    generation = next(
+        (
+            index
+            for index, command in enumerate(commands)
+            if command[-2:] == ["run", "generate"]
+            and str(benchmark_production.FRONTEND) in command
+        ),
+        None,
+    )
+    assert generation is not None, "missing canonical frontend generation step"
+    build = next(
+        index
+        for index, command in enumerate(commands)
+        if "fluxfast.cli" in command and "build" in command
+    )
+    assert generation < build

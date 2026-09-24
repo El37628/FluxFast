@@ -4,11 +4,11 @@ The developer manifest is an offline code-generation contract. It is separate
 from the `fluxfast/1` browser protocol, package versions, runtime page data,
 cache storage, and live-resource messages.
 
-FluxFast 0.9 treats `fluxfast-schema/2` as the closed developer-manifest shape
-expected through 1.0. Python produces schema/2; current JavaScript tooling reads
-both schema/2 and the legacy `fluxfast-schema/1` format. Adding, removing, or
-reinterpreting a manifest field requires a future `fluxfast-schema/3` and an
-explicit migration path.
+FluxFast 1.x treats `fluxfast-schema/2` as its closed, stable
+developer-manifest shape. Python produces schema/2; current JavaScript tooling
+reads both schema/2 and the legacy `fluxfast-schema/1` format. Adding, removing,
+or reinterpreting a manifest field requires a future `fluxfast-schema/3` and
+an explicit migration path.
 
 The shared fixtures are executable compatibility evidence:
 
@@ -20,8 +20,8 @@ The shared fixtures are executable compatibility evidence:
   v0.9.0 manifest digest, semantic fingerprint, supported readers, and v1.0.0
   producer-only transition.
 
-The [v1.0 schema stability proof](releases/v1.0-schema-stability.md) records how
-the candidate is compared with that baseline.
+The [v1.0 schema stability proof](releases/v1.0-schema-stability.md) records the
+promotion comparison with that baseline.
 
 ## Closed schema/2 shape
 
@@ -154,7 +154,7 @@ has the same digest.
 ## Schema/1 compatibility
 
 `fluxfast-schema/1` has the same top-level shape except it has no `types` field.
-It remains a readable legacy format through 1.0. Current JavaScript tooling
+It remains a readable legacy format throughout 1.x. Current JavaScript tooling
 continues generating resource types, route builders, mutation helpers, and
 supported validators from schema/1; removal is a future major-version decision.
 

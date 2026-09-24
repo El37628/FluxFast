@@ -101,7 +101,7 @@ During 1.0 preparation, follow the [dependency-freeze policy and reviewed
 tooling inventory](releases/v1.0-dependency-freeze.md). Routine major dependency
 upgrades are deferred; security and necessary compatibility corrections remain
 eligible after validation. A green dependency PR alone is not a reason to
-change the stable candidate's test environment.
+change the stable release line's test environment.
 
 The [v1.0 supply-chain gate](releases/v1.0-supply-chain-gate.md) audits the
 workspace lock and Python base, Redis, and dev dependency groups in both PR and
