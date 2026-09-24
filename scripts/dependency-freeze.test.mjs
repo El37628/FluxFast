@@ -70,7 +70,7 @@ test("keeps all workspace tooling and runtime resolutions on the reviewed set", 
   assert.deepEqual(Object.keys(facts.javascriptRuntime).sort(), [
     "next", "react", "react-dom",
   ]);
-  assert.deepEqual(facts.javascriptTransitive, { rollup: "4.63.2" });
+  assert.deepEqual(facts.javascriptTransitive, { rollup: "4.63.4" });
   const frozen = { ...facts.javascriptTooling, ...facts.javascriptRuntime };
   const seen = new Set();
   const lock = read("pnpm-lock.yaml");
