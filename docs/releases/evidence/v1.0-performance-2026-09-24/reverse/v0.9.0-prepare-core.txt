@@ -1,0 +1,3 @@
+
+> @fluxfast/core@0.9.0 build /tmp/fluxfast-v1-perf-Tw04uS/v090/packages/core
+> tsc && tsc -p tsconfig.esm.json && node ../../scripts/write-esm-package.mjs dist/esm

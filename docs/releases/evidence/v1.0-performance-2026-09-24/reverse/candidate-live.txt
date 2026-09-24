@@ -1,0 +1,11 @@
+FluxFast controlled Live Resource benchmark
+workload: 50 latency samples; 10000-event slow-client flood; 500 repeated connections
+connection creation (  1): 0.292 ms
+connection creation ( 10): 0.858 ms
+connection creation (100): 5.275 ms
+connection creation (500): 27.492 ms
+publish to receive: 0.080 ms median, 0.141 ms p95
+invalidation to canonical resource-only refresh: 3.245 ms median, 3.636 ms p95
+slow subscriber: 16/64 events pending, 156 overflows, 140005 peak traced bytes, 568 retained traced bytes
+connection cleanup: 500 connections in 54.373 ms; active subscribers returned to 0
+correctness: PASS — convergence completed with canonical state; slow-client queues stayed bounded; all subscriptions were cleaned up

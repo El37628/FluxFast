@@ -239,6 +239,7 @@ def prepare_frontend() -> None:
     pnpm = "pnpm.cmd" if os.name == "nt" else "pnpm"
     run_checked([pnpm, "--filter", "@fluxfast/core", "run", "build"])
     run_checked([pnpm, "--filter", "@fluxfast/next", "run", "build"])
+    run_checked([pnpm, "--dir", str(FRONTEND), "run", "generate"])
     run_checked(
         [
             sys.executable,

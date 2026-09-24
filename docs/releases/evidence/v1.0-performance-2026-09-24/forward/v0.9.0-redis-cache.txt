@@ -1,0 +1,15 @@
+FluxFast controlled distributed resource-cache benchmark
+workload: 10 samples per 1/10/100/1024 KiB payload; 100 entries per tag invalidation; 64 warm HTTP requests per 1/2/4/8-worker run
+payload operations (Redis reads use a separate client):
+     1 KiB requested, 1097 B serialized — memory set 0.029 ms median, 0.072 ms p95; memory get 0.014 ms median, 0.025 ms p95; Redis set 0.482 ms median, 0.803 ms p95; Redis cross-client get 0.406 ms median, 2.241 ms p95
+    10 KiB requested, 10314 B serialized — memory set 0.028 ms median, 0.029 ms p95; memory get 0.014 ms median, 0.014 ms p95; Redis set 0.499 ms median, 0.559 ms p95; Redis cross-client get 0.465 ms median, 0.617 ms p95
+   100 KiB requested, 102475 B serialized — memory set 0.028 ms median, 0.049 ms p95; memory get 0.014 ms median, 0.022 ms p95; Redis set 0.887 ms median, 1.302 ms p95; Redis cross-client get 0.543 ms median, 0.768 ms p95
+  1024 KiB requested, 1048652 B serialized — memory set 0.056 ms median, 0.064 ms p95; memory get 0.017 ms median, 0.017 ms p95; Redis set 6.273 ms median, 7.965 ms p95; Redis cross-client get 3.163 ms median, 3.842 ms p95
+Redis tag invalidation (100 entries): 1.563 ms median, 1.859 ms p95
+multi-worker shared-resource HTTP workload:
+  1 worker(s) — cold fan-out 59.440 ms / 1 loader execution(s); warm 351.4 req/s; hit 163.723 ms median, 168.990 ms p95; 1 loader execution; 66 Redis reads; 1 Redis write; 1/1 known-version omissions
+  2 worker(s) — cold fan-out 60.386 ms / 2 loader execution(s); warm 487.5 req/s; hit 110.184 ms median, 123.477 ms p95; 1 loader execution; 67 Redis reads; 1 Redis write; 2/2 known-version omissions
+  4 worker(s) — cold fan-out 62.616 ms / 4 loader execution(s); warm 624.1 req/s; hit 79.053 ms median, 92.440 ms p95; 1 loader execution; 69 Redis reads; 1 Redis write; 4/4 known-version omissions
+  8 worker(s) — cold fan-out 66.020 ms / 8 loader execution(s); warm 781.7 req/s; hit 69.114 ms median, 74.073 ms p95; 1 loader execution; 73 Redis reads; 1 Redis write; 8/8 known-version omissions
+tradeoff: Redis adds serialization and network work in exchange for cache coherence across independent workers; simultaneous cold misses may still execute duplicate loaders because FluxFast has no distributed lease
+correctness: PASS — every cross-client payload round-tripped exactly; tag invalidation removed all tagged entries; ordinary warm traffic kept one loader execution at every worker count; known versions were omitted

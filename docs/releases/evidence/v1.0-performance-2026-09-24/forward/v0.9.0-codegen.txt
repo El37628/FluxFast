@@ -1,0 +1,85 @@
+FluxFast controlled schema-codegen benchmark
+environment: Python 3.13.14; Node 24.19.0; Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39; packages /tmp/fluxfast-v1-perf-Tw04uS/v090
+workload: 10/100/500/1000 explicit contracts plus legacy resource/route/mutation/nesting cases; 5 measured samples after one untimed warm-up per Node operation; no timing thresholds
+contracts-10: 0 resources, 0 routes, 0 mutations, 10 explicit contracts; 2.7 KiB manifest
+  Python schema export: 3.315 ms median, 3.418 ms p95 (first export 4.555 ms)
+  Node manifest parsing: 0.174 ms median, 0.271 ms p95
+  Type compilation: 0.401 ms median, 0.839 ms p95
+  Validator compilation: 0.722 ms median, 0.948 ms p95
+  TypeScript compile: 143.574 ms median, 148.377 ms p95
+  fluxfast doctor: 3.378 ms median, 4.033 ms p95
+  fluxfast generate --check: 1.953 ms median, 2.433 ms p95
+contracts-100: 0 resources, 0 routes, 0 mutations, 100 explicit contracts; 25.8 KiB manifest
+  Python schema export: 30.931 ms median, 31.123 ms p95 (first export 31.319 ms)
+  Node manifest parsing: 1.682 ms median, 1.913 ms p95
+  Type compilation: 2.338 ms median, 2.870 ms p95
+  Validator compilation: 3.110 ms median, 3.748 ms p95
+  TypeScript compile: 143.881 ms median, 146.672 ms p95
+  fluxfast doctor: 14.144 ms median, 17.852 ms p95
+  fluxfast generate --check: 8.768 ms median, 9.242 ms p95
+contracts-500: 0 resources, 0 routes, 0 mutations, 500 explicit contracts; 128.1 KiB manifest
+  Python schema export: 156.743 ms median, 166.904 ms p95 (first export 156.365 ms)
+  Node manifest parsing: 5.276 ms median, 6.117 ms p95
+  Type compilation: 9.377 ms median, 10.036 ms p95
+  Validator compilation: 12.004 ms median, 12.636 ms p95
+  TypeScript compile: 220.484 ms median, 228.402 ms p95
+  fluxfast doctor: 58.817 ms median, 67.004 ms p95
+  fluxfast generate --check: 35.611 ms median, 37.149 ms p95
+contracts-1000: 0 resources, 0 routes, 0 mutations, 1000 explicit contracts; 256.0 KiB manifest
+  Python schema export: 311.237 ms median, 325.196 ms p95 (first export 313.444 ms)
+  Node manifest parsing: 12.368 ms median, 16.042 ms p95
+  Type compilation: 18.555 ms median, 20.014 ms p95
+  Validator compilation: 22.807 ms median, 23.364 ms p95
+  TypeScript compile: 355.270 ms median, 367.574 ms p95
+  fluxfast doctor: 117.984 ms median, 121.803 ms p95
+  fluxfast generate --check: 69.229 ms median, 71.990 ms p95
+resources-10: 10 resources, 0 routes, 0 mutations, 0 explicit contracts; 5.2 KiB manifest
+  Python schema export: 6.334 ms median, 6.824 ms p95 (first export 6.373 ms)
+  Node manifest parsing: 0.391 ms median, 0.411 ms p95
+  Type compilation: 0.660 ms median, 0.765 ms p95
+  Validator compilation: 1.035 ms median, 1.148 ms p95
+  TypeScript compile: 142.924 ms median, 149.966 ms p95
+  fluxfast doctor: 5.341 ms median, 5.881 ms p95
+  fluxfast generate --check: 3.435 ms median, 4.259 ms p95
+resources-100: 100 resources, 0 routes, 0 mutations, 0 explicit contracts; 50.9 KiB manifest
+  Python schema export: 63.889 ms median, 80.548 ms p95 (first export 62.389 ms)
+  Node manifest parsing: 2.717 ms median, 2.773 ms p95
+  Type compilation: 5.175 ms median, 5.436 ms p95
+  Validator compilation: 7.812 ms median, 8.196 ms p95
+  TypeScript compile: 172.924 ms median, 181.795 ms p95
+  fluxfast doctor: 37.861 ms median, 38.496 ms p95
+  fluxfast generate --check: 21.380 ms median, 22.773 ms p95
+resources-500: 500 resources, 0 routes, 0 mutations, 0 explicit contracts; 253.6 KiB manifest
+  Python schema export: 329.239 ms median, 341.157 ms p95 (first export 316.389 ms)
+  Node manifest parsing: 14.946 ms median, 16.874 ms p95
+  Type compilation: 25.269 ms median, 34.866 ms p95
+  Validator compilation: 35.289 ms median, 36.219 ms p95
+  TypeScript compile: 382.175 ms median, 397.885 ms p95
+  fluxfast doctor: 170.385 ms median, 171.931 ms p95
+  fluxfast generate --check: 104.005 ms median, 105.793 ms p95
+large-nested: 10 resources, 0 routes, 0 mutations, 0 explicit contracts; 81.0 KiB manifest
+  Python schema export: 138.250 ms median, 144.893 ms p95 (first export 140.138 ms)
+  Node manifest parsing: 3.937 ms median, 4.004 ms p95
+  Type compilation: 11.344 ms median, 11.810 ms p95
+  Validator compilation: 11.382 ms median, 11.737 ms p95
+  TypeScript compile: 203.828 ms median, 225.154 ms p95
+  fluxfast doctor: 63.421 ms median, 63.615 ms p95
+  fluxfast generate --check: 35.665 ms median, 36.815 ms p95
+many-routes: 10 resources, 500 routes, 0 mutations, 0 explicit contracts; 147.7 KiB manifest
+  Python schema export: 384.279 ms median, 446.558 ms p95 (first export 385.843 ms)
+  Node manifest parsing: 10.094 ms median, 12.949 ms p95
+  Type compilation: 9.137 ms median, 9.641 ms p95
+  Validator compilation: 9.696 ms median, 10.120 ms p95
+  TypeScript compile: 192.698 ms median, 218.404 ms p95
+  fluxfast doctor: 80.824 ms median, 85.436 ms p95
+  fluxfast generate --check: 51.097 ms median, 53.041 ms p95
+many-mutations: 10 resources, 0 routes, 500 mutations, 0 explicit contracts; 255.1 KiB manifest
+  Python schema export: 374.036 ms median, 421.234 ms p95 (first export 376.153 ms)
+  Node manifest parsing: 14.144 ms median, 15.206 ms p95
+  Type compilation: 24.917 ms median, 27.112 ms p95
+  Validator compilation: 29.971 ms median, 31.992 ms p95
+  TypeScript compile: 381.352 ms median, 395.135 ms p95
+  fluxfast doctor: 145.494 ms median, 146.780 ms p95
+  fluxfast generate --check: 101.277 ms median, 107.301 ms p95
+tradeoff: direct parse/type/validator compilation isolates codegen CPU; TypeScript compilation measures all generated contract artifacts; doctor and generate --check also include project detection, file reads, and deterministic artifact comparison
+correctness: PASS — manifests stayed deterministic; handlers never executed; counts and fingerprints matched; generated output stayed byte-stable and type-safe; doctor and generate --check accepted every consumer

@@ -1,0 +1,95 @@
+
+> @fluxfast/core@0.9.0 build /tmp/fluxfast-v1-perf-Tw04uS/v090/packages/core
+> tsc && tsc -p tsconfig.esm.json && node ../../scripts/write-esm-package.mjs dist/esm
+
+
+> @fluxfast/next@0.9.0 build /tmp/fluxfast-v1-perf-Tw04uS/v090/packages/next
+> tsc && tsc -p tsconfig.esm.json && node ../../scripts/write-esm-package.mjs dist/esm
+
+
+> fluxfast-browser-fixture@0.0.0 generate /tmp/fluxfast-v1-perf-Tw04uS/v090/tests/browser/frontend
+> node ./generate-types.mjs
+
+✓ Generated FluxFast registry at src/.fluxfast/pages.generated.ts
+✓ Generated FluxFast types from src/.fluxfast/schema.generated.json
+  src/.fluxfast/types.generated.ts
+  src/.fluxfast/validators.generated.ts
+  src/.fluxfast/routes.generated.ts
+  src/.fluxfast/mutations.generated.ts
+[fluxfast] validating frontend: /tmp/fluxfast-v1-perf-Tw04uS/v090/tests/browser/frontend
+FluxFast Configuration Check
+
+✓ Node 24.19.0
+✓ Next.js 16.3.4
+✓ React 19.2.8
+✓ React DOM 19.2.8
+✓ @fluxfast/next 0.9.0
+✓ @fluxfast/core 0.9.0
+✓ Root FluxFast package versions are compatible (0.9.0 / 0.9.0)
+✓ Adapter-resolved core is compatible (0.9.0 / 0.9.0)
+✓ App Router at src/app
+✓ src/ layout
+✓ TypeScript
+✓ FluxFast config at src/fluxfast.config.ts
+✓ next.config.ts uses withFluxFast()
+✓ FluxFast catch-all at src/app/(flux)/[[...flux]]/page.tsx
+✓ FluxFast public health route at src/app/%5Ffluxfast/[probe]/route.ts
+✓ FluxFast production transport route at src/app/%5Ffluxfast/transport/[[...path]]/route.ts
+✓ No root route conflict
+✓ 9 FluxFast pages registered
+✓ Registry is up-to-date with 9 pages
+
+FluxFast is configured correctly.
+✓ Generated FluxFast files are current.
+[fluxfast] building production frontend
+
+> fluxfast-browser-fixture@0.0.0 prebuild /tmp/fluxfast-v1-perf-Tw04uS/v090/tests/browser/frontend
+> pnpm run generate
+
+
+> fluxfast-browser-fixture@0.0.0 generate /tmp/fluxfast-v1-perf-Tw04uS/v090/tests/browser/frontend
+> node ./generate-types.mjs
+
+✓ Generated FluxFast registry at src/.fluxfast/pages.generated.ts
+✓ Generated FluxFast types from src/.fluxfast/schema.generated.json
+  src/.fluxfast/types.generated.ts
+  src/.fluxfast/validators.generated.ts
+  src/.fluxfast/routes.generated.ts
+  src/.fluxfast/mutations.generated.ts
+
+> fluxfast-browser-fixture@0.0.0 build /tmp/fluxfast-v1-perf-Tw04uS/v090/tests/browser/frontend
+> next build
+
+▲ Next.js 16.3.4 (Turbopack)
+[fluxfast] Generated component registry with 9 pages at /tmp/fluxfast-v1-perf-Tw04uS/v090/tests/browser/frontend/src/.fluxfast/pages.generated.ts
+✓ Running next.config.ts took 37ms
+
+  Creating an optimized production build ...
+[fluxfast] Generated component registry with 9 pages at /tmp/fluxfast-v1-perf-Tw04uS/v090/tests/browser/frontend/src/.fluxfast/pages.generated.ts
+✓ Compiled successfully in 145ms
+  Running TypeScript ...
+  Finished TypeScript in 271ms ...
+  Collecting page data using 6 workers ...
+  Generating static pages using 6 workers (0/2) ...
+✓ Generating static pages using 6 workers (2/2) in 452ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /_fluxfast/[probe]
+├ ƒ /_fluxfast/transport/[[...path]]
+├ ○ /_not-found
+└ ƒ /[[...flux]]
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+FluxFast controlled production lifecycle benchmark
+workload: 3 complete start/readiness/SIGTERM cycles for each 1/2/4/8 FastAPI-worker topology
+cumulative startup observations from supervisor launch:
+  1 worker(s) — FastAPI process start 453.632 ms; FastAPI ready 1020.982 ms; Next.js process start 1037.934 ms; public ready 1834.602 ms; SIGTERM cleanup 318.448 ms; 4 peak descendants
+  2 worker(s) — FastAPI process start 436.161 ms; FastAPI ready 1157.894 ms; Next.js process start 1171.192 ms; public ready 1960.463 ms; SIGTERM cleanup 592.568 ms; 7 peak descendants
+  4 worker(s) — FastAPI process start 443.605 ms; FastAPI ready 1220.012 ms; Next.js process start 1235.836 ms; public ready 2024.725 ms; SIGTERM cleanup 546.537 ms; 9 peak descendants
+  8 worker(s) — FastAPI process start 436.626 ms; FastAPI ready 1369.403 ms; Next.js process start 1386.730 ms; public ready 2110.573 ms; SIGTERM cleanup 498.208 ms; 13 peak descendants
+tradeoff: additional FastAPI workers increase process and startup work; timings are host observations, not release thresholds
+correctness: PASS — every run exposed one public port with loopback-only FastAPI, returned minimal health/readiness payloads, served from the exact worker count, exited cleanly on SIGTERM, and left no child process or listening socket after repeated start/stop cycles

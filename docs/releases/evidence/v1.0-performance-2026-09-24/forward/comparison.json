@@ -1,0 +1,265 @@
+{
+  "completed": true,
+  "startedAt": "2026-09-24T02:30:31.689Z",
+  "host": {
+    "platform": "linux",
+    "release": "6.18.33.2-microsoft-standard-WSL2",
+    "architecture": "x64",
+    "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+    "cpus": 12,
+    "startLoad": [
+      2.54,
+      1.01,
+      0.93
+    ],
+    "finishLoad": [
+      2.62,
+      1.85,
+      1.29
+    ]
+  },
+  "baselineCommit": "ee50ce0276c713a066e9324e3a9e5d2fc6df3872",
+  "candidateCommit": "d28a8d93500260dc8680a03b180f0e04e0e3ecb0",
+  "node": "24.19.0",
+  "python": "/home/el37628/fluxfast/.venv/bin/python",
+  "order": [
+    "v0.9.0",
+    "candidate"
+  ],
+  "lockSha256": "24d7e18f9bdf72c4a04bfb0a89d5c2fba740e40c7d8ec080484133d52c873d65",
+  "baselineToolingChanges": [
+    "packages/next/package.json",
+    "pnpm-lock.yaml",
+    "tests/browser/frontend/package.json"
+  ],
+  "sources": {
+    "v0.9.0": {
+      "root": "/tmp/fluxfast-v1-perf-Tw04uS/v090",
+      "runtimeSha256": "75c5cbb8f241a4930275f38ee4673db2ad78b1de40d057336b6e2d189e29dd73",
+      "python": {
+        "python": "3.13.14",
+        "source": "/tmp/fluxfast-v1-perf-Tw04uS/v090/python/fluxfast/src/fluxfast/__init__.py",
+        "dependencies": {
+          "fastapi": "0.141.1",
+          "pydantic": "2.13.5",
+          "starlette": "1.6.0",
+          "uvicorn": "0.52.4",
+          "anyio": "4.14.2",
+          "httpx2": "2.12.0",
+          "redis": "7.4.1"
+        }
+      },
+      "javascript": {
+        "next": "16.3.4",
+        "react": "19.2.8",
+        "react-dom": "19.2.8"
+      }
+    },
+    "candidate": {
+      "root": "/home/el37628/fluxfast",
+      "runtimeSha256": "6b48c36afc3c687f2258ba07f9fca717d1a0e54607f1c7eae19b267b4a020dab",
+      "python": {
+        "python": "3.13.14",
+        "source": "/home/el37628/fluxfast/python/fluxfast/src/fluxfast/__init__.py",
+        "dependencies": {
+          "fastapi": "0.141.1",
+          "pydantic": "2.13.5",
+          "starlette": "1.6.0",
+          "uvicorn": "0.52.4",
+          "anyio": "4.14.2",
+          "httpx2": "2.12.0",
+          "redis": "7.4.1"
+        }
+      },
+      "javascript": {
+        "next": "16.3.4",
+        "react": "19.2.8",
+        "react-dom": "19.2.8"
+      }
+    }
+  },
+  "harness": {
+    "benchmarks/scripts/benchmark_bundle.mjs": "52b0d31db919eb8777e05d433de6e721dac4dc843fee6892cf9427e8749ed10a",
+    "benchmarks/scripts/benchmark_codegen.mjs": "37290fb817e1139e5bde39de0a412dca66f01fe789ad65dd9560e3495d728e68",
+    "benchmarks/scripts/benchmark_codegen_export.py": "894a1d05d959088207ca5ddd9a6f31d0ef0feaba256f4866a1f9fdfbb6721762",
+    "benchmarks/scripts/benchmark_container.py": "313de087cfaea31e0adfd305f3d8e732e5dd6138db9bc8f7244d435ee2048636",
+    "benchmarks/scripts/benchmark_cross_page.py": "98dc7fb58d42e6f9f62d747c4b695dba9159f31bed5eca5a58841426ea9112a5",
+    "benchmarks/scripts/benchmark_deferred.py": "b0746e87ed044fef89332820f13ba7823314c7b3e9d5cd298761f80b2aced37f",
+    "benchmarks/scripts/benchmark_live.py": "b58cb15be9b1a176d73be45d50b1faa4638f603b291fd184a3eb3ef218275ed0",
+    "benchmarks/scripts/benchmark_memory.mjs": "50f46a986009f315f32574dae3476801c771e4ed81d1a4b1ed5a5e8f22b2043a",
+    "benchmarks/scripts/benchmark_production.py": "38ccfeb5c29349994372b99631722959cdb8cf7439f9c3d7948af9bba116833d",
+    "benchmarks/scripts/benchmark_redis_cache.py": "4a58bd5cfef07d7ff59d1d58cd09254eef73c7d2cf46972aee3e3af75b232b12",
+    "benchmarks/scripts/benchmark_v1_comparison.mjs": "b02706ba3cfc9e414479af31557990147833de16931ec558f1a541f5eb620a95",
+    "benchmarks/scripts/benchmark_validation.mjs": "08b1f6dcf0c40b6d86020b7c262311d2374b180f1cf5974d97f51d8d70ab8d3d",
+    "benchmarks/fixtures/__init__.py": "3e32847aedaf36b200fcdd41115401eda6750e49c3e08ada910d4bc40840e957",
+    "benchmarks/fixtures/app.py": "73b050c270ae305ba0b883cdf6810892849ba469a0b1dea622034c7186d20d62",
+    "benchmarks/fixtures/deferred.py": "aecaae63817ff482c93d3173ebffb3b6dca8123b53603dd32fdf03589fcaf9da",
+    "benchmarks/fixtures/redis_worker.py": "6f95ea946afa5ad133749365914c0fd9afb998b5f19a7dbf2ff8cb9beefb9939"
+  },
+  "results": [
+    {
+      "label": "v0.9.0",
+      "workload": "cross-page",
+      "filename": "v0.9.0-cross-page.txt",
+      "sha256": "eee798e771eff21fb04ca709f5f09932491090b5d17d1727b69b43a28153b52a",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "candidate",
+      "workload": "cross-page",
+      "filename": "candidate-cross-page.txt",
+      "sha256": "c33e95c8715a99b06cebbdc091c50ee8d2487bbfb8131928d04bcd5a075a7acd",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "v0.9.0",
+      "workload": "deferred",
+      "filename": "v0.9.0-deferred.txt",
+      "sha256": "707c1a01bc8a351b9e1a19e182793359b00cec1223b659d59b51d00d2440315d",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "candidate",
+      "workload": "deferred",
+      "filename": "candidate-deferred.txt",
+      "sha256": "c6b59e7a673c6d1653a42eaab732a12a55a64a9f74af99b9b7b2af8f5b5a70f8",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "v0.9.0",
+      "workload": "live",
+      "filename": "v0.9.0-live.txt",
+      "sha256": "bde5c33e5f40bf1a61832e2f9b33e14e25154f967b4e9e4ecae03f9e0c5b174d",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "candidate",
+      "workload": "live",
+      "filename": "candidate-live.txt",
+      "sha256": "77a4a504892ab95bf606562bb24ebed00b003549ae077684f5726f44ff7b7957",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "v0.9.0",
+      "workload": "redis-cache",
+      "filename": "v0.9.0-redis-cache.txt",
+      "sha256": "2246f299fac358abd8f34ffc4e31a062650685dd01dfa27172abd71ed3b57963",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "candidate",
+      "workload": "redis-cache",
+      "filename": "candidate-redis-cache.txt",
+      "sha256": "6114bde3f279d3b1c8ba666896e58147a0d5fc50d52b56496c06d53e36a58598",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "v0.9.0",
+      "workload": "codegen",
+      "filename": "v0.9.0-codegen.txt",
+      "sha256": "3ba9b7795d38613bcfd0d56c83d883bb87afa5c3bbd451d6b817d41b5f7c347f",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "candidate",
+      "workload": "codegen",
+      "filename": "candidate-codegen.txt",
+      "sha256": "1f35db48eb34729f8a6ac044cfe851d6a8a927d6362d1a162049f2fab6e8b0db",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "v0.9.0",
+      "workload": "validation",
+      "filename": "v0.9.0-validation.txt",
+      "sha256": "21ae8793bbaa859956b67f6486fa154d732b7f8f11d72558a5d8798e592764dd",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "candidate",
+      "workload": "validation",
+      "filename": "candidate-validation.txt",
+      "sha256": "0c6628ad799e5689d4539e6a80e3584e9f7d58270b3d7745c2e95ab602866af3",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "v0.9.0",
+      "workload": "memory",
+      "filename": "v0.9.0-memory.txt",
+      "sha256": "f36c043e3839754a996de1251906d4e44bb5078a3528e6caef6730840e1b7921",
+      "exitCode": 1,
+      "signal": null,
+      "status": "known-v090-state-only-memory-defect"
+    },
+    {
+      "label": "candidate",
+      "workload": "memory",
+      "filename": "candidate-memory.txt",
+      "sha256": "58da8c7a178e87b08f18d821cbc19df9dc3174b8e8b484d361647175bdb20e49",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "v0.9.0",
+      "workload": "bundle",
+      "filename": "v0.9.0-bundle.txt",
+      "sha256": "a29bbfe4735da3712947c8b6bcfb73538435ed30f145a156daf6bcfbbd3db43c",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "candidate",
+      "workload": "bundle",
+      "filename": "candidate-bundle.txt",
+      "sha256": "dadd58bb036379ac3f216221462acdbef1a9e0561122a6fbcea3ced21a4e7e62",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "v0.9.0",
+      "workload": "production",
+      "filename": "v0.9.0-production.txt",
+      "sha256": "32a18f84188a607bef50e6822ca41fcf4eb962315316e8d35a6373a8266b3d87",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    },
+    {
+      "label": "candidate",
+      "workload": "production",
+      "filename": "candidate-production.txt",
+      "sha256": "210988b607d8e04af39dc2afea50e2b98a9c69ba87476cf11f9dfd4faae21d20",
+      "exitCode": 0,
+      "signal": null,
+      "status": "passed"
+    }
+  ],
+  "policy": "Timings and heap trends are observations; investigate repeatable meaningful hot-path regressions over 10%. Candidate correctness is mandatory.",
+  "finishedAt": "2026-09-24T02:35:40.784Z"
+}

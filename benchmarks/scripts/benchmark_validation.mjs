@@ -3,9 +3,15 @@
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 import { createRequire } from "node:module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const require = createRequire(import.meta.url);
-const { createValidator } = require("../../packages/core/dist/index.js");
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = process.env.FLUXFAST_BENCHMARK_REPOSITORY_ROOT
+  ? path.resolve(process.env.FLUXFAST_BENCHMARK_REPOSITORY_ROOT)
+  : path.resolve(scriptDirectory, "../..");
+const require = createRequire(path.join(repositoryRoot, "package.json"));
+const { createValidator } = require("./packages/core/dist/index.js");
 
 function parseArguments(argv) {
   const options = { iterations: 25, samples: 5 };
@@ -204,7 +210,7 @@ function buildWorkloads() {
 function runBenchmark(samples, iterations) {
   const workloads = buildWorkloads();
   console.log("FluxFast controlled core validation-plan runtime benchmark");
-  console.log(`environment: Node ${process.versions.node}`);
+  console.log(`environment: Node ${process.versions.node}; packages ${repositoryRoot}`);
   console.log(
     `workload: ${samples} measured samples of ${iterations} validations after one untimed correctness warm-up; no timing thresholds`,
   );
