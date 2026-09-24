@@ -12,6 +12,10 @@ The frontend adapter targets the Next.js 16 App Router.
 
 ## Quickstart
 
+For a complete empty-directory walkthrough covering a shared typed resource,
+generated validator and mutation helper, production build, and one-origin
+startup, follow [Getting Started](docs/getting-started.md).
+
 Create a Python environment and install the backend package:
 
 ```bash
@@ -331,7 +335,7 @@ guidance.
 
 ## Documentation
 
-- [Getting Started](#quickstart)
+- [Getting Started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
 - [Resources](#resources)
 - [Mutations](docs/mutations.md)

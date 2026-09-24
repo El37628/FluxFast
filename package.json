@@ -22,6 +22,7 @@
     "test:schema-compatibility": "node scripts/test-schema-compatibility.mjs",
     "test:consumer:init": "node scripts/test-next-init-consumer.mjs",
     "test:consumer:production": "FLUXFAST_RUN_PRODUCTION=1 node scripts/test-next-init-consumer.mjs",
+    "test:consumer:stranger": "node scripts/test-fresh-docs-consumer.mjs",
     "test:consumer:mixed-published": "node scripts/test-published-mixed-consumer.mjs",
     "test:python": "./.venv/bin/python -m pytest -q python/fluxfast/tests",
     "benchmark": "pnpm benchmark:runtime && pnpm benchmark:codegen && pnpm benchmark:validation && pnpm benchmark:memory && pnpm benchmark:bundle && pnpm benchmark:production",

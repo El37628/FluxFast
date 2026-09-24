@@ -151,6 +151,7 @@ security, and both CodeQL languages.
   "nonRequiredExhaustiveChecks": [
     "Generated artifacts (ubuntu-latest)",
     "Generated artifacts (windows-latest)",
+    "Fresh documentation consumer",
     "Redis 6.2.24 on Python 3.11",
     "Redis 8.10.1 on Python 3.14",
     "Distributed browser flow",
