@@ -68,9 +68,25 @@ test("comparison refuses to measure the candidate as its own baseline", () => {
 
 test("controlled source comparison remains manual and records both workload orders", () => {
   const workflow = fs.readFileSync(path.join(root, ".github/workflows/benchmark.yml"), "utf8");
+  const runner = fs.readFileSync(path.join(root, "benchmarks/scripts/benchmark_v1_comparison.mjs"), "utf8");
   assert.match(workflow, /workflow_dispatch:\s+inputs:\s+compare_v090:/);
   assert.doesNotMatch(workflow, /^  (?:push|pull_request|schedule):/m);
   assert.match(workflow, /ref: v0\.9\.0/);
+  for (const manifest of [
+    "package.json",
+    "packages/core/package.json",
+    "packages/next/package.json",
+    "tests/browser/frontend/package.json",
+  ]) {
+    assert.ok(
+      workflow.includes(`cp ${manifest} .comparison-baseline/${manifest}`),
+      `comparison workflow does not align ${manifest}`,
+    );
+    assert.ok(
+      runner.includes(`"${manifest}"`),
+      `comparison runner does not allow or verify ${manifest}`,
+    );
+  }
   assert.equal((workflow.match(/node benchmarks\/scripts\/benchmark_v1_comparison\.mjs/g) ?? []).length, 2);
   assert.match(workflow, /--reverse/);
   assert.match(workflow, /name: v090-candidate-comparison/);

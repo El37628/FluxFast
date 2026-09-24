@@ -110,7 +110,9 @@ jobs:
       - run: python -m pip install 'python/fluxfast[dev,redis]'
       - name: Align comparison tooling without changing baseline runtime sources
         run: |
+          cp package.json .comparison-baseline/package.json
           cp pnpm-lock.yaml .comparison-baseline/pnpm-lock.yaml
+          cp packages/core/package.json .comparison-baseline/packages/core/package.json
           cp packages/next/package.json .comparison-baseline/packages/next/package.json
           cp tests/browser/frontend/package.json .comparison-baseline/tests/browser/frontend/package.json
           pnpm install --frozen-lockfile
