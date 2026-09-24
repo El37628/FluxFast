@@ -1,0 +1,11 @@
+FluxFast controlled core validation-plan runtime benchmark
+environment: Node 24.19.0; packages /home/el37628/fluxfast
+workload: 10 measured samples of 100 validations after one untimed correctness warm-up; no timing thresholds
+large nested object (24 levels, valid): 0.043 ms/validation median, 0.087 ms/validation p95
+large nested object (24 levels, invalid leaf): 0.039 ms/validation median, 0.047 ms/validation p95
+large array (10000 objects, valid): 13.779 ms/validation median, 13.873 ms/validation p95
+large array (10000 objects, invalid tail): 13.445 ms/validation median, 13.768 ms/validation p95
+recursive linked value (16 nodes, valid): 0.037 ms/validation median, 0.062 ms/validation p95
+recursive linked value (16 nodes, invalid tail): 0.029 ms/validation median, 0.033 ms/validation p95
+tradeoff: validation is synchronous and bounded; valid large collections traverse every element, while invalid-tail cases also retain exact nested issue paths
+correctness: PASS — valid nested, array, and JSON-pointer-recursive values were accepted; invalid leaf and tail values were rejected at their exact paths

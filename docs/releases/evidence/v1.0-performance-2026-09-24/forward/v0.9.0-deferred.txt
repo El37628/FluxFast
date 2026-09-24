@@ -1,0 +1,11 @@
+FluxFast controlled deferred-resource benchmark
+workload: 5 samples; fast=10 ms, medium=100 ms, slow=500 ms
+blocking baseline initial: 504.07 ms median, 1335 bytes median, 3 resources, 0 pending, 0 cache hits, 3 cache misses
+blocking capable initial: 503.86 ms median, 1375 bytes median, 3 resources, 0 pending, 0 cache hits, 3 cache misses
+deferred initial: 13.03 ms median, 542 bytes median, 1 resources, 2 pending, 0 cache hits, 3 cache misses
+deferred follow-up: 503.59 ms median, 1011 bytes median, 2 resources, 0 pending, 0 cache hits, 2 cache misses
+deferred settlement: 516.79 ms median across two requests
+capability-only blocking delta: -0.20 ms median
+payload tradeoff: blocking=1335 bytes; deferred initial=542 bytes; deferred settled total=1553 bytes
+loader counts: blocking:fast=10, blocking:medium=10, blocking:slow=10, deferred:fast=5, deferred:medium=5, deferred:slow=5
+correctness: PASS — initial deferred response ran only fast; follow-up ran medium+slow; blocking resources stayed immediate

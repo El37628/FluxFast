@@ -1,0 +1,9 @@
+FluxFast controlled cross-page benchmark
+workload: 25 fresh-application samples; no timing thresholds
+initial dashboard: 5.71 ms median, 26151 bytes median
+complete props: 2.33 ms median, 86119 bytes median
+resource delta: 7.19 ms median, 64314 bytes median, 4 cache hits, 2 cache misses
+warm resource response: 3.50 ms median, 6 cache hits, 0 cache misses
+payload reduction: 25.3% (21805 bytes)
+delta resources: room-types, rooms
+correctness: PASS — every fresh app omitted all four known shared resources; cold, mixed, and warm cache counters matched; every loader ran once; response byte counts remained stable

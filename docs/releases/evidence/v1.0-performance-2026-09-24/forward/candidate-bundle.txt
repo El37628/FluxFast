@@ -1,0 +1,10 @@
+FluxFast controlled production-bundle benchmark
+environment: Node 24.19.0; Next.js 16.3.4; packages /home/el37628/fluxfast
+workload: five clean production builds generated from 100 contracts; no timing or byte thresholds
+minimal-core: / first-load 448.1 KiB (458826 B); all client chunks 558.0 KiB (571420 B) (0 B vs minimal-core, -48.1 KiB (-49224 B) vs no-validators); validator chunks 0 B; build 5080.331 ms; retained plans 0; retained runtime markers 0
+minimal-next: / first-load 494.3 KiB (506141 B); all client chunks 604.2 KiB (618735 B) (46.2 KiB (47315 B) vs minimal-core, -1.9 KiB (-1909 B) vs no-validators); validator chunks 0 B; build 5131.176 ms; retained plans 0; retained runtime markers 0
+no-validators: / first-load 496.1 KiB (508050 B); all client chunks 606.1 KiB (620644 B) (48.1 KiB (49224 B) vs minimal-core, 0 B vs no-validators); validator chunks 0 B; build 5287.083 ms; retained plans 0; retained runtime markers 0
+one-validator: / first-load 524.0 KiB (536572 B); all client chunks 634.0 KiB (649166 B) (75.9 KiB (77746 B) vs minimal-core, 27.9 KiB (28522 B) vs no-validators); validator chunks 81.4 KiB (83317 B); build 5169.675 ms; retained plans 1; retained runtime markers 2
+realistic-validators-live-forms: / first-load 525.3 KiB (537945 B); all client chunks 635.3 KiB (650539 B) (77.3 KiB (79119 B) vs minimal-core, 29.2 KiB (29895 B) vs no-validators); validator chunks 82.7 KiB (84690 B); build 5287.702 ms; retained plans 10; retained runtime markers 2
+tradeoff: dual ESM/CommonJS package output preserves require() compatibility while allowing production bundlers to omit the framework-neutral validation runtime until a validator is imported; aggregate .next chunk totals include framework chunks and are comparison data, not a package-size guarantee
+correctness: PASS — all five production consumers rendered; validator-free Core, Next, and application builds retained neither generated plans nor validation-runtime markers, while the single-validator and realistic application builds retained exactly one and ten plans plus the runtime

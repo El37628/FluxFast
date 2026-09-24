@@ -92,36 +92,128 @@ function createManifest() {
   };
 }
 
+function renderMinimalNextPage() {
+  return [
+    '"use client";',
+    "",
+    'import type { PageEnvelope } from "@fluxfast/core";',
+    'import { PROTOCOL_VERSION } from "@fluxfast/core";',
+    'import { FluxProvider, useResource } from "@fluxfast/next";',
+    "",
+    "const initialEnvelope: PageEnvelope = {",
+    "  protocol: PROTOCOL_VERSION,",
+    '  page: { component: "home/index", url: "/" },',
+    '  resourceKeys: ["summary"],',
+    '  resources: { summary: { version: "summary-v1", value: { rooms: 42 } } },',
+    "};",
+    "",
+    "function Consumer() {",
+    '  const summary = useResource<{ rooms: number }>("summary");',
+    '  return <main data-minimal-next={summary.rooms}>Rooms: {summary.rooms}</main>;',
+    "}",
+    "",
+    "export default function Page() {",
+    "  return <FluxProvider initialEnvelope={initialEnvelope}><Consumer /></FluxProvider>;",
+    "}",
+  ].join("\n") + "\n";
+}
+
+function renderApplicationPage(importedIndexes) {
+  const names = importedIndexes.map(index => contractName(index) + "Validator");
+  assert.equal(
+    new Set(importedIndexes).size,
+    importedIndexes.length,
+    "The consumer must import each validator only once",
+  );
+  const validatorChecks = importedIndexes.map(
+    (index, position) =>
+      names[position] + ".is({ " + marker(index) + ': "ok" })',
+  );
+  const source = [
+    '"use client";',
+    "",
+    'import type { PageEnvelope } from "@fluxfast/core";',
+    'import { PROTOCOL_VERSION } from "@fluxfast/core";',
+    'import { FluxProvider, Link, useDeferredResource, useLiveStatus, useResource' +
+      (names.length > 0 ? ", useForm" : "") +
+      ' } from "@fluxfast/next";',
+    ...(names.length > 0
+      ? ['import { ' + names.join(", ") + ' } from "../.fluxfast/validators.generated";']
+      : []),
+    "",
+    "const initialEnvelope: PageEnvelope = {",
+    "  protocol: PROTOCOL_VERSION,",
+    '  page: { component: "home/index", url: "/" },',
+    '  resourceKeys: ["summary", "details"],',
+    "  resources: {",
+    '    summary: { version: "summary-v1", value: { rooms: 42 } },',
+    "  },",
+    '  deferred: ["details"],',
+    '  live: ["summary"],',
+    "};",
+    ...(names.length > 0
+      ? [
+          "const validatorChecks = [",
+          "  " + validatorChecks.join(",\n  "),
+          "];",
+        ]
+      : []),
+    "",
+    "function Board() {",
+    '  const summary = useResource<{ rooms: number }>("summary");',
+    '  const details = useDeferredResource<{ message: string }>("details");',
+    "  const live = useLiveStatus();",
+    ...(names.length > 0
+      ? [
+          '  const form = useForm({ field0000: "ready" }, { validator: ' +
+            names[0] +
+            " });",
+        ]
+      : []),
+    "  return (",
+    '    <main data-consumer="ready" data-validator-count={' +
+      (names.length > 0 ? "validatorChecks.filter(Boolean).length" : "0") +
+      "}>",
+    '      <p data-room-count={summary.rooms}>Rooms: {summary.rooms}</p>',
+    '      <p data-deferred={details.status}>{details.data?.message ?? "pending"}</p>',
+    '      <p data-live-status={live.status}>Live: {live.status}</p>',
+    ...(names.length > 0
+      ? [
+          '      <form data-form-value={form.data.field0000} onSubmit={form.submit("/save")}>',
+          '        <input name="field0000" value={form.data.field0000} onChange={event => form.setData("field0000", event.target.value)} />',
+          "        {form.errors.field0000 && <p role=\"alert\">{form.errors.field0000}</p>}",
+          '        <button type="submit" disabled={form.processing}>Save</button>',
+          "      </form>",
+        ]
+      : []),
+    '      <button type="button" onClick={() => void details.retry()}>Retry details</button>',
+    '      <Link href="/rooms">Rooms</Link>',
+    "    </main>",
+    "  );",
+    "}",
+    "",
+    "export default function Page() {",
+    "  return <FluxProvider initialEnvelope={initialEnvelope}><Board /></FluxProvider>;",
+    "}",
+  ];
+  return source.join("\n") + "\n";
+}
+
 function renderPage(name, importedIndexes) {
+  if (name === "no-validators") return renderApplicationPage([]);
+  if (name === "one-validator") {
+    assert.deepEqual(importedIndexes, [0]);
+    return renderApplicationPage(importedIndexes);
+  }
+  if (name === "realistic-validators-live-forms") {
+    assert.equal(importedIndexes.length, multipleCount);
+    return renderApplicationPage(importedIndexes);
+  }
+  if (name === "minimal-next") return renderMinimalNextPage();
   if (name === "minimal-core") {
     return `"use client";\n\nimport { PROTOCOL_VERSION } from "@fluxfast/core";\n\nexport default function Page() {\n  return <main data-fluxfast-core={PROTOCOL_VERSION}>Minimal Core consumer</main>;\n}\n`;
   }
-
-  if (name === "minimal-next") {
-    return `"use client";\n\nimport { useResource } from "@fluxfast/next";\n\nconst fluxfastConsumer = String(useResource).length;\n\nexport default function Page() {\n  return <main data-fluxfast-next={fluxfastConsumer}>Minimal Next consumer</main>;\n}\n`;
-  }
-
-  const runtimeImports = [
-    'import { PROTOCOL_VERSION } from "@fluxfast/core";',
-    'import { Link, useDeferredResource, useForm, useLiveStatus, useResource } from "@fluxfast/next";',
-  ].join("\n");
-  const consumerProbe = [
-    "PROTOCOL_VERSION,",
-    "String(Link).length,",
-    "String(useDeferredResource).length,",
-    "String(useForm).length,",
-    "String(useLiveStatus).length,",
-    "String(useResource).length,",
-  ].join("\n  ");
-  if (importedIndexes.length === 0) {
-    return `"use client";\n\n${runtimeImports}\n\nconst fluxfastConsumer = [\n  ${consumerProbe}\n].join(":");\n\nexport default function Page() {\n  return <main data-fluxfast-consumer={fluxfastConsumer} data-validator-count="0">No validators imported</main>;\n}\n`;
-  }
-  const names = importedIndexes.map(index => `${contractName(index)}Validator`);
-  const imports = `import { ${names.join(", ")} } from "../.fluxfast/validators.generated";`;
-  const entries = importedIndexes.map((index, position) =>
-    `${names[position]}.is({ ${marker(index)}: "ok" })`
-  );
-  return `"use client";\n\n${runtimeImports}\n${imports}\n\nconst fluxfastConsumer = [\n  ${consumerProbe}\n].join(":");\nconst checks = [\n  ${entries.join(",\n  ")}\n];\n\nexport default function Page() {\n  return <main data-fluxfast-consumer={fluxfastConsumer} data-validator-count={checks.filter(Boolean).length}>Validators imported</main>;\n}\n`;
+  throw new Error(`Unknown bundle benchmark variant: ${name}`);
 }
 
 function prepareProject(root, name, importedIndexes) {
@@ -185,13 +277,13 @@ function prepareProject(root, name, importedIndexes) {
   fs.symlinkSync(fixtureNodeModules, path.join(root, "node_modules"), "dir");
 }
 
-function listJavaScriptFiles(root) {
+function listFiles(root, extension = ".js") {
   const files = [];
   const visit = directory => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const target = path.join(directory, entry.name);
       if (entry.isDirectory()) visit(target);
-      else if (entry.isFile() && entry.name.endsWith(".js")) files.push(target);
+      else if (entry.isFile() && entry.name.endsWith(extension)) files.push(target);
     }
   };
   visit(root);
@@ -221,7 +313,7 @@ function buildVariant(temporaryRoot, name, importedIndexes) {
   );
 
   const chunkRoot = path.join(projectRoot, ".next", "static", "chunks");
-  const files = listJavaScriptFiles(chunkRoot);
+  const files = listFiles(chunkRoot);
   const chunks = files.map(file => ({
     bytes: fs.statSync(file).size,
     content: fs.readFileSync(file, "utf8"),
@@ -256,6 +348,33 @@ function buildVariant(temporaryRoot, name, importedIndexes) {
   ));
   const pageStats = routeStats.find(entry => entry.route === "/");
   assert.ok(pageStats, `Next.js ${name} build did not report the / route`);
+  if (name !== "minimal-core") {
+    const renderedHtml = listFiles(
+      path.join(projectRoot, ".next", "server", "app"),
+      ".html",
+    )
+      .map(file => fs.readFileSync(file, "utf8"))
+      .join("\n");
+    const expected = name === "minimal-next"
+      ? ['data-minimal-next="42"']
+      : [
+          'data-consumer="ready"',
+          'data-validator-count="' + importedIndexes.length + '"',
+          'data-room-count="42"',
+          'data-deferred="pending"',
+          'data-live-status="idle"',
+          'href="/rooms"',
+          ...(importedIndexes.length > 0
+            ? ['data-form-value="ready"', "<form"]
+            : []),
+        ];
+    for (const marker of expected) {
+      assert.ok(
+        renderedHtml.includes(marker),
+        "The " + name + " production render did not contain " + marker,
+      );
+    }
+  }
   return {
     buildMs,
     firstLoadBytes: pageStats.firstLoadUncompressedJsBytes,
@@ -313,7 +432,7 @@ function runBenchmark() {
       "tradeoff: dual ESM/CommonJS package output preserves require() compatibility while allowing production bundlers to omit the framework-neutral validation runtime until a validator is imported; aggregate .next chunk totals include framework chunks and are comparison data, not a package-size guarantee",
     );
     console.log(
-      "correctness: PASS — minimal Core and Next consumers built independently; every validator-free build retained neither generated plans nor validation-runtime markers, while the single-validator and realistic validators/live/forms builds retained exactly one and ten plans plus the runtime",
+      "correctness: PASS — all five production consumers rendered; validator-free Core, Next, and application builds retained neither generated plans nor validation-runtime markers, while the single-validator and realistic application builds retained exactly one and ten plans plus the runtime",
     );
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });

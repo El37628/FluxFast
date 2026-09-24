@@ -1,0 +1,35 @@
+FluxFast controlled client memory/resource benchmark
+environment: Node 24.19.0; packages /tmp/fluxfast-v1-perf-Tw04uS/v090
+workload: 5 retained-heap samples after one warm-up; 100 cycles per navigation/deferred/mutation/live batch; 10000 ResourceStore inserts and valid+invalid validation pairs per batch
+navigation: retained +12.7 KiB; per-sample trend +3.2 KiB; heap samples 5.02 MiB, 5.02 MiB, 5.02 MiB, 5.03 MiB, 5.04 MiB
+deferred loads: retained +62.1 KiB; per-sample trend +15.6 KiB; heap samples 5.07 MiB, 5.21 MiB, 5.13 MiB, 5.13 MiB, 5.13 MiB
+mutation cycles: retained +1.3 KiB; per-sample trend +0.3 KiB; heap samples 5.17 MiB, 5.17 MiB, 5.17 MiB, 5.17 MiB, 5.17 MiB
+live reconnects: retained -163.0 KiB; per-sample trend +2.8 KiB; heap samples 5.28 MiB, 5.28 MiB, 5.28 MiB, 5.29 MiB, 5.29 MiB
+large ResourceStore: retained +1.9 KiB; per-sample trend +0.2 KiB; heap samples 5.31 MiB, 5.31 MiB, 5.31 MiB, 5.31 MiB, 5.31 MiB
+validation calls: retained +32.1 KiB; per-sample trend +9.3 KiB; heap samples 5.46 MiB, 5.49 MiB, 5.49 MiB, 5.50 MiB, 5.50 MiB
+long-lived lifecycle sample 1: cycles 200; resources 16; states 216; epochs 800; heap 5.80 MiB
+long-lived lifecycle sample 2: cycles 300; resources 16; states 316; epochs 1200; heap 5.90 MiB
+long-lived lifecycle sample 3: cycles 400; resources 16; states 416; epochs 1600; heap 5.94 MiB
+long-lived lifecycle sample 4: cycles 500; resources 16; states 516; epochs 2000; heap 6.02 MiB
+long-lived lifecycle sample 5: cycles 600; resources 16; states 616; epochs 2400; heap 6.13 MiB
+long-lived lifecycle: retained +421.5 KiB; per-sample trend +85.2 KiB
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  assert.ok(privateSize(router.resourceStore, "stateSnapshots") <= 16)
+
+    at longLivedLifecycle (file:///home/el37628/fluxfast/benchmarks/scripts/benchmark_memory.mjs:329:12)
+    at async runBenchmark (file:///home/el37628/fluxfast/benchmarks/scripts/benchmark_memory.mjs:365:3)
+    at async file:///home/el37628/fluxfast/benchmarks/scripts/benchmark_memory.mjs:375:1 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.19.0

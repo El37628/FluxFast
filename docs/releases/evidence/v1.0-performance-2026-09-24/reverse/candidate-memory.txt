@@ -1,0 +1,17 @@
+FluxFast controlled client memory/resource benchmark
+environment: Node 24.19.0; packages /home/el37628/fluxfast
+workload: 5 retained-heap samples after one warm-up; 100 cycles per navigation/deferred/mutation/live batch; 10000 ResourceStore inserts and valid+invalid validation pairs per batch
+navigation: retained +10.6 KiB; per-sample trend +2.8 KiB; heap samples 5.06 MiB, 5.06 MiB, 5.06 MiB, 5.07 MiB, 5.07 MiB
+deferred loads: retained +63.0 KiB; per-sample trend +15.7 KiB; heap samples 5.11 MiB, 5.16 MiB, 5.17 MiB, 5.17 MiB, 5.17 MiB
+mutation cycles: retained +8.4 KiB; per-sample trend +2.1 KiB; heap samples 5.21 MiB, 5.21 MiB, 5.21 MiB, 5.21 MiB, 5.22 MiB
+live reconnects: retained -10.7 KiB; per-sample trend +2.8 KiB; heap samples 5.33 MiB, 5.33 MiB, 5.33 MiB, 5.34 MiB, 5.34 MiB
+large ResourceStore: retained +1.6 KiB; per-sample trend +0.2 KiB; heap samples 5.36 MiB, 5.36 MiB, 5.36 MiB, 5.36 MiB, 5.36 MiB
+validation calls: retained +32.1 KiB; per-sample trend +9.3 KiB; heap samples 5.51 MiB, 5.54 MiB, 5.54 MiB, 5.55 MiB, 5.55 MiB
+long-lived lifecycle sample 1: cycles 200; resources 10; states 16; epochs 800; heap 5.84 MiB
+long-lived lifecycle sample 2: cycles 300; resources 10; states 16; epochs 1024; heap 5.91 MiB
+long-lived lifecycle sample 3: cycles 400; resources 10; states 16; epochs 1024; heap 5.96 MiB
+long-lived lifecycle sample 4: cycles 500; resources 10; states 16; epochs 1024; heap 6.00 MiB
+long-lived lifecycle sample 5: cycles 600; resources 10; states 16; epochs 1024; heap 6.04 MiB
+long-lived lifecycle: retained +274.0 KiB; per-sample trend +50.9 KiB
+policy: heap values are diagnostic trend observations after forced collection, not exact-byte CI thresholds
+correctness: PASS — page/resource stores and state-only metadata stayed capped; deferred and mutation state converged; live connections and listeners returned to zero; long-lived epoch history stayed bounded and was released on destroy; large stores evicted to their configured bound; all validation outcomes remained exact

@@ -1,0 +1,3 @@
+
+> @fluxfast/next@0.9.0 build /home/el37628/fluxfast/packages/next
+> tsc && tsc -p tsconfig.esm.json && node ../../scripts/write-esm-package.mjs dist/esm
