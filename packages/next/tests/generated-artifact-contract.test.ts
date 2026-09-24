@@ -58,6 +58,9 @@ const schemaFixture = fs.readFileSync(
   ),
   "utf8"
 );
+const packageVersion = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8")
+).version as string;
 
 function prepareProject(root: string, schemaContent = schemaFixture): {
   generatedDir: string;
@@ -523,7 +526,7 @@ describe("generated artifact compatibility contract", () => {
       )
     ) as GeneratedContractBaseline;
     expect(baseline.capturedFrom).toBe("@fluxfast/next@0.9.0");
-    expect(baseline.candidatePackage).toBe("1.0.0");
+    expect(baseline.candidatePackage).toBe(packageVersion);
 
     const reference = createGeneratedContractSnapshot(
       prepareProject(temporaryProject()).generatedDir

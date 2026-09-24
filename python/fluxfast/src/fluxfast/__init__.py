@@ -1,6 +1,6 @@
 """FluxFast — high-performance server-driven application runtime for FastAPI."""
 
-__version__ = "0.9.0"
+__version__ = "1.0.0"
 
 from .app import FluxFast
 from .cache import CachedResource, MemoryResourceCache, ResourceCacheBackend

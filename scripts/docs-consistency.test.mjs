@@ -250,8 +250,11 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   const stability = read("docs/stability.md");
   const versioning = read("docs/versioning.md");
   const upgrade = read("docs/upgrade-v1.md");
+  const releaseNotes = read("docs/releases/v1.0.0.md");
+  const releasing = read("docs/releasing.md");
   const migrationV1 = read("docs/migration.md").split("\n---\n", 1)[0];
   const readme = read("README.md");
+  const security = read("SECURITY.md");
 
   assert.match(stability, /FluxFast 1\.x follows semantic versioning\./);
   assert.match(stability, /### Patch releases: 1\.0\.x/);
@@ -300,6 +303,15 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   assert.match(upgrade, /fluxfast doctor --production \\\n/);
   assert.match(upgrade, /Do not run `fluxfast init`/);
   assert.doesNotMatch(migrationV1, /fluxfast init --yes/);
+  assert.match(releaseNotes, /^# FluxFast 1\.0\.0 Release Notes$/m);
+  assert.match(releaseNotes, /fluxfast==1\.0\.0/);
+  assert.match(releaseNotes, /@fluxfast\/core@1\.0\.0 @fluxfast\/next@1\.0\.0/);
+  assert.match(releaseNotes, /zero unresolved P0\/P1 findings/);
+  assert.match(releaseNotes, /Python \| 3\.11, 3\.12, 3\.13, 3\.14/);
+  assert.match(security, /Pre-1\.0 releases are\s+unsupported/);
+  assert.doesNotMatch(security, /Before 1\.0/);
+  assert.equal(releasing.match(/version=1\.0\.0/g)?.length, 2);
+  assert.doesNotMatch(releasing, /version=0\.9\.0/);
 
   assert.match(
     readme,
@@ -323,6 +335,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
     "docs/production.md",
     "docs/distributed-cache.md",
     "docs/stability.md",
+    "docs/releases/v1.0.0.md",
     "docs/upgrade-v1.md",
   ]) {
     assert.ok(readme.includes(`](${target})`), `missing README documentation path: ${target}`);

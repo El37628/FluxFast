@@ -63,10 +63,11 @@ and newest [supported Redis server lines](distributed-cache.md#supported-redis-v
 Both matrix ends must be green before preparing a release that changes
 distributed-cache behavior.
 
-## v0.9 release integrity policy
+## Stable release integrity policy
 
-FluxFast v0.9 selects the GitHub release, workflow provenance, and digest policy
-instead of requiring maintainers to GPG-sign release tags. Release tags remain
+FluxFast stable releases use the GitHub release, workflow provenance, and
+digest policy instead of requiring maintainers to GPG-sign release tags.
+Release tags remain
 annotated, immutable, restricted to maintainers, and must identify a reviewed
 commit already reachable from `main`; an unsigned annotated tag is therefore
 not itself a release failure. This avoids making a local signing-key setup a
@@ -259,7 +260,7 @@ the package manifests, Python runtime version, lockfile, and dated release
 section together:
 
 ```bash
-version=0.9.0
+version=1.0.0
 pnpm release:prepare "$version"
 pnpm release:check "v$version"
 ```
@@ -273,7 +274,7 @@ an up-to-date checkout:
 ```bash
 git switch main
 git pull --ff-only
-version=0.9.0
+version=1.0.0
 pnpm release:check "v$version"
 git tag -a "v$version" -m "FluxFast $version"
 git push origin "v$version"
