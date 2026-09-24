@@ -85,6 +85,9 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   assert.equal(artifactContract.match(/npm pack \.\/packages\//g)?.length, 2);
   assert.match(artifactContract, /scripts\/verify_release_artifacts\.py/);
   assert.match(artifactContract, /--write-checksums/);
+  assert.match(artifactContract, /actions\/upload-artifact@[0-9a-f]{40}/);
+  assert.match(artifactContract, /name: fluxfast-v1-candidate/);
+  assert.match(artifactContract, /compression-level: 0/);
 
   const release = readWorkflow("release.yml");
   const build = jobBlock(release, "build");
@@ -116,15 +119,32 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   }
 });
 
-test("runs the full packed v0.9 release-candidate consumer", () => {
-  const smoke = jobBlock(readWorkflow("release-smoke.yml"), "clean-production-consumer");
-  assert.match(smoke, /name: Clean production consumer/);
-  assert.match(smoke, /python -m build/);
-  assert.equal(smoke.match(/npm pack \.\/packages\//g)?.length, 2);
-  assert.match(smoke, /Verify the full packed v0\.9 release-candidate lifecycle/);
-  assert.match(smoke, /FLUXFAST_ARTIFACT_DIR:/);
-  assert.match(smoke, /FLUXFAST_RUN_PRODUCTION: "1"/);
-  assert.match(smoke, /pnpm test:consumer:init/);
+test("runs full production and distributed consumers from one packed v1 candidate", () => {
+  const workflow = readWorkflow("release-smoke.yml");
+  const production = jobBlock(workflow, "clean-production-consumer");
+  assert.match(production, /name: Clean production consumer/);
+  assert.match(production, /needs: artifact-contract/);
+  assert.match(production, /actions\/download-artifact@[0-9a-f]{40}/);
+  assert.match(production, /name: fluxfast-v1-candidate/);
+  assert.match(production, /sha256sum --check SHA256SUMS/);
+  assert.match(production, /scripts\/test_sdist_consumer\.py/);
+  assert.doesNotMatch(production, /python -m build/);
+  assert.doesNotMatch(production, /npm pack \.\/packages\//);
+  assert.match(production, /Verify the full packed v1\.0 release-candidate lifecycle/);
+  assert.match(production, /FLUXFAST_ARTIFACT_DIR:/);
+  assert.match(production, /FLUXFAST_RUN_PRODUCTION: "1"/);
+  assert.match(production, /pnpm test:consumer:init/);
+
+  const distributed = jobBlock(workflow, "clean-distributed-consumer");
+  assert.match(distributed, /name: Clean distributed consumer/);
+  assert.match(distributed, /needs: artifact-contract/);
+  assert.match(distributed, /actions\/download-artifact@[0-9a-f]{40}/);
+  assert.match(distributed, /name: fluxfast-v1-candidate/);
+  assert.match(distributed, /sha256sum --check SHA256SUMS/);
+  assert.doesNotMatch(distributed, /python -m build/);
+  assert.doesNotMatch(distributed, /npm pack \.\/packages\//);
+  assert.match(distributed, /FLUXFAST_RUN_DISTRIBUTED: "1"/);
+  assert.match(distributed, /pnpm test:consumer:init/);
 
   const initializer = readRepositoryFile("scripts/test-next-init-consumer.mjs");
   assert.match(initializer, /"fluxfast", "init", "--yes"/);
@@ -132,6 +152,7 @@ test("runs the full packed v0.9 release-candidate consumer", () => {
   assert.match(initializer, /"build",\n\s+"--app"/);
   assert.match(initializer, /installedCoreVersion,\n\s+installedNextVersion/);
   assert.match(initializer, /assert version\('fluxfast'\) == sys\.argv\[1\]/);
+  assert.match(initializer, /FLUXFAST_CONSUMER_PRODUCTION: "1"/);
 
   const runtime = readRepositoryFile("scripts/test-next-init-live.mjs");
   assert.match(runtime, /assert\.match\(html, \/Clean live consumer\//);
@@ -142,6 +163,14 @@ test("runs the full packed v0.9 release-candidate consumer", () => {
   assert.match(runtime, /pathname === "\/increment"/);
   assert.match(runtime, /"\/reports\/quarterly"/);
   assert.match(runtime, /FLUXFAST_CONSUMER_PRODUCTION/);
+
+  const distributedRuntime = readRepositoryFile(
+    "scripts/test-next-init-distributed.mjs"
+  );
+  assert.match(distributedRuntime, /production \? "start" : "dev"/);
+  assert.match(distributedRuntime, /scenarioCompleted = true/);
+  assert.match(distributedRuntime, /packed distributed processes did not stop after SIGTERM/);
+  assert.match(distributedRuntime, /packed distributed process remained on port/);
 });
 
 test("v1.0 compatibility gates exercise both v0.9.0 upgrade orders and rollback", () => {
