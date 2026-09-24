@@ -310,7 +310,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
     /Inertia synchronizes pages and props\. FluxFast treats application data as\s+independently versioned, cached, progressively loaded, and live resources\./
   );
   for (const target of [
-    "#quickstart",
+    "docs/getting-started.md",
     "docs/architecture.md",
     "#resources",
     "docs/mutations.md",
