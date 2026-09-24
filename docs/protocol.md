@@ -4,10 +4,11 @@ The wire protocol version is `fluxfast/1`; its media type is
 `application/vnd.fluxfast+json`. It is versioned independently from Python and
 npm packages.
 
-FluxFast 0.9 treats this document and the shared fixtures in
-`tests/fixtures/protocol-v1` as the compatibility contract expected through
-1.0. This freeze does not create `fluxfast/2` and does not make the protocol
-version follow package versions.
+FluxFast 1.x treats this document and the shared fixtures in
+`tests/fixtures/protocol-v1` as the stable compatibility contract. Package v2
+does not automatically imply `fluxfast/2`, and `fluxfast/2` does not
+automatically imply package v2. The protocol identifier changes only when the
+wire contract requires it.
 
 The machine-readable
 [`protocol-v1-v0.9.0.json`](../tests/fixtures/protocol-v1-v0.9.0.json)

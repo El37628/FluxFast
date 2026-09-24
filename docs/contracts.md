@@ -227,8 +227,8 @@ Existing imports from `@/.fluxfast/types.generated` (such as `resourceKeys` and
 ## The `fluxfast-schema/2` manifest
 
 FluxFast 0.8 uses the `fluxfast-schema/2` specification for offline developer
-manifests. FluxFast 0.9 freezes its exact shape, producer modes, ordering, and
-fingerprint algorithm as the developer contract expected through 1.0; see the
+manifests. FluxFast 1.x treats its exact shape, producer modes, ordering, and
+fingerprint algorithm as a stable developer contract; see the
 [developer schema specification](developer-schema.md).
 
 ### Manifest structure

@@ -5,9 +5,9 @@ caches.
 
 ## Server resource cache
 
-### v0.9 stability contract
+### Stable 1.x contract
 
-Resource identity and mutation/cache semantics are 1.0 stable candidates:
+Resource identity and mutation/cache semantics are stable throughout 1.x:
 
 - The logical key names application data. Reuse also depends on the explicit
   server-owned scope; a matching key alone does not authorize sharing.

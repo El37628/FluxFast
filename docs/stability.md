@@ -1,11 +1,10 @@
 # Stability contract
 
-FluxFast 0.9 is the compatibility freeze before 1.0. Before 0.9.0 is published,
-a remaining public correction is acceptable only when preserving the old
-behavior would make the 1.0 contract materially unsafe or incorrect. Once 0.9.0
-is published, its public surface follows the compatible 0.9.x maintenance rules
-below; only an extraordinary security issue with no compatible solution can
-override them. Any such exception must include migration guidance.
+FluxFast 1.x follows semantic versioning. FluxFast 1.0 adopts the public
+contract frozen and proven against v0.9.0 as its stable contract. Compatible
+1.x releases preserve that contract; breaking package API changes require
+2.0.0. Only an extraordinary security issue with no compatible solution can
+override that rule, and any such exception must include migration guidance.
 
 This document defines the boundary. More detailed specifications remain
 authoritative for their own domains and are linked below.
@@ -14,7 +13,7 @@ authoritative for their own domains and are linked below.
 
 A surface is public when applications can reasonably depend on it through an
 official package path, documented command, generated artifact, or documented
-runtime behavior. The v0.9 public surface includes:
+runtime behavior. The FluxFast 1.x public surface includes:
 
 - names exported by the top-level Python `fluxfast` package;
 - names and paths exported by `@fluxfast/core` and `@fluxfast/next`;
@@ -27,11 +26,11 @@ runtime behavior. The v0.9 public surface includes:
   production, health, readiness, and runtime-support behavior.
 
 The [Python](python-api.md), [`@fluxfast/core`](core-api.md), and
-[`@fluxfast/next`](next-api.md) inventories classify exported names as stable
-candidates, advanced stable candidates, or deprecated. Stable and advanced
-stable candidates receive the same compatibility guarantee. "Advanced" means
-that an API is primarily for adapter, transport, cache, live-resource, protocol,
-or validation integrations; it does not mean experimental. Examples include
+[`@fluxfast/next`](next-api.md) inventories classify exported names as stable,
+advanced stable, or deprecated. Stable and advanced stable APIs receive the
+same compatibility guarantee. "Advanced" means that an API is primarily for
+adapter, transport, cache, live-resource, protocol, or validation integrations;
+it does not mean experimental. Examples include
 `LiveBroker`, `ResourceCacheBackend`, transport interfaces, validation-plan
 APIs, and protocol types.
 
@@ -42,12 +41,11 @@ imports, underscore-prefixed Python implementation details, package `src` and
 scripts are internal. Internal code may change without a compatibility promise,
 provided the public behavior above is preserved.
 
-## What is frozen in 0.9
+## What is stable in 1.x
 
-The following are 1.0 candidates and must remain compatible throughout the 0.9
-release line:
+The following contracts are stable throughout the 1.x release line:
 
-| Surface | Frozen contract |
+| Surface | Stable contract |
 | --- | --- |
 | Python package | The documented `fluxfast.__all__` names, call shapes, and behavior. |
 | Core package | The `@fluxfast/core` root path, its declarations, and framework-neutral runtime behavior. |
@@ -151,32 +149,28 @@ are byte-for-byte fixed.
 
 ## Package versioning
 
-### The 0.9.x line
+### Patch releases: 1.0.x
 
-The 0.9 release line is reserved for:
+Patch releases are for bug fixes, security fixes, compatible performance fixes,
+and documentation corrections. They may also repair compatibility without
+changing the documented public contract.
 
-- bug fixes;
-- security fixes;
-- performance fixes;
-- compatibility fixes; and
-- documentation corrections.
+### Minor releases: 1.x.0
 
-It does not introduce significant new public API, redesign existing APIs, or
-remove compatibility-sensitive behavior. Small additive changes are considered
-only when they are necessary to preserve security, correctness, or compatibility
-and do not weaken the freeze.
+Minor releases may add backwards-compatible features. Existing supported
+applications must continue to build and run without source rewrites.
 
-### Version 1.0 and later
+### Major releases: 2.0.0
 
-FluxFast 1.0 adopts the frozen candidates as the stable public contract. After
-1.0, backwards-compatible additions may use a minor release and fixes may use a
-patch release. Breaking public API changes require the next major package
-version. The only exception is an extraordinary security issue for which no
-compatible solution exists; the release must explain the impact and migration.
+A breaking public package API change requires a major release. The normal
+deprecation process applies before removal whenever practical.
 
-Package versions do not version the browser protocol or developer manifest. A
-package major release does not by itself change either identifier, and a
-breaking protocol or manifest change requires its own version bump.
+Package versions do not version the browser protocol or developer manifest.
+Package v2 does not automatically imply `fluxfast/2`, and `fluxfast/2` does
+not automatically imply package v2. The protocol identifier changes only when
+the wire contract requires it. Likewise, FluxFast 1.x may continue using
+`fluxfast-schema/2` for the entire major line; a manifest version changes only
+when that offline schema contract requires it.
 
 ## Deprecation policy
 
@@ -193,13 +187,13 @@ introduce a supported replacement
 Where practical, deprecation is visible in documentation and the type system or
 runtime, but importing the package or starting an ordinary application must not
 produce noisy warnings. The Python `ValidationError` and `PageNotFoundError`
-compatibility exports are deprecated in v0.9 and remain importable through 1.0.
+compatibility exports are deprecated and remain importable throughout 1.x.
 Immediate incompatible action is limited to extraordinary security or protocol
 correctness cases where no compatible fix exists.
 
 ## Protocol evolution
 
-`fluxfast/1` is expected to remain valid through FluxFast 1.0. A compatible v1
+`fluxfast/1` remains valid throughout FluxFast 1.x. A compatible protocol-v1
 change may add ignorable optional metadata or capability-gated behavior only
 when older clients remain correct and a safe no-capability fallback exists.
 Capability names become public once shipped.
@@ -217,7 +211,7 @@ browser protocol:
 
 ```text
 fluxfast-schema/1  -> legacy readable format
-fluxfast-schema/2  -> current closed format and 1.0 candidate
+fluxfast-schema/2  -> current closed format, stable for FluxFast 1.x
 ```
 
 Current JavaScript tooling reads schema/1 and schema/2. Python emits schema/2.

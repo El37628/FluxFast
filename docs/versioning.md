@@ -5,7 +5,12 @@ FluxFast uses one synchronized [Semantic Version](https://semver.org/) for the
 versioned independently; package version `1.x` does not imply protocol version
 1, and a breaking wire change requires the protocol process in
 [`protocol.md`](protocol.md). The central [stability contract](stability.md)
-defines what FluxFast 0.9 treats as public, frozen, deprecated, and internal.
+defines what FluxFast 1.x treats as public, stable, deprecated, and internal.
+
+Package and protocol major versions are independent. Package v2 does not
+automatically imply `fluxfast/2`, and `fluxfast/2` does not automatically
+imply package v2. The protocol identifier changes only when the wire contract
+requires it.
 
 ## Supported runtimes
 
@@ -24,24 +29,22 @@ Node 22 and resolve the latest compatible Next.js 16 and React 19 releases on
 Node 24. This prevents the monorepo's installed dependency versions from being
 the only compatibility evidence.
 
-FluxFast 0.9 freezes this matrix through 1.0. A line may be removed before then
+FluxFast 1.x supports this matrix. A line may be removed in a compatible release
 only when an upstream dependency makes continued support impractical; such an
 exception requires an explicit compatibility decision and migration note.
 Dependabot security and required compatibility updates may advance versions
 inside these ranges, but dependency updates must not silently widen the public
-runtime or peer-dependency contract. Major dependency churn without concrete
-user benefit is deferred until after the 1.0 freeze.
+runtime or peer-dependency contract. Major dependency churn requires an
+explicit compatibility review and concrete user benefit.
 
 ## Package changes
 
-- The 0.9.x line contains backwards-compatible bug, security, performance,
-  compatibility, and documentation fixes. It does not add significant public
-  API, redesign existing API, or remove compatibility-sensitive behavior.
-- From 1.0 onward, patch releases contain backwards-compatible fixes and minor
-  releases may add backwards-compatible features.
-- Breaking public API changes require a major release. An extraordinary
-  security fix may be incompatible only when no compatible solution exists;
-  its impact and migration must be documented.
+- Patch releases such as `1.0.x` contain bug fixes, security fixes, compatible
+  performance fixes, and documentation corrections.
+- Minor releases such as `1.x.0` may add backwards-compatible features.
+- Breaking public package API changes require a major release such as `2.0.0`.
+  An extraordinary security fix may be incompatible only when no compatible
+  solution exists; its impact and migration must be documented.
 
 The normal deprecation path introduces a supported replacement, marks the old
 API deprecated, documents migration, retains it through compatible releases,
@@ -51,16 +54,16 @@ ordinary import or application startup. The only immediate incompatible action
 is the extraordinary security or protocol-correctness case where no compatible
 fix exists.
 
-Starting with 0.9, exported APIs are classified as stable candidates,
-advanced stable candidates, deprecated, or internal. Stable and advanced
-stable candidates receive the same compatibility treatment; the distinction
-describes the expected audience, not a weaker guarantee. The complete
+FluxFast 1.x exported APIs are classified as stable, advanced stable,
+deprecated, or internal. Stable and advanced stable APIs receive the same
+compatibility treatment; the distinction describes the expected audience, not
+a weaker guarantee. The complete
 top-level Python inventory and the two compatibility-only deprecated exports
-are recorded in the [Python public API freeze](python-api.md). The complete
+are recorded in the [Python public API contract](python-api.md). The complete
 framework-neutral JavaScript inventory is recorded in the
-[`@fluxfast/core` API freeze](core-api.md). The Next.js adapter's supported
+[`@fluxfast/core` API contract](core-api.md). The Next.js adapter's supported
 symbols and five public package paths are recorded in the
-[`@fluxfast/next` API freeze](next-api.md).
+[`@fluxfast/next` API contract](next-api.md).
 
 ## Capability negotiation
 
@@ -102,13 +105,14 @@ application contracts (`types`) and reusable mutation request bodies.
 The manifest version is not the package version, the `fluxfast/1` browser
 protocol, or the Redis cache schema. A breaking manifest-format change requires
 a new schema identifier even when the package change is otherwise a normal
-minor release.
+minor release. FluxFast 1.x may continue using `fluxfast-schema/2` for the
+entire major line.
 
-FluxFast 0.9 treats schema/2 as a closed manifest shape expected through 1.0.
+FluxFast 1.x treats schema/2 as a closed, stable manifest shape.
 Its fields, producer modes, ordering rules, and fingerprint algorithm are
 defined by the [developer schema specification](developer-schema.md). New
 manifest structure requires `fluxfast-schema/3`; schema/1 remains readable by
-current JavaScript tooling through 1.0.
+current JavaScript tooling throughout 1.x.
 
 Compatibility remains directional and additive:
 
@@ -125,7 +129,7 @@ Compatibility remains directional and additive:
   and
 - generated files should be regenerated with the package versions under test.
   From 0.9, their filenames, public exported symbols, and semantic TypeScript
-  contracts are stable candidates through 1.0; cosmetic source formatting is
+  contracts are stable throughout 1.x; cosmetic source formatting is
   not. The complete boundary is defined by the [generated artifact
   contract](generated-artifacts.md).
 
@@ -177,8 +181,8 @@ production path. See [production deployment](production.md) and
 Add user-facing entries beneath `Unreleased`, then run:
 
 ```bash
-pnpm release:prepare 0.9.0
-pnpm release:check v0.9.0
+pnpm release:prepare 1.0.0
+pnpm release:check v1.0.0
 ```
 
 The preparation command synchronizes every package manifest, the Python runtime

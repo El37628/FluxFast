@@ -4,9 +4,9 @@ Deferred resources let a FluxFast page return its renderable shell before
 secondary resource loaders finish. They are an additive `fluxfast/1` feature,
 negotiated with the `deferred-resources` capability.
 
-## v0.9 stability contract
+## Stable 1.x contract
 
-Deferred-resource behavior from v0.8.1 is a 1.0 stable candidate:
+Deferred-resource behavior frozen against v0.9.0 is stable throughout 1.x:
 
 | Situation | Frozen behavior |
 | --- | --- |

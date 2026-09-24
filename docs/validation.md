@@ -422,11 +422,11 @@ export function RegistrationForm() {
 
 ---
 
-## v0.9 validation stability contract
+## Stable 1.x validation contract
 
-The existing v0.8.1 validation behavior is a 1.0 stable candidate. The freeze
-covers `FluxValidator<T>`, `ValidationResult`, `ValidationIssue`, Core's
-`ValidationError`, `refineValidator`, canonical paths, and `useForm`.
+The validation behavior frozen against v0.9.0 is stable throughout 1.x. The
+contract covers `FluxValidator<T>`, `ValidationResult`, `ValidationIssue`,
+Core's `ValidationError`, `refineValidator`, canonical paths, and `useForm`.
 
 `validate` returns a discriminated success/failure result; successful `value`
 and `assert` preserve the input's identity. Validation does not coerce strings
