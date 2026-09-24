@@ -46,6 +46,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Gate production topology with JavaScript-disabled SSR, hydration and
   header-gated same-origin navigation from installed artifacts, and run live
   synchronization/reconnect coverage in both Docker and rootless Podman images.
+- Complete the final v0.9.0-to-v1.0 compatibility audit with zero unresolved
+  release blockers and lock the normalized 100-file candidate runtime against
+  non-version changes during promotion.
 
 ### Fixed
 

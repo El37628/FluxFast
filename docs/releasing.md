@@ -22,6 +22,8 @@ deferred/live settlement, dynamic-route navigation and history restoration, and
 clean shutdown without importing a source checkout.
 The complete acceptance mapping is recorded in the
 [v1.0 packed-candidate gate](releases/v1.0-packed-candidate.md).
+The subsequent [v1.0 final freeze audit](releases/v1.0-final-freeze-audit.md)
+locks the normalized candidate runtime before the version-only promotion.
 The release gate also runs a separate clean consumer against Redis with three
 independent FastAPI worker processes. From only the built wheel and npm
 tarballs, it proves that a deferred live resource is populated by one worker,

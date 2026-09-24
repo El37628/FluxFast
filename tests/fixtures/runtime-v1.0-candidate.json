@@ -1,0 +1,16 @@
+{
+  "baseline": "v0.9.0",
+  "auditedCommit": "a5ea091b6ce8679d1321716400aa2c792fbc5f42",
+  "runtime": {
+    "sourceRoots": [
+      "packages/core/src",
+      "packages/next/src",
+      "python/fluxfast/src/fluxfast"
+    ],
+    "versionNormalizedPaths": [
+      "python/fluxfast/src/fluxfast/__init__.py"
+    ],
+    "runtimeFileCount": 100,
+    "runtimeDigest": "cb839991228a6ca12b5341b1c63d0602ed5b559250708f31cbbcd5eb0bc3d762"
+  }
+}
