@@ -691,7 +691,11 @@ try {
       process.execPath,
       [path.join(repositoryRoot, "scripts", "test-next-init-distributed.mjs"), consumerRoot],
       repositoryRoot,
-      { FLUXFAST_E2E_PYTHON: isolatedPython, PYTHONPATH: "" }
+      {
+        FLUXFAST_CONSUMER_PRODUCTION: "1",
+        FLUXFAST_E2E_PYTHON: isolatedPython,
+        PYTHONPATH: "",
+      }
     );
   }
 

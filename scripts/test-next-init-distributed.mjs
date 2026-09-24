@@ -71,6 +71,19 @@ async function waitForExit(child, timeout) {
   ]);
 }
 
+async function portAcceptsConnections(port) {
+  return new Promise(resolve => {
+    const socket = net.connect({ host: "127.0.0.1", port });
+    const finish = accepts => {
+      socket.destroy();
+      resolve(accepts);
+    };
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+    socket.setTimeout(1_000, () => finish(false));
+  });
+}
+
 const processes = [];
 function start(label, command, args, environment = {}) {
   const childEnvironment = {
@@ -153,6 +166,7 @@ const sharedEnvironment = {
 
 let browser;
 const contexts = [];
+let scenarioCompleted = false;
 try {
   const workers = Object.entries(workerUrls).map(([name, url]) => {
     const port = new URL(url).port;
@@ -366,6 +380,7 @@ try {
     "Built FluxFast packages synchronized a deferred Redis resource across " +
       `workers A, B, and C at ${frontendUrl}.`
   );
+  scenarioCompleted = true;
 } catch (error) {
   if (error instanceof Error) error.message = `${error.message}${processOutput()}`;
   throw error;
@@ -387,4 +402,19 @@ try {
     if (!exited[index]) terminateProcessGroup(child, "SIGKILL");
   });
   await Promise.all(processes.map(({ child }) => waitForExit(child, 5_000)));
+  if (scenarioCompleted) {
+    assert.equal(
+      exited.every(Boolean),
+      true,
+      `packed distributed processes did not stop after SIGTERM.${processOutput()}`
+    );
+    for (const port of [frontendPort, proxyPort, workerAPort, workerBPort, workerCPort]) {
+      assert.equal(
+        await portAcceptsConnections(port),
+        false,
+        `packed distributed process remained on port ${port}`
+      );
+    }
+    console.log("Packed distributed consumer stopped without orphan listeners.");
+  }
 }

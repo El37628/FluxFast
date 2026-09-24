@@ -30,6 +30,7 @@ jobs:
           tests/release-artifacts
           tests/soak
           scripts/verify_release_artifacts.py
+          scripts/test_sdist_consumer.py
       - run: >-
           python -m pytest -q python/fluxfast/tests
           tests/release-artifacts

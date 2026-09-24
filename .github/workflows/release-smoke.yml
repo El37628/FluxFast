@@ -47,6 +47,14 @@ jobs:
             --release-dir "$RUNNER_TEMP/fluxfast-release-contract" \
             --version "$version" \
             --write-checksums
+      - name: Upload the verified v1 candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fluxfast-v1-candidate
+          path: ${{ runner.temp }}/fluxfast-release-contract
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
   fresh-documentation-consumer:
     name: Fresh documentation consumer
@@ -187,6 +195,7 @@ jobs:
 
   clean-distributed-consumer:
     name: Clean distributed consumer
+    needs: artifact-contract
     runs-on: ubuntu-latest
     services:
       redis:
@@ -211,14 +220,25 @@ jobs:
           python-version: "3.12"
       - run: npm install --global pnpm@10.15.0
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - name: Build release artifacts
+      - name: Download the verified v1 candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: fluxfast-v1-candidate
+          path: ${{ runner.temp }}/fluxfast-v1-candidate
+      - name: Verify and stage the exact candidate artifacts
         run: |
+          version="$(node -p 'require("./package.json").version')"
+          download="$RUNNER_TEMP/fluxfast-v1-candidate"
+          candidate="$RUNNER_TEMP/fluxfast-clean-distributed/candidate"
+          mkdir -p "$candidate"
+          cp "$download"/python/* "$download"/npm/* "$download/SHA256SUMS" "$candidate/"
+          (cd "$candidate" && sha256sum --check SHA256SUMS)
           mkdir -p "$RUNNER_TEMP/fluxfast-clean-distributed/artifacts"
-          python -m pip install build
-          python -m build --outdir "$RUNNER_TEMP/fluxfast-clean-distributed/artifacts" python/fluxfast
-          npm pack ./packages/core --pack-destination "$RUNNER_TEMP/fluxfast-clean-distributed/artifacts"
-          npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-clean-distributed/artifacts"
+          cp \
+            "$candidate/fluxfast-${version}-py3-none-any.whl" \
+            "$candidate/fluxfast-core-${version}.tgz" \
+            "$candidate/fluxfast-next-${version}.tgz" \
+            "$RUNNER_TEMP/fluxfast-clean-distributed/artifacts/"
       - name: Install Chromium
         run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
       - name: Verify three-worker Redis synchronization from packed artifacts
@@ -231,6 +251,7 @@ jobs:
 
   clean-production-consumer:
     name: Clean production consumer
+    needs: artifact-contract
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -245,17 +266,31 @@ jobs:
           python-version: "3.12"
       - run: npm install --global pnpm@10.15.0
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - name: Build release artifacts
+      - name: Download the verified v1 candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: fluxfast-v1-candidate
+          path: ${{ runner.temp }}/fluxfast-v1-candidate
+      - name: Install the sdist and stage the exact application artifacts
         run: |
+          version="$(node -p 'require("./package.json").version')"
+          download="$RUNNER_TEMP/fluxfast-v1-candidate"
+          candidate="$RUNNER_TEMP/fluxfast-clean-production/candidate"
+          mkdir -p "$candidate"
+          cp "$download"/python/* "$download"/npm/* "$download/SHA256SUMS" "$candidate/"
+          (cd "$candidate" && sha256sum --check SHA256SUMS)
+          python scripts/test_sdist_consumer.py \
+            "$candidate/fluxfast-${version}.tar.gz" \
+            --version "$version"
           mkdir -p "$RUNNER_TEMP/fluxfast-clean-production/artifacts"
-          python -m pip install build
-          python -m build --outdir "$RUNNER_TEMP/fluxfast-clean-production/artifacts" python/fluxfast
-          npm pack ./packages/core --pack-destination "$RUNNER_TEMP/fluxfast-clean-production/artifacts"
-          npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-clean-production/artifacts"
+          cp \
+            "$candidate/fluxfast-${version}-py3-none-any.whl" \
+            "$candidate/fluxfast-core-${version}.tgz" \
+            "$candidate/fluxfast-next-${version}.tgz" \
+            "$RUNNER_TEMP/fluxfast-clean-production/artifacts/"
       - name: Install Chromium
         run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
-      - name: Verify the full packed v0.9 release-candidate lifecycle
+      - name: Verify the full packed v1.0 release-candidate lifecycle
         env:
           FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-clean-production/artifacts
           FLUXFAST_E2E_PYTHON: python
