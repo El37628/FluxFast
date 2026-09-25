@@ -373,7 +373,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Chromium
-        run: npx --yes playwright@1.62.1 install --with-deps chromium
+        run: npx --yes playwright@1.63.0 install --with-deps chromium
       - name: Verify packages in a clean one-service production consumer
         env:
           FLUXFAST_E2E_PYTHON: python
