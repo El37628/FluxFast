@@ -176,9 +176,44 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  verify-release-payload:
+    name: Verify immutable release payload
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Download Python distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-distributions
+          path: release/python
+      - name: Download npm distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-distributions
+          path: release/npm
+      - name: Download release checksums
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-checksums
+          path: release
+      - name: Verify downloaded metadata, contents, and checksums
+        run: >-
+          python scripts/verify_release_artifacts.py
+          --release-dir release
+          --version "${GITHUB_REF_NAME#v}"
+          --verify-checksums
+
   publish-pypi:
     name: Publish fluxfast to PyPI
-    needs: build
+    needs: verify-release-payload
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -200,7 +235,7 @@ jobs:
 
   publish-npm:
     name: Publish JavaScript packages to npm
-    needs: build
+    needs: verify-release-payload
     runs-on: ubuntu-latest
     environment: npm
     permissions:
@@ -348,6 +383,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
       - name: Download distributions
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -363,6 +404,12 @@ jobs:
         with:
           name: release-checksums
           path: release
+      - name: Verify final GitHub release payload
+        run: >-
+          python scripts/verify_release_artifacts.py
+          --release-dir release
+          --version "${GITHUB_REF_NAME#v}"
+          --verify-checksums
       - name: Create release and attach distributions
         env:
           GH_TOKEN: ${{ github.token }}
@@ -373,5 +420,5 @@ jobs:
             release/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --generate-notes \
-            --title "FluxFast ${GITHUB_REF_NAME#v}"
+            --notes-file docs/releases/v1.0.0.md \
+            --title "FluxFast 1.0 — Stable server-driven applications for FastAPI with independently synchronized resources."

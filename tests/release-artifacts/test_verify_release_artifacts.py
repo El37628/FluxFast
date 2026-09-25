@@ -66,6 +66,73 @@ def _add_tar_file(
     archive.addfile(info, io.BytesIO(content))
 
 
+def _rewrite_tar_archive(
+    path: Path,
+    *,
+    replacements: dict[str, bytes] | None = None,
+    removals: set[str] | None = None,
+    additions: dict[str, bytes] | None = None,
+) -> None:
+    replacements = replacements or {}
+    removals = removals or set()
+    additions = additions or {}
+    entries: dict[str, tuple[bytes, int]] = {}
+    with tarfile.open(path, "r:gz") as archive:
+        for member in archive.getmembers():
+            if not member.isfile():
+                continue
+            extracted = archive.extractfile(member)
+            assert extracted is not None
+            entries[member.name] = (extracted.read(), member.mode)
+    for name in removals:
+        entries.pop(name)
+    for name, content in replacements.items():
+        assert name in entries
+        entries[name] = (content, entries[name][1])
+    for name, content in additions.items():
+        entries[name] = (content, 0o644)
+    temporary = path.with_name(f".{path.name}.rewrite")
+    with tarfile.open(temporary, "w:gz") as archive:
+        for name, (content, mode) in entries.items():
+            _add_tar_file(archive, name, content, mode=mode)
+    temporary.replace(path)
+
+
+def _rewrite_zip_archive(
+    path: Path,
+    *,
+    replacements: dict[str, bytes],
+) -> None:
+    with zipfile.ZipFile(path) as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+    for name, content in replacements.items():
+        assert name in entries
+        entries[name] = content
+    temporary = path.with_name(f".{path.name}.rewrite")
+    with zipfile.ZipFile(temporary, "w") as archive:
+        for name, content in entries.items():
+            archive.writestr(name, content)
+    temporary.replace(path)
+
+
+def _rewrite_npm_manifest(
+    release: Path,
+    package: str,
+    version: str,
+    update: dict,
+) -> None:
+    archive = release / "npm" / f"fluxfast-{package}-{version}.tgz"
+    with tarfile.open(archive, "r:gz") as packed:
+        member = packed.extractfile("package/package.json")
+        assert member is not None
+        manifest = json.loads(member.read())
+    manifest.update(update)
+    _rewrite_tar_archive(
+        archive,
+        replacements={"package/package.json": json.dumps(manifest).encode()},
+    )
+
+
 def _build_python_archives(repository: Path, release: Path, version: str) -> None:
     package_root = repository / "python/fluxfast"
     readme = "# FluxFast test package\n"
@@ -270,6 +337,36 @@ def test_verifies_all_distributions_and_writes_checksums(tmp_path: Path) -> None
     for line, artifact in zip(checksum_lines, artifacts, strict=True):
         assert line.split("  ", 1)[0] == hashlib.sha256(artifact.read_bytes()).hexdigest()
 
+    assert verifier.verify_release_artifacts(
+        release_dir=release,
+        repository_root=repository,
+        version=version,
+        verify_checksums=True,
+    ) == artifacts
+
+
+def test_rejects_checksum_drift_or_extra_entries(tmp_path: Path) -> None:
+    repository, release, version = _build_release(tmp_path)
+    verifier.verify_release_artifacts(
+        release_dir=release,
+        repository_root=repository,
+        version=version,
+        write_checksums=True,
+    )
+    checksum_file = release / "SHA256SUMS"
+    checksum_file.write_text(checksum_file.read_text() + f"{'0' * 64}  extra.tgz\n")
+
+    with pytest.raises(
+        verifier.ArtifactVerificationError,
+        match="exactly the four verified distribution digests",
+    ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+            verify_checksums=True,
+        )
+
 
 def test_rejects_an_extra_artifact(tmp_path: Path) -> None:
     repository, release, version = _build_release(tmp_path)
@@ -311,6 +408,193 @@ def test_rejects_packed_metadata_drift(tmp_path: Path) -> None:
         verifier.ArtifactVerificationError,
         match="packed name does not match package.json",
     ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
+
+
+@pytest.mark.parametrize(
+    ("update", "message"),
+    [
+        ({"version": "9.9.9"}, "packed version does not match"),
+        ({"dependencies": {"@fluxfast/core": "^9.9.9"}}, "packed dependencies does not match"),
+        (
+            {
+                "peerDependencies": {
+                    "next": ">=99.0.0",
+                    "react": ">=19.0.0",
+                    "react-dom": ">=19.0.0",
+                }
+            },
+            "packed peerDependencies does not match",
+        ),
+    ],
+)
+def test_rejects_wrong_npm_version_dependencies_and_peer_ranges(
+    tmp_path: Path,
+    update: dict,
+    message: str,
+) -> None:
+    repository, release, version = _build_release(tmp_path)
+    _rewrite_npm_manifest(release, "next", version, update)
+
+    with pytest.raises(verifier.ArtifactVerificationError, match=message):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
+
+
+def test_rejects_missing_exports_and_cli(tmp_path: Path) -> None:
+    repository, release, version = _build_release(tmp_path)
+    next_archive = release / "npm" / f"fluxfast-next-{version}.tgz"
+    _rewrite_tar_archive(
+        next_archive,
+        removals={"package/dist/index.js", "package/bin/fluxfast.js"},
+    )
+
+    with pytest.raises(
+        verifier.ArtifactVerificationError,
+        match="archive contents do not match package.json files and built output",
+    ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
+
+
+def test_rejects_missing_python_cli_entry_point(tmp_path: Path) -> None:
+    repository, release, version = _build_release(tmp_path)
+    wheel = release / "python" / f"fluxfast-{version}-py3-none-any.whl"
+    _rewrite_zip_archive(
+        wheel,
+        replacements={
+            f"fluxfast-{version}.dist-info/entry_points.txt": b"[console_scripts]\n",
+        },
+    )
+
+    with pytest.raises(
+        verifier.ArtifactVerificationError,
+        match="fluxfast console entry point is missing",
+    ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
+
+
+def test_rejects_wrong_python_dependency_metadata(tmp_path: Path) -> None:
+    repository, release, version = _build_release(tmp_path)
+    wheel = release / "python" / f"fluxfast-{version}-py3-none-any.whl"
+    metadata_name = f"fluxfast-{version}.dist-info/METADATA"
+    with zipfile.ZipFile(wheel) as archive:
+        metadata = archive.read(metadata_name).replace(
+            b"Requires-Dist: anyio>=4.0.0",
+            b"Requires-Dist: anyio>=99.0.0",
+        )
+    _rewrite_zip_archive(wheel, replacements={metadata_name: metadata})
+
+    with pytest.raises(
+        verifier.ArtifactVerificationError,
+        match="dependencies do not match pyproject.toml",
+    ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
+
+
+def test_rejects_unexpected_internal_files(tmp_path: Path) -> None:
+    repository, release, version = _build_release(tmp_path)
+    core = release / "npm" / f"fluxfast-core-{version}.tgz"
+    _rewrite_tar_archive(core, additions={"package/debug.log": b"unexpected\n"})
+
+    with pytest.raises(
+        verifier.ArtifactVerificationError,
+        match="archive contents do not match package.json files and built output",
+    ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
+
+
+def test_rejects_npm_build_content_mismatch(tmp_path: Path) -> None:
+    repository, release, version = _build_release(tmp_path)
+    core = release / "npm" / f"fluxfast-core-{version}.tgz"
+    _rewrite_tar_archive(
+        core,
+        replacements={"package/dist/index.js": b"module.exports = { altered: true };\n"},
+    )
+
+    with pytest.raises(
+        verifier.ArtifactVerificationError,
+        match="packed file 'package/dist/index.js' does not match the source build",
+    ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
+
+
+@pytest.mark.parametrize("distribution", ["wheel", "sdist"])
+def test_rejects_python_source_content_mismatch(
+    tmp_path: Path,
+    distribution: str,
+) -> None:
+    repository, release, version = _build_release(tmp_path)
+    if distribution == "wheel":
+        wheel = release / "python" / f"fluxfast-{version}-py3-none-any.whl"
+        _rewrite_zip_archive(
+            wheel,
+            replacements={"fluxfast/cli.py": b"def main():\n    return 99\n"},
+        )
+    else:
+        sdist = release / "python" / f"fluxfast-{version}.tar.gz"
+        _rewrite_tar_archive(
+            sdist,
+            replacements={
+                f"fluxfast-{version}/src/fluxfast/cli.py": b"def main():\n    return 99\n",
+            },
+        )
+
+    with pytest.raises(
+        verifier.ArtifactVerificationError,
+        match="packaged Python source .* does not match",
+    ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
+
+
+@pytest.mark.parametrize(
+    ("name", "replacement", "message"),
+    [
+        ("package/LICENSE", b"wrong license\n", "LICENSE does not match"),
+        ("package/README.md", b"wrong readme\n", "README.md does not match"),
+    ],
+)
+def test_rejects_npm_license_and_readme_mismatch(
+    tmp_path: Path,
+    name: str,
+    replacement: bytes,
+    message: str,
+) -> None:
+    repository, release, version = _build_release(tmp_path)
+    core = release / "npm" / f"fluxfast-core-{version}.tgz"
+    _rewrite_tar_archive(core, replacements={name: replacement})
+
+    with pytest.raises(verifier.ArtifactVerificationError, match=message):
         verifier.verify_release_artifacts(
             release_dir=release,
             repository_root=repository,

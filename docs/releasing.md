@@ -86,9 +86,14 @@ The release artifact verifier rejects missing or extra distributions, unsafe
 archive entries, metadata drift, missing export or command targets, dependency
 and peer-dependency drift, incorrect Python metadata, mismatched license or
 README content, and packaged source/build output that differs from the checked
-out package trees. It then writes `SHA256SUMS` for the four verified files.
-The GitHub release attaches those exact distributions and the checksum file;
-after downloading the five assets into one directory, verify them with:
+out package trees byte for byte. It then writes `SHA256SUMS` for the four
+verified files. Before either registry job starts, a separate job downloads all
+three immutable workflow artifacts and repeats the full content and checksum
+verification. The final GitHub-release job downloads and verifies the payload
+again before attaching the four distributions and checksum file. The complete
+proof is recorded in the
+[v1.0 artifact-verification gate](releases/v1.0-artifact-verification.md).
+After downloading the five release assets into one directory, verify them with:
 
 ```bash
 sha256sum --check SHA256SUMS
