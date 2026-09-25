@@ -224,10 +224,10 @@ def _verify_python_metadata(
     )
 
 
-def _source_python_files(repository_root: Path) -> set[str]:
+def _source_python_files(repository_root: Path) -> dict[str, bytes]:
     source = repository_root / "python/fluxfast/src"
     return {
-        path.relative_to(source).as_posix()
+        path.relative_to(source).as_posix(): path.read_bytes()
         for path in source.rglob("*.py")
         if path.is_file()
     }
@@ -256,11 +256,17 @@ def _verify_wheel(
         all(name.startswith(("fluxfast/", f"{dist_info}/")) for name in files),
         f"{path.name}: wheel contains files outside the package and dist-info roots",
     )
+    expected_sources = _source_python_files(repository_root)
     actual_sources = {name for name in files if name.startswith("fluxfast/")}
     _expect(
-        actual_sources == _source_python_files(repository_root),
+        actual_sources == set(expected_sources),
         f"{path.name}: packaged Python sources do not match python/fluxfast/src",
     )
+    for name, expected in expected_sources.items():
+        _expect(
+            files[name].data == expected,
+            f"{path.name}: packaged Python source {name!r} does not match",
+        )
 
     package_root = repository_root / "python/fluxfast"
     readme = (package_root / "README.md").read_bytes()
@@ -322,15 +328,21 @@ def _verify_sdist(
             f"{path.name}: {name} does not match the source package",
         )
     expected_sources = {
-        f"{root}/src/{name}" for name in _source_python_files(repository_root)
+        f"{root}/src/{name}": data
+        for name, data in _source_python_files(repository_root).items()
     }
     actual_sources = {
         name for name in files if name.startswith(f"{root}/src/fluxfast/")
     }
     _expect(
-        actual_sources == expected_sources,
+        actual_sources == set(expected_sources),
         f"{path.name}: packaged Python sources do not match python/fluxfast/src",
     )
+    for name, expected in expected_sources.items():
+        _expect(
+            files[name].data == expected,
+            f"{path.name}: packaged Python source {name!r} does not match",
+        )
     _verify_python_metadata(
         files[f"{root}/PKG-INFO"].data,
         project=project,
@@ -348,10 +360,10 @@ def _runtime_targets(value: Any) -> Iterable[str]:
             yield from _runtime_targets(child)
 
 
-def _source_tree_files(root: Path, prefix: str) -> set[str]:
+def _source_tree_files(root: Path, prefix: str) -> dict[str, bytes]:
     _expect(root.is_dir(), f"missing built package directory: {root}")
     return {
-        f"package/{prefix}/{path.relative_to(root).as_posix()}"
+        f"package/{prefix}/{path.relative_to(root).as_posix()}": path.read_bytes()
         for path in root.rglob("*")
         if path.is_file()
     }
@@ -413,13 +425,23 @@ def _verify_npm_package(
         f"{path.name}: LICENSE does not match the source package",
     )
 
-    expected_files = required | _source_tree_files(package_root / "dist", "dist")
+    expected_files = {
+        "package/package.json": files["package/package.json"].data,
+        "package/README.md": (package_root / "README.md").read_bytes(),
+        "package/LICENSE": (package_root / "LICENSE").read_bytes(),
+        **_source_tree_files(package_root / "dist", "dist"),
+    }
     if (package_root / "bin").is_dir():
-        expected_files |= _source_tree_files(package_root / "bin", "bin")
+        expected_files.update(_source_tree_files(package_root / "bin", "bin"))
     _expect(
-        set(files) == expected_files,
+        set(files) == set(expected_files),
         f"{path.name}: archive contents do not match package.json files and built output",
     )
+    for name, expected in expected_files.items():
+        _expect(
+            files[name].data == expected,
+            f"{path.name}: packed file {name!r} does not match the source build",
+        )
 
     declared_targets = set(_runtime_targets(packed_manifest.get("exports", {})))
     for field in ("main", "module", "types"):
@@ -463,6 +485,8 @@ def _artifact_paths(release_dir: Path, version: str) -> tuple[Path, ...]:
         "release directory must contain exactly the wheel, sdist, Core tarball, and Next tarball",
     )
     for path in expected:
+        _expect(path.is_file(), f"{path.name}: distribution is not a regular file")
+        _expect(not path.is_symlink(), f"{path.name}: distribution cannot be a symlink")
         _expect(
             path.stat().st_size <= _MAX_ARCHIVE_BYTES,
             f"{path.name}: distribution exceeds the size limit",
@@ -485,12 +509,23 @@ def _write_checksums(paths: Iterable[Path], output: Path) -> None:
     temporary.replace(output)
 
 
+def _verify_checksums(paths: Iterable[Path], checksum_file: Path) -> None:
+    _expect(checksum_file.is_file(), "SHA256SUMS is missing")
+    _expect(not checksum_file.is_symlink(), "SHA256SUMS cannot be a symlink")
+    expected = "".join(f"{_sha256(path)}  {path.name}\n" for path in paths)
+    _expect(
+        checksum_file.read_text() == expected,
+        "SHA256SUMS must contain exactly the four verified distribution digests",
+    )
+
+
 def verify_release_artifacts(
     *,
     release_dir: Path,
     repository_root: Path,
     version: str,
     write_checksums: bool = False,
+    verify_checksums: bool = False,
 ) -> tuple[Path, ...]:
     """Verify all four distributions and optionally write ``SHA256SUMS``."""
 
@@ -533,6 +568,8 @@ def verify_release_artifacts(
     artifacts = (wheel, sdist, core, next_package)
     if write_checksums:
         _write_checksums(artifacts, release_dir / "SHA256SUMS")
+    if verify_checksums:
+        _verify_checksums(artifacts, release_dir / "SHA256SUMS")
     return artifacts
 
 
@@ -542,6 +579,7 @@ def main() -> int:
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).parents[1])
     parser.add_argument("--version", required=True)
     parser.add_argument("--write-checksums", action="store_true")
+    parser.add_argument("--verify-checksums", action="store_true")
     arguments = parser.parse_args()
     try:
         artifacts = verify_release_artifacts(
@@ -549,6 +587,7 @@ def main() -> int:
             repository_root=arguments.repository_root,
             version=arguments.version,
             write_checksums=arguments.write_checksums,
+            verify_checksums=arguments.verify_checksums,
         )
     except (ArtifactVerificationError, KeyError, OSError, UnicodeError, ValueError) as error:
         print(f"release artifact verification failed: {error}")

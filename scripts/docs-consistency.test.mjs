@@ -252,6 +252,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   const upgrade = read("docs/upgrade-v1.md");
   const releaseNotes = read("docs/releases/v1.0.0.md");
   const finalCandidateGate = read("docs/releases/v1.0-final-candidate-gate.md");
+  const artifactGate = read("docs/releases/v1.0-artifact-verification.md");
   const releasing = read("docs/releasing.md");
   const migrationV1 = read("docs/migration.md").split("\n---\n", 1)[0];
   const readme = read("README.md");
@@ -315,6 +316,13 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   assert.match(finalCandidateGate, /91e53c1a9c790f32aa16b9ab57a19a4a76c3c849/);
   assert.match(finalCandidateGate, /cb839991228a6ca12b5341b1c63d0602ed5b559250708f31cbbcd5eb0bc3d762/);
   assert.match(finalCandidateGate, /36025792262/);
+  assert.match(releaseNotes, /v1\.0-artifact-verification\.md/);
+  assert.match(artifactGate, /fluxfast-1\.0\.0-py3-none-any\.whl/);
+  assert.match(artifactGate, /fluxfast-core-1\.0\.0\.tgz/);
+  assert.match(artifactGate, /fluxfast-next-1\.0\.0\.tgz/);
+  assert.match(artifactGate, /SHA256SUMS/);
+  assert.match(artifactGate, /trusted OIDC and PEP 740 attestations/);
+  assert.match(artifactGate, /trusted OIDC and provenance/);
   assert.match(security, /Pre-1\.0 releases are\s+unsupported/);
   assert.doesNotMatch(security, /Before 1\.0/);
   assert.equal(releasing.match(/version=1\.0\.0/g)?.length, 2);
@@ -344,6 +352,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
     "docs/stability.md",
     "docs/releases/v1.0.0.md",
     "docs/releases/v1.0-final-candidate-gate.md",
+    "docs/releases/v1.0-artifact-verification.md",
     "docs/upgrade-v1.md",
   ]) {
     assert.ok(readme.includes(`](${target})`), `missing README documentation path: ${target}`);

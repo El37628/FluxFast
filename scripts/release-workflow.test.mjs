@@ -68,8 +68,13 @@ test("release publication waits for full production and container CI", () => {
     jobBlock(source, "build"),
     /needs: \[container-ci, release-artifacts-ci\]/
   );
-  assert.match(jobBlock(source, "publish-pypi"), /needs: build/);
-  assert.match(jobBlock(source, "publish-npm"), /needs: build/);
+  const payload = jobBlock(source, "verify-release-payload");
+  assert.match(payload, /needs: build/);
+  assert.equal(payload.match(/actions\/download-artifact@[0-9a-f]{40}/g)?.length, 3);
+  assert.match(payload, /scripts\/verify_release_artifacts\.py/);
+  assert.match(payload, /--verify-checksums/);
+  assert.match(jobBlock(source, "publish-pypi"), /needs: verify-release-payload/);
+  assert.match(jobBlock(source, "publish-npm"), /needs: verify-release-payload/);
 
   const githubRelease = jobBlock(source, "github-release");
   assert.match(githubRelease, /- verify-published-production/);
@@ -107,6 +112,10 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   const githubRelease = jobBlock(release, "github-release");
   assert.match(githubRelease, /name: release-checksums/);
   assert.match(githubRelease, /release\/SHA256SUMS/);
+  assert.match(githubRelease, /scripts\/verify_release_artifacts\.py/);
+  assert.match(githubRelease, /--verify-checksums/);
+  assert.match(githubRelease, /--notes-file docs\/releases\/v1\.0\.0\.md/);
+  assert.doesNotMatch(githubRelease, /--generate-notes/);
 
   for (const workflow of [smoke, release]) {
     for (const match of workflow.matchAll(/^\s+- uses: (?!\.\/)(\S+)$/gm)) {
