@@ -349,6 +349,7 @@ guidance.
 - [Distributed Redis](docs/distributed-cache.md)
 - [Stability / Versioning](docs/stability.md)
 - [FluxFast 1.0 Release Notes](docs/releases/v1.0.0.md)
+- [FluxFast 1.0 Final Candidate Gate](docs/releases/v1.0-final-candidate-gate.md)
 - [v0.9 → v1.0 Upgrade Guide](docs/upgrade-v1.md)
 
 ## Development
