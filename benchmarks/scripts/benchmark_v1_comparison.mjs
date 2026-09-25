@@ -56,7 +56,13 @@ export function runComparison({ baseline, output, python, reverse = false }) {
   assert.notEqual(baseline, fs.realpathSync(repository), "baseline must be a different checkout");
   const baselineCommit = checked("git", ["-C", baseline, "rev-parse", "HEAD"]);
   assert.equal(baselineCommit, checked("git", ["rev-parse", "v0.9.0^{}"]), "baseline must be the existing v0.9.0 tag");
-  const allowed = new Set(["pnpm-lock.yaml", "packages/next/package.json", "tests/browser/frontend/package.json"]);
+  const allowed = new Set([
+    "package.json",
+    "pnpm-lock.yaml",
+    "packages/core/package.json",
+    "packages/next/package.json",
+    "tests/browser/frontend/package.json",
+  ]);
   const baselineChanges = checked("git", ["-C", baseline, "diff", "--name-only", "HEAD"]).split("\n").filter(Boolean);
   assert.ok(baselineChanges.every(name => allowed.has(name)), "baseline runtime sources must not be modified");
   assert.equal(checked("git", ["-C", baseline, "ls-files", "--others", "--exclude-standard"]), "", "baseline must not contain additional untracked inputs");

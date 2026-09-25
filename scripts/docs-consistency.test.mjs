@@ -251,6 +251,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   const versioning = read("docs/versioning.md");
   const upgrade = read("docs/upgrade-v1.md");
   const releaseNotes = read("docs/releases/v1.0.0.md");
+  const finalCandidateGate = read("docs/releases/v1.0-final-candidate-gate.md");
   const releasing = read("docs/releasing.md");
   const migrationV1 = read("docs/migration.md").split("\n---\n", 1)[0];
   const readme = read("README.md");
@@ -308,6 +309,12 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   assert.match(releaseNotes, /@fluxfast\/core@1\.0\.0 @fluxfast\/next@1\.0\.0/);
   assert.match(releaseNotes, /zero unresolved P0\/P1 findings/);
   assert.match(releaseNotes, /Python \| 3\.11, 3\.12, 3\.13, 3\.14/);
+  assert.match(releaseNotes, /v1\.0-final-candidate-gate\.md/);
+  assert.match(finalCandidateGate, /61 of 61 checks successfully/);
+  assert.match(finalCandidateGate, /zero known unresolved P0\/P1 findings/);
+  assert.match(finalCandidateGate, /91e53c1a9c790f32aa16b9ab57a19a4a76c3c849/);
+  assert.match(finalCandidateGate, /cb839991228a6ca12b5341b1c63d0602ed5b559250708f31cbbcd5eb0bc3d762/);
+  assert.match(finalCandidateGate, /36025792262/);
   assert.match(security, /Pre-1\.0 releases are\s+unsupported/);
   assert.doesNotMatch(security, /Before 1\.0/);
   assert.equal(releasing.match(/version=1\.0\.0/g)?.length, 2);
@@ -336,6 +343,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
     "docs/distributed-cache.md",
     "docs/stability.md",
     "docs/releases/v1.0.0.md",
+    "docs/releases/v1.0-final-candidate-gate.md",
     "docs/upgrade-v1.md",
   ]) {
     assert.ok(readme.includes(`](${target})`), `missing README documentation path: ${target}`);
