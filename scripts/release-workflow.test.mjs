@@ -221,6 +221,13 @@ test("v1.0 compatibility gates exercise both v0.9.0 upgrade orders and rollback"
   assert.match(publishedSmoke, /playwright@1\.63\.0/);
   assert.equal(publishedSmoke.match(/FLUXFAST_UPGRADE_SEQUENCE: "1"/g)?.length, 2);
   assert.doesNotMatch(publishedSmoke, /0\.8\.1/);
+
+  const publishedProduction = jobBlock(
+    readWorkflow("release.yml"),
+    "verify-published-production"
+  );
+  assert.match(publishedProduction, /playwright@1\.63\.0/);
+  assert.doesNotMatch(publishedProduction, /playwright@1\.62\.1/);
 });
 
 test("freezes the v0.9 runtime support matrix in metadata and CI", () => {
