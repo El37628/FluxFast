@@ -88,10 +88,11 @@ and peer-dependency drift, incorrect Python metadata, mismatched license or
 README content, and packaged source/build output that differs from the checked
 out package trees byte for byte. It then writes `SHA256SUMS` for the four
 verified files. Before either registry job starts, a separate job downloads all
-three immutable workflow artifacts and repeats the full content and checksum
-verification. The final GitHub-release job downloads and verifies the payload
-again before attaching the four distributions and checksum file. The complete
-proof is recorded in the
+three immutable workflow artifacts, rebuilds the JavaScript package output from
+the tagged source, and repeats the full content and checksum verification. The
+final GitHub-release job rebuilds, downloads, and verifies the payload again
+before attaching the four distributions and checksum file. The complete proof
+is recorded in the
 [v1.0 artifact-verification gate](releases/v1.0-artifact-verification.md).
 After downloading the five release assets into one directory, verify them with:
 
