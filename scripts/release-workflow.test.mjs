@@ -71,6 +71,9 @@ test("release publication waits for full production and container CI", () => {
   const payload = jobBlock(source, "verify-release-payload");
   assert.match(payload, /needs: build/);
   assert.equal(payload.match(/actions\/download-artifact@[0-9a-f]{40}/g)?.length, 3);
+  assert.match(payload, /actions\/setup-node@[0-9a-f]{40}/);
+  assert.match(payload, /pnpm install --frozen-lockfile/);
+  assert.match(payload, /pnpm build/);
   assert.match(payload, /scripts\/verify_release_artifacts\.py/);
   assert.match(payload, /--verify-checksums/);
   assert.match(jobBlock(source, "publish-pypi"), /needs: verify-release-payload/);
@@ -112,6 +115,9 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   const githubRelease = jobBlock(release, "github-release");
   assert.match(githubRelease, /name: release-checksums/);
   assert.match(githubRelease, /release\/SHA256SUMS/);
+  assert.match(githubRelease, /actions\/setup-node@[0-9a-f]{40}/);
+  assert.match(githubRelease, /pnpm install --frozen-lockfile/);
+  assert.match(githubRelease, /pnpm build/);
   assert.match(githubRelease, /scripts\/verify_release_artifacts\.py/);
   assert.match(githubRelease, /--verify-checksums/);
   assert.match(githubRelease, /--notes-file docs\/releases\/v1\.0\.0\.md/);
