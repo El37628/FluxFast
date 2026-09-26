@@ -11,6 +11,153 @@ import { FluxRouter, createValidator } from "@fluxfast/core";
 Deep imports into `dist` or source files are internal. The package's ESM and
 CommonJS entry points expose the same named API.
 
+## Common API inputs and outputs
+
+Application components normally reach this runtime through `@fluxfast/next`.
+The direct API is useful for adapter authors, non-React clients, validation,
+and tests.
+
+### Hydrate the framework-neutral runtime
+
+`FluxRouter` accepts the same `PageEnvelope` returned by FastAPI. Supplying
+`deferHistory: true` keeps this standalone example independent of the browser
+History API.
+
+```ts
+import { FluxRouter, type PageEnvelope } from "@fluxfast/core";
+
+const initialEnvelope: PageEnvelope = {
+  protocol: "fluxfast/1",
+  page: {
+    component: "rooms/index",
+    url: "/rooms",
+    meta: { title: "Rooms" },
+  },
+  resources: {
+    rooms: {
+      version: "rooms-v1",
+      value: [{ id: 101, status: "available" }],
+    },
+  },
+};
+
+const router = new FluxRouter({
+  initialEnvelope,
+  deferHistory: true,
+});
+
+console.log({
+  page: router.pageStore.getSnapshot(),
+  rooms: router.resourceStore.getSnapshot("rooms"),
+  resourceStatus: router.resourceStore.getStateSnapshot("rooms").status,
+});
+```
+
+Output:
+
+```json
+{
+  "page": {
+    "component": "rooms/index",
+    "url": "/rooms",
+    "meta": { "title": "Rooms" }
+  },
+  "rooms": [{ "id": 101, "status": "available" }],
+  "resourceStatus": "ready"
+}
+```
+
+Use `createFluxRuntime(options)` when a factory is more convenient; it returns
+the same `FluxRouter` public runtime.
+
+### Validate unknown input
+
+Generated validators use this API internally. A custom integration can also
+construct a deterministic plan directly:
+
+```ts
+import { createValidator } from "@fluxfast/core";
+
+interface Room {
+  id: number;
+  status: "available" | "occupied";
+}
+
+const roomValidator = createValidator<Room>({
+  kind: "object",
+  properties: {
+    id: { kind: "integer", minimum: 1 },
+    status: {
+      kind: "enum",
+      values: ["available", "occupied"],
+    },
+  },
+  required: ["id", "status"],
+  additionalProperties: false,
+});
+
+console.log(roomValidator.validate({ id: 0, status: "unknown" }));
+```
+
+Output:
+
+```json
+{
+  "valid": false,
+  "issues": [
+    {
+      "path": ["id"],
+      "code": "minimum",
+      "message": "Value must be at least 1."
+    },
+    {
+      "path": ["status"],
+      "code": "enum",
+      "message": "Value is not one of the allowed values."
+    }
+  ]
+}
+```
+
+A valid input returns `{ valid: true, value, issues: [] }`. `is()` exposes a
+TypeScript type guard, while `assert()` returns the typed value or throws
+`ValidationError` with the same structured issues.
+
+### Apply a mutation patch
+
+`applyPatchToValue()` is the pure operation used by the resource store for one
+patch. It does not mutate the input value.
+
+```ts
+import { applyPatchToValue } from "@fluxfast/core";
+
+const rooms = [
+  { id: 101, status: "available" },
+  { id: 102, status: "occupied" },
+];
+
+const updated = applyPatchToValue(rooms, {
+  op: "replace-item",
+  id: 101,
+  value: { id: 101, status: "occupied" },
+});
+
+console.log(updated);
+```
+
+Output:
+
+```json
+[
+  { "id": 101, "status": "occupied" },
+  { "id": 102, "status": "occupied" }
+]
+```
+
+The runtime also supports `replace-resource`, `merge-object`, `remove-item`,
+and `append-item` operations. The server remains responsible for deciding which
+patches are authorized and authoritative.
+
 ## Classification
 
 A stable API is part of the ordinary application or adapter-author surface. An
