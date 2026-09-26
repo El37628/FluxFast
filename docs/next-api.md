@@ -17,6 +17,162 @@ package internals receive no compatibility guarantee. The published-package
 consumer verifies CommonJS `require()`, ESM `import`, and TypeScript declarations
 for every public path, and verifies that representative deep imports are blocked.
 
+## Common API inputs and outputs
+
+These examples follow the runtime boundaries in the table above. Generated
+resource keys and validators come from the FastAPI-owned contract; do not
+redeclare those types by hand.
+
+### Render a resource in a client component
+
+Given this resource record in the initial envelope:
+
+```json
+{
+  "rooms": {
+    "version": "rooms-v1",
+    "value": [{ "id": 101, "status": "available" }]
+  }
+}
+```
+
+the root or `/client` entry point can subscribe to its value and lifecycle:
+
+```tsx
+"use client";
+
+import { useResource, useResourceState } from "@fluxfast/next/client";
+import { resourceKeys } from "@/.fluxfast/types.generated";
+
+export default function RoomsPage() {
+  const rooms = useResource(resourceKeys.rooms);
+  const state = useResourceState(resourceKeys.rooms);
+
+  return (
+    <main>
+      <p>Resource status: {state.status}</p>
+      <ul>
+        {rooms.map(room => (
+          <li key={room.id}>
+            Room {room.id}: {room.status}
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+```
+
+Rendered output:
+
+```text
+Resource status: ready
+Room 101: available
+```
+
+`useResource()` is for an available value. Use `useDeferredResource()` when the
+server marks a resource deferred; its result adds `isPending`, `isLoading`,
+`isReady`, `isError`, and `retry()` to the same state snapshot.
+
+### Reconstruct a server request path
+
+The `/server` entry point converts optional catch-all parameters and Next.js
+search parameters into one origin-relative FastAPI path:
+
+```ts
+import { buildFluxPath } from "@fluxfast/next/server";
+
+const path = buildFluxPath(
+  ["rooms", "101"],
+  {
+    status: "available",
+    tag: ["sea view", "suite"],
+  },
+);
+
+console.log(path);
+```
+
+Output:
+
+```text
+/rooms/101?status=available&tag=sea+view&tag=suite
+```
+
+`createFluxNextPage()` performs this conversion, forwards only its documented
+server-side headers, fetches the initial envelope without caching, and renders
+the configured application. A FastAPI 404 invokes Next.js `notFound()` so the
+document keeps a real 404 status.
+
+### Inspect generated page registration
+
+The `/generate` entry point can build a registry snapshot without writing any
+files. For this directory:
+
+```text
+src/flux-pages/
+├── home/index.tsx
+└── rooms/index.tsx
+```
+
+inspect the identifiers that would be generated:
+
+```ts
+import { createPagesRegistrySnapshot } from "@fluxfast/next/generate";
+
+const snapshot = createPagesRegistrySnapshot();
+
+console.log({
+  identifiers: snapshot.identifiers,
+  outputFile: snapshot.outputFile,
+});
+```
+
+Output (the absolute prefix of `outputFile` depends on the project directory):
+
+```json
+{
+  "identifiers": ["home/index", "rooms/index"],
+  "outputFile": "/project/src/.fluxfast/pages.generated.ts"
+}
+```
+
+Use `checkFluxFastProject()` for a read-only drift result and
+`generateFluxFastProject()` when tooling intentionally owns generated-file
+writes. Application code should use the higher-level `fluxfast types` workflow.
+
+### Add the same-origin Next.js transport
+
+`withFluxFast()` belongs in `next.config.ts` through the `/next-config` entry
+point:
+
+```ts
+import type { NextConfig } from "next";
+import { withFluxFast } from "@fluxfast/next/next-config";
+
+const nextConfig: NextConfig = {
+  output: "standalone",
+};
+
+export default withFluxFast(nextConfig);
+```
+
+During supervised production startup, the resulting transport rewrite is:
+
+```json
+{
+  "source": "/:path*",
+  "has": [
+    { "type": "header", "key": "x-fluxfast", "value": "1" }
+  ],
+  "destination": "/_fluxfast/transport/:path*"
+}
+```
+
+Only requests carrying the FluxFast header match that rule. Normal document
+requests stay in Next.js, and the private FastAPI origin is not exposed to the
+browser.
+
 ## Classification
 
 A stable API is ordinary application or tooling API. An advanced stable API is

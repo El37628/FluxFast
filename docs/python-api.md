@@ -13,6 +13,149 @@ because the package is imported or an application starts. Names absent from
 undocumented deep-module imports, are internal unless another public contract
 explicitly says otherwise.
 
+## Common API inputs and outputs
+
+The examples below show the public Python objects together with the wire values
+they produce. The HTTP requests represent what the Next.js adapter sends; an
+ordinary application does not need to construct these headers by hand.
+
+### Define a typed page resource
+
+`FluxFast`, `Page`, `resource()`, and `scope` form the usual page API. The
+Pydantic model is both the server-side validation contract and the source for
+generated frontend types.
+
+```python
+from typing import Literal
+
+from fastapi import FastAPI
+from fluxfast import FluxFast, Page, resource, scope
+from pydantic import BaseModel
+
+
+class Room(BaseModel):
+    id: int
+    status: Literal["available", "occupied"]
+
+
+app = FastAPI()
+flux = FluxFast(app)
+ROOMS = flux.define_resource("rooms", list[Room])
+
+
+@flux.page("/rooms", name="rooms")
+async def rooms() -> Page:
+    return Page(
+        component="rooms/index",
+        resources=[
+            resource(
+                ROOMS,
+                lambda: [{"id": 101, "status": "available"}],
+                scope=scope.public(),
+                ttl=30,
+            )
+        ],
+        meta={"title": "Rooms"},
+    )
+```
+
+Input from the adapter:
+
+```http
+GET /rooms HTTP/1.1
+X-FluxFast: 1
+X-FluxFast-Protocol: 1
+```
+
+Output (`version` is an opaque content version and will change with the value):
+
+```json
+{
+  "protocol": "fluxfast/1",
+  "page": {
+    "component": "rooms/index",
+    "url": "/rooms",
+    "meta": { "title": "Rooms" }
+  },
+  "resources": {
+    "rooms": {
+      "version": "73915f1c8af5463d44965405f18e6531",
+      "value": [{ "id": 101, "status": "available" }]
+    }
+  }
+}
+```
+
+The component identifier selects an allowlisted frontend module. It is not an
+arbitrary import path. Use a reusable cache scope only when the value is safe to
+share at that scope; authenticated or tenant data should use `scope.user(...)`
+or `scope.tenant(...)` after normal FastAPI authorization.
+
+### Return a mutation result
+
+Mutation helpers describe the client update; the FastAPI handler still owns
+authorization, validation, and the database transaction.
+
+```python
+from fluxfast import invalidate_resource, mutation, replace_item
+
+
+class RoomUpdate(BaseModel):
+    status: Literal["available", "occupied"]
+
+
+@flux.mutation("/rooms/{room_id}", methods=["PATCH"], name="update_room")
+async def update_room(room_id: int, body: RoomUpdate):
+    # Persist the update before returning the mutation result.
+    return mutation(
+        patches={
+            "rooms": [
+                replace_item(
+                    room_id,
+                    {"id": room_id, "status": body.status},
+                )
+            ]
+        },
+        invalidates=[
+            invalidate_resource("summary", scope=scope.public()),
+        ],
+    )
+```
+
+Input:
+
+```http
+PATCH /rooms/101 HTTP/1.1
+Content-Type: application/json
+X-FluxFast: 1
+
+{"status":"occupied"}
+```
+
+Output:
+
+```json
+{
+  "protocol": "fluxfast/1",
+  "mutation": {
+    "patches": {
+      "rooms": [
+        {
+          "op": "replace-item",
+          "id": 101,
+          "value": { "id": 101, "status": "occupied" }
+        }
+      ]
+    },
+    "invalidate": ["summary"]
+  }
+}
+```
+
+The browser applies the room patch immediately. It treats `summary` as stale,
+while the explicit public scope also lets the backend delete the matching cache
+entry and publish a live invalidation when a shared broker is configured.
+
 ## Export classification
 
 This table is the authoritative Python export inventory. CI verifies that it
