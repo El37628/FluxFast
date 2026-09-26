@@ -4,6 +4,10 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyInitPlan } from "../../src/cli/apply";
 import {
+  desiredAgentKnowledgePath,
+  FLUXFAST_AGENT_BLOCK_START,
+} from "../../src/cli/agent-knowledge";
+import {
   desiredCatchAllPath,
   desiredHealthRoutePath,
   desiredHomePagePath,
@@ -37,6 +41,8 @@ describe("FluxFast init plan application", () => {
       "next.config.ts",
       "const nextConfig = {};\nexport default nextConfig;\n"
     );
+    const originalAgents = "# Project rules\n\nKeep this instruction.\n";
+    writeTestFile(tmpDir, "AGENTS.md", originalAgents);
     let project = detectFluxProject(tmpDir);
 
     const result = applyInitPlan(createInitPlan(project), { logRegistry: false });
@@ -63,6 +69,15 @@ describe("FluxFast init plan application", () => {
     );
     expect(fs.readFileSync(path.join(tmpDir, "next.config.ts"), "utf8")).toContain(
       "export default withFluxFast(nextConfig);"
+    );
+    expect(fs.readFileSync(desiredAgentKnowledgePath(project), "utf8")).toContain(
+      "## Architecture and ownership"
+    );
+    const agents = fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8");
+    expect(agents).toContain(originalAgents);
+    expect(agents).toContain(FLUXFAST_AGENT_BLOCK_START);
+    expect(fs.readFileSync(path.join(tmpDir, "CLAUDE.md"), "utf8")).toContain(
+      "@src/.fluxfast/agent-knowledge.md"
     );
 
     project = detectFluxProject(tmpDir);
@@ -99,6 +114,9 @@ describe("FluxFast init plan application", () => {
     expect(fs.existsSync(desiredTransportRoutePath(project))).toBe(false);
     expect(fs.existsSync(desiredHomePagePath(project))).toBe(false);
     expect(fs.existsSync(project.registryPath)).toBe(false);
+    expect(fs.existsSync(desiredAgentKnowledgePath(project))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "AGENTS.md"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "CLAUDE.md"))).toBe(false);
     expect(fs.readFileSync(nextConfigPath, "utf8")).toBe(originalConfig);
   });
 

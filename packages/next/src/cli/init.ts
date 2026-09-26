@@ -1,5 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  desiredAgentInstructionPaths,
+  desiredAgentKnowledgePath,
+  isFluxFastAgentKnowledge,
+  mergeAgentInstructionBlock,
+  renderAgentInstructionBlock,
+  renderAgentKnowledge,
+} from "./agent-knowledge.js";
 import { validateInitPrerequisites } from "./diagnostics.js";
 import {
   desiredCatchAllPath,
@@ -52,6 +60,112 @@ function isDirectory(directoryPath: string): boolean {
     return fs.statSync(directoryPath).isDirectory();
   } catch {
     return false;
+  }
+}
+
+function planAgentKnowledge(
+  project: FluxProjectInfo,
+  options: InitPlanOptions,
+  operations: InitOperation[],
+  warnings: string[],
+  manualActions: string[]
+): void {
+  const knowledgePath = desiredAgentKnowledgePath(project);
+  const knowledgeContent = renderAgentKnowledge(project);
+  const knowledgeDisplayPath = relativeProjectPath(project, knowledgePath);
+
+  if (isDirectory(knowledgePath)) {
+    const warning = `${knowledgeDisplayPath} is a directory, so FluxFast could not install agent knowledge there.`;
+    warnings.push(warning);
+    manualActions.push(
+      `Move or remove ${knowledgeDisplayPath}, then run npx fluxfast init again.`
+    );
+    operations.push({ type: "skip", path: knowledgePath, reason: warning });
+  } else if (isFile(knowledgePath)) {
+    const before = fs.readFileSync(knowledgePath, "utf8");
+    if (before === knowledgeContent) {
+      operations.push({
+        type: "skip",
+        path: knowledgePath,
+        reason: "FluxFast agent knowledge is current",
+      });
+    } else if (isFluxFastAgentKnowledge(before) || options.force) {
+      operations.push({
+        type: "modify",
+        path: knowledgePath,
+        before,
+        after: knowledgeContent,
+      });
+      if (!isFluxFastAgentKnowledge(before)) {
+        warnings.push(
+          `${knowledgeDisplayPath} was replaced because --force was used.`
+        );
+      }
+    } else {
+      const warning =
+        `${knowledgeDisplayPath} exists but is not managed by FluxFast.`;
+      warnings.push(warning);
+      manualActions.push(
+        `Move ${knowledgeDisplayPath} or run npx fluxfast init --force to replace it.`
+      );
+      operations.push({ type: "skip", path: knowledgePath, reason: warning });
+    }
+  } else {
+    operations.push({
+      type: "create",
+      path: knowledgePath,
+      content: knowledgeContent,
+    });
+  }
+
+  const instructionBlock = renderAgentInstructionBlock(project);
+  for (const instructionPath of desiredAgentInstructionPaths(project)) {
+    const instructionDisplayPath = relativeProjectPath(
+      project,
+      instructionPath
+    );
+    if (isDirectory(instructionPath)) {
+      const warning = `${instructionDisplayPath} is a directory, so FluxFast could not add its agent knowledge reference.`;
+      warnings.push(warning);
+      manualActions.push(
+        `Move or remove ${instructionDisplayPath}, then run npx fluxfast init again.`
+      );
+      operations.push({ type: "skip", path: instructionPath, reason: warning });
+      continue;
+    }
+
+    if (!isFile(instructionPath)) {
+      operations.push({
+        type: "create",
+        path: instructionPath,
+        content: `${instructionBlock}\n`,
+      });
+      continue;
+    }
+
+    const before = fs.readFileSync(instructionPath, "utf8");
+    const merge = mergeAgentInstructionBlock(before, instructionBlock);
+    if (merge.status === "malformed") {
+      const warning = `${instructionDisplayPath} has an incomplete FluxFast agent knowledge marker block.`;
+      warnings.push(warning);
+      manualActions.push(
+        `Repair or remove the FluxFast marker block in ${instructionDisplayPath}, then run npx fluxfast init again.`
+      );
+      operations.push({ type: "skip", path: instructionPath, reason: warning });
+    } else if (merge.status === "unchanged") {
+      operations.push({
+        type: "skip",
+        path: instructionPath,
+        reason: "FluxFast agent knowledge reference is current",
+      });
+    } else {
+      operations.push({
+        type: "modify",
+        path: instructionPath,
+        before,
+        after: merge.content,
+      });
+    }
   }
 }
 
@@ -264,6 +378,8 @@ export function createInitPlan(
   if (nextConfig.manualAction) {
     manualActions.push(nextConfig.manualAction);
   }
+
+  planAgentKnowledge(project, options, operations, warnings, manualActions);
 
   return { project, operations, warnings, errors, manualActions };
 }
