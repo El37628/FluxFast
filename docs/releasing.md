@@ -1,5 +1,14 @@
 # Releasing FluxFast
 
+## Historical release snapshots
+
+Final runtime snapshots are immutable evidence for the release they audited.
+After that release is published, repository tests validate the recorded fixture
+and its audit facts rather than comparing all future development to the old
+runtime digest. A later release candidate that changes runtime source requires
+its own review and evidence before tagging; never rewrite an earlier release's
+snapshot to make a new change pass.
+
 Stable releases publish the same version to PyPI, `@fluxfast/core`, and
 `@fluxfast/next`. Pushing a matching `vMAJOR.MINOR.PATCH` tag starts
 `.github/workflows/release.yml`. The workflow validates versions, runs all

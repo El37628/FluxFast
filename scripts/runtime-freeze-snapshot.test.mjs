@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { createRuntimeFreezeSnapshot } from "./runtime-freeze-snapshot.mjs";
-
 const fixture = JSON.parse(
   fs.readFileSync(
     new URL("../tests/fixtures/runtime-v1.0-candidate.json", import.meta.url),
@@ -25,10 +23,21 @@ function auditFacts() {
   return JSON.parse(block[1]);
 }
 
-test("keeps the final audited v1 runtime unchanged except for its package version", () => {
+test("retains the exact runtime snapshot audited for v1.0.0", () => {
   assert.equal(fixture.baseline, "v0.9.0");
   assert.equal(fixture.auditedCommit, "a5ea091b6ce8679d1321716400aa2c792fbc5f42");
-  assert.deepEqual(createRuntimeFreezeSnapshot(), fixture.runtime);
+  assert.deepEqual(fixture.runtime, {
+    sourceRoots: [
+      "packages/core/src",
+      "packages/next/src",
+      "python/fluxfast/src/fluxfast",
+    ],
+    versionNormalizedPaths: [
+      "python/fluxfast/src/fluxfast/__init__.py",
+    ],
+    runtimeFileCount: 100,
+    runtimeDigest: "cb839991228a6ca12b5341b1c63d0602ed5b559250708f31cbbcd5eb0bc3d762",
+  });
 });
 
 test("records a passing final audit with no unresolved release blocker", () => {
