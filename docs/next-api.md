@@ -17,6 +17,12 @@ package internals receive no compatibility guarantee. The published-package
 consumer verifies CommonJS `require()`, ESM `import`, and TypeScript declarations
 for every public path, and verifies that representative deep imports are blocked.
 
+Use the [Stable APIs guide](stable-apis.md) to choose ordinary application
+hooks, form, generation, and shell APIs. Use
+[Advanced Stable APIs](advanced-stable-apis.md) only when you deliberately own
+server handlers, route context, registry inspection, or provider integration.
+This page is the authoritative entry-point and symbol inventory.
+
 ## Common API inputs and outputs
 
 These examples follow the runtime boundaries in the table above. Generated
