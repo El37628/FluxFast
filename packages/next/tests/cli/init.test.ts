@@ -3,6 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  desiredAgentInstructionPaths,
+  desiredAgentKnowledgePath,
+  FLUXFAST_AGENT_BLOCK_START,
+  FLUXFAST_AGENT_KNOWLEDGE_MARKER,
+  renderAgentInstructionBlock,
+  renderAgentKnowledge,
+} from "../../src/cli/agent-knowledge";
+import {
   desiredCatchAllPath,
   desiredHealthRoutePath,
   desiredHomePagePath,
@@ -52,6 +60,8 @@ describe("FluxFast init planner", () => {
     const catchAll = desiredCatchAllPath(project);
     const healthRoute = desiredHealthRoutePath(project);
     const transportRoute = desiredTransportRoutePath(project);
+    const knowledgePath = desiredAgentKnowledgePath(project);
+    const [agentsPath, claudePath] = desiredAgentInstructionPaths(project);
 
     expect(plan.errors).toEqual([]);
     expect(plan.warnings).toEqual([]);
@@ -66,6 +76,12 @@ describe("FluxFast init planner", () => {
       type: "create",
       content: renderTransportRoute(),
     });
+    expect(operation("create", knowledgePath)).toMatchObject({
+      type: "create",
+      content: renderAgentKnowledge(project),
+    });
+    expect(operation("create", agentsPath)).toMatchObject({ type: "create" });
+    expect(operation("create", claudePath)).toMatchObject({ type: "create" });
     expect(operation("move", homePage)).toMatchObject({
       type: "move",
       from: rootPage,
@@ -79,6 +95,9 @@ describe("FluxFast init planner", () => {
     expect(fs.existsSync(catchAll)).toBe(false);
     expect(fs.existsSync(healthRoute)).toBe(false);
     expect(fs.existsSync(transportRoute)).toBe(false);
+    expect(fs.existsSync(knowledgePath)).toBe(false);
+    expect(fs.existsSync(agentsPath)).toBe(false);
+    expect(fs.existsSync(claudePath)).toBe(false);
     expect(fs.readFileSync(rootPage, "utf8")).toContain("next/image");
   });
 
@@ -150,11 +169,88 @@ describe("FluxFast init planner", () => {
       "next.config.ts",
       'import { withFluxFast } from "@fluxfast/next/next-config";\nexport default withFluxFast({});\n'
     );
+    writeTestFile(
+      tmpDir,
+      path.relative(tmpDir, desiredAgentKnowledgePath(project)),
+      renderAgentKnowledge(project)
+    );
+    for (const instructionPath of desiredAgentInstructionPaths(project)) {
+      writeTestFile(
+        tmpDir,
+        path.relative(tmpDir, instructionPath),
+        `${renderAgentInstructionBlock(project)}\n`
+      );
+    }
     project = detectFluxProject(tmpDir);
     const plan = createInitPlan(project);
 
     expect(plan.errors).toEqual([]);
     expect(changedOperations(plan)).toEqual([]);
+  });
+
+  it("preserves existing agent instructions and appends one managed block", () => {
+    createTestProject(tmpDir);
+    const existing = "# Project rules\n\nKeep user instructions.\n";
+    const agentsPath = writeTestFile(tmpDir, "AGENTS.md", existing);
+    const project = detectFluxProject(tmpDir);
+    const plan = createInitPlan(project);
+    const update = plan.operations.find(
+      item => item.type === "modify" && item.path === agentsPath
+    );
+    const after = update && "after" in update ? update.after : "";
+
+    expect(update).toMatchObject({ type: "modify", before: existing });
+    expect(after).toContain(existing);
+    expect(after).toContain(FLUXFAST_AGENT_BLOCK_START);
+    expect(after.match(/fluxfast-agent-knowledge:start/g)).toHaveLength(1);
+  });
+
+  it("updates generated knowledge but preserves a custom collision without force", () => {
+    createTestProject(tmpDir);
+    let project = detectFluxProject(tmpDir);
+    const knowledgePath = desiredAgentKnowledgePath(project);
+    writeTestFile(
+      tmpDir,
+      path.relative(tmpDir, knowledgePath),
+      `${FLUXFAST_AGENT_KNOWLEDGE_MARKER}\nold generated content\n`
+    );
+
+    let plan = createInitPlan(detectFluxProject(tmpDir));
+    expect(plan.operations).toContainEqual(
+      expect.objectContaining({ type: "modify", path: knowledgePath })
+    );
+
+    fs.writeFileSync(knowledgePath, "# Custom project knowledge\n", "utf8");
+    project = detectFluxProject(tmpDir);
+    plan = createInitPlan(project);
+    expect(plan.operations).toContainEqual(
+      expect.objectContaining({ type: "skip", path: knowledgePath })
+    );
+    expect(plan.manualActions.join("\n")).toContain("init --force");
+
+    const forced = createInitPlan(project, { force: true });
+    expect(forced.operations).toContainEqual({
+      type: "modify",
+      path: knowledgePath,
+      before: "# Custom project knowledge\n",
+      after: renderAgentKnowledge(project),
+    });
+  });
+
+  it("does not rewrite an incomplete managed instruction block", () => {
+    createTestProject(tmpDir);
+    const agentsPath = writeTestFile(
+      tmpDir,
+      "AGENTS.md",
+      `# Project rules\n\n${FLUXFAST_AGENT_BLOCK_START}\n`
+    );
+    const plan = createInitPlan(detectFluxProject(tmpDir));
+
+    expect(plan.operations).toContainEqual(
+      expect.objectContaining({ type: "skip", path: agentsPath })
+    );
+    expect(plan.manualActions.join("\n")).toContain("Repair or remove");
+    expect(fs.readFileSync(agentsPath, "utf8")).toContain("# Project rules");
   });
 
   it("preserves a custom reserved health route unless force repairs it", () => {
