@@ -5,6 +5,12 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+### Added
+
+- Install a detailed, version-aware FluxFast agent guide during `fluxfast init`
+  and maintain bounded references to it in project-root `AGENTS.md` and
+  `CLAUDE.md` files without replacing existing user instructions.
+
 ## [1.0.0] - 2026-09-24
 
 ### Added

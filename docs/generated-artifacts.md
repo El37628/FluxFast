@@ -22,6 +22,13 @@ supported root or `src/` project layout. Changing between those layouts may
 move the directory, but renaming one of these files would break generated
 imports and is therefore a breaking change.
 
+`fluxfast init` also writes `agent-knowledge.md` into that directory. It is a
+generated AI-agent integration guide rather than a TypeScript or developer
+schema API, so it is outside the semantic application-code contract below. The
+initializer refreshes it independently and maintains bounded reference blocks
+in the project-root `AGENTS.md` and `CLAUDE.md`; content outside those blocks is
+user-owned and preserved.
+
 ## Stable generated API
 
 Application code may depend on these semantic exports:

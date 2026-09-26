@@ -68,6 +68,9 @@ describe("FluxFast CLI", () => {
     expect(output).toContain("FluxFast Setup — Dry Run");
     expect(output).toContain("Would create:");
     expect(output).toContain("src/fluxfast.config.ts");
+    expect(output).toContain("src/.fluxfast/agent-knowledge.md");
+    expect(output).toContain("AGENTS.md");
+    expect(output).toContain("CLAUDE.md");
     expect(output).toContain("Would modify:");
     expect(output).toContain("next.config.ts");
     expect(output).toContain("No files were changed.");
@@ -82,6 +85,15 @@ describe("FluxFast CLI", () => {
     const project = detectFluxProject(tmpDir);
     expect(fs.existsSync(project.configPath)).toBe(true);
     expect(fs.existsSync(project.registryPath)).toBe(true);
+    expect(
+      fs.existsSync(path.join(project.generatedDir, "agent-knowledge.md"))
+    ).toBe(true);
+    expect(fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf8")).toContain(
+      "@src/.fluxfast/agent-knowledge.md"
+    );
+    expect(fs.readFileSync(path.join(tmpDir, "CLAUDE.md"), "utf8")).toContain(
+      "@src/.fluxfast/agent-knowledge.md"
+    );
     expect(fs.existsSync(path.join(tmpDir, "next.config.ts"))).toBe(true);
     expect(stdout.join("\n")).toContain("Ready.");
 
