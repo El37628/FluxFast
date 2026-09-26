@@ -77,6 +77,183 @@ the ordinary stable validation surface. Generated validators already implement
 that interface, so application components normally consume a validator rather
 than construct its plan themselves.
 
+## Every Stable API in one line
+
+The snippets below are intentionally small declaration-and-use fragments. They
+assume the surrounding values named in the snippet already exist—for example,
+`app` is a `FastAPI` application, `router` is a FluxFast router, and generated
+keys and validators come from `src/.fluxfast`. The final column explains the
+real job of the API so the line is not mistaken for a complete workflow.
+The three tables cover all 124 Stable exports currently frozen for FluxFast
+1.x: 27 Python exports, 49 Core exports, and 48 Next.js exports.
+
+### Python Stable APIs
+
+Import these names from `fluxfast`. Application models in the examples are
+ordinary Pydantic models.
+
+```python
+from fluxfast import FluxFast, Page, mutation, resource, scope
+```
+
+<!-- stable-api-examples-python:start -->
+| API | One-line declaration or use | What it actually does |
+| --- | --- | --- |
+| `CacheScope` | `user_scope: CacheScope = scope.user(current_user.id)` | Carries the explicit cache-isolation identity for a public, user, tenant, custom, or request value. |
+| `ContractMode` | `mode: ContractMode = "validation"` | Selects whether a declared application type represents validation input, serialization output, or both. |
+| `FluxFast` | `flux = FluxFast(app)` | Installs FluxFast pages, mutations, resource caching, live coordination, errors, and health lifecycle on FastAPI. |
+| `FluxFastError` | `except FluxFastError as error: report(error.details)` | Catches the documented base class for FluxFast application-facing failures. |
+| `FluxFastLiveScopeError` | `except FluxFastLiveScopeError: require_reusable_scope()` | Detects a live resource incorrectly declared with request-only or missing reusable scope. |
+| `InvalidateResource` | `refresh: InvalidateResource = invalidate_resource("rooms", scope.public())` | Types a mutation instruction that deletes one scoped server cache entry and marks the browser resource stale. |
+| `MutationResult` | `result: MutationResult = mutation(invalidate=["rooms"])` | Represents the structured patches, invalidations, or redirect returned by a mutation route. |
+| `Page` | `return Page(component="rooms/index", resources=[rooms_resource])` | Selects an allowlisted frontend component and the resource graph for one FastAPI page response. |
+| `ResourceContract` | `ROOMS: ResourceContract[list[Room]] = flux.define_resource("rooms", list[Room])` | Binds one logical resource key to its authoritative Python/Pydantic value contract. |
+| `ResourceContractError` | `except ResourceContractError as error: quarantine(error.details)` | Handles a loader value that failed its declared resource contract. |
+| `ResourceError` | `except ResourceError as error: log_resource_failure(error)` | Handles a documented resource-resolution failure at an application boundary. |
+| `ResourceLoader` | `load_rooms: ResourceLoader = lambda: repository.list_rooms()` | Types the synchronous or asynchronous callable used to resolve a resource value. |
+| `ResourceSpec` | `rooms_spec: ResourceSpec = resource(ROOMS, load_rooms)` | Stores the loader, logical key, scope, TTL, tags, deferred flag, live flag, and optional contract for a page resource. |
+| `ScopeError` | `except ScopeError: reject_invalid_identity()` | Handles invalid cache-scope kinds or identities before caching occurs. |
+| `ScopeType` | `kind: ScopeType = ScopeType.TENANT` | Names the isolation kind used by a `CacheScope`. |
+| `TypeContract` | `ROOM_INPUT: TypeContract = flux.define_type("RoomInput", RoomInput)` | Publishes a reusable non-resource application type to generated TypeScript and validators. |
+| `append_item` | `patch = append_item({"id": 102, "name": "Lake View"})` | Builds a patch that appends one value to an array resource. |
+| `flux_external_redirect` | `return flux_external_redirect("https://billing.example.com/session/123")` | Requests a full browser navigation to an absolute HTTP(S) destination. |
+| `flux_redirect` | `return flux_redirect("/rooms/102")` | Requests an internal FluxFast navigation to a safe origin-relative path. |
+| `invalidate_resource` | `stale = invalidate_resource("rooms", scope.tenant(hotel.id))` | Builds a scoped invalidation descriptor for a mutation result. |
+| `merge_object` | `patch = merge_object({"status": "ready"})` | Builds a shallow object-merge patch for one resource. |
+| `mutation` | `return mutation(patches={"rooms": append_item(created)})` | Converts patch, invalidation, and redirect instructions into a `MutationResult`. |
+| `remove_item` | `patch = remove_item(102)` | Builds an array patch that removes the item whose `id` matches the supplied identity. |
+| `replace_item` | `patch = replace_item(102, updated_room)` | Builds an array patch that replaces one matching item with an authoritative value. |
+| `replace_resource` | `patch = replace_resource(fresh_rooms)` | Builds a patch that replaces the complete resource value. |
+| `resource` | `rooms_resource = resource(ROOMS, load_rooms, scope=scope.public(), ttl=30)` | Declares how one page resource is loaded, isolated, cached, deferred, tagged, and optionally made live. |
+| `scope` | `tenant_scope = scope.tenant(hotel.id)` | Creates validated cache-scope descriptors without constructing `CacheScope` manually. |
+<!-- stable-api-examples-python:end -->
+
+### `@fluxfast/core` Stable APIs
+
+Import these names from `@fluxfast/core`. Direct Core use is mainly for
+framework-neutral applications, adapter work, and tests; a Next.js component
+normally uses the `@fluxfast/next` hooks in the following table.
+
+```ts
+import { FluxRouter, createValidator } from "@fluxfast/core";
+```
+
+<!-- stable-api-examples-core:start -->
+| API | One-line declaration or use | What it actually does |
+| --- | --- | --- |
+| `ComponentResolutionError` | `if (error instanceof ComponentResolutionError) showMissingComponent()` | Identifies a server-selected component that is absent from the allowlisted registry. |
+| `EventEmitter` | `const stop = new EventEmitter().on("visit:success", event => audit(event.url));` | Publishes and subscribes to typed runtime lifecycle events. |
+| `FluxEventListener` | `const listener: FluxEventListener<"cache:hit"> = event => count(event.key);` | Types a callback for one exact FluxFast event name and payload. |
+| `FluxEventName` | `const eventName: FluxEventName = "resource:update";` | Restricts event selection to the documented runtime event union. |
+| `FluxEventPayloads` | `const payload: FluxEventPayloads["cache:hit"] = { key: "rooms" };` | Resolves the payload shape associated with a specific event name. |
+| `FluxFastError` | `if (error instanceof FluxFastError) report(error.details);` | Matches the shared base error for Core runtime failures. |
+| `FluxResourceKey` | `const key: FluxResourceKey = resourceKeys.rooms;` | Restricts a key to names added by generated resource-map augmentation. |
+| `FluxResourceMap` | `type ApplicationResources = FluxResourceMap;` | Exposes the generated key-to-value map that powers typed resource APIs. |
+| `FluxResourceValue` | `type Rooms = FluxResourceValue<typeof resourceKeys.rooms>;` | Looks up the generated value type for one resource key. |
+| `FluxRouter` | `const router = new FluxRouter({ initialEnvelope });` | Coordinates visits, mutations, resources, history, prefetch, cache, and live state. |
+| `FluxRuntimeOptions` | `const options: FluxRuntimeOptions = { initialEnvelope, maxResources: 128 };` | Configures router dependencies, initial state, cache bounds, history, and transports. |
+| `FluxValidator` | `const validator: FluxValidator<RoomInput> = RoomInputValidator;` | Describes a reusable validator with `validate`, `is`, and `assert` operations. |
+| `LoadResourcesOptions` | `const options: LoadResourcesOptions = { reason: "retry" };` | Supplies the reason, URL, headers, and cancellation signal for a resource-only load. |
+| `MutateOptions` | `const options: MutateOptions = { method: "PATCH", preserveScroll: true };` | Configures one router mutation request. |
+| `MutationError` | `if (error instanceof MutationError) showMutationFailure(error.details);` | Identifies a structured mutation request failure. |
+| `PageNotFoundError` | `if (error instanceof PageNotFoundError) renderNotFound();` | Lets custom adapter code represent a missing page as a typed error; the built-in Next adapter uses `notFound()`. |
+| `PageState` | `const page: PageState = router.pageStore.getSnapshot();` | Types the current component identifier, URL, and page metadata. |
+| `PageStore` | `const pages = new PageStore({ component: "home/index", url: "/" });` | Holds the reactive current-page snapshot independently of a UI framework. |
+| `PatchOp` | `const operation: PatchOp = "append-item";` | Restricts a mutation patch operation to the five supported operation names. |
+| `ProtocolError` | `if (error instanceof ProtocolError) rejectMalformedEnvelope();` | Identifies a payload or protocol constraint violation. |
+| `RefreshOptions` | `const options: RefreshOptions = { only: ["rooms"] };` | Limits a refresh to selected resources without changing the page. |
+| `ResourceError` | `if (error instanceof ResourceError) showResourceFailure(error.details);` | Identifies a resource-specific runtime failure. |
+| `ResourceErrorEvent` | `const onError = (event: ResourceErrorEvent) => show(event.key, event.error);` | Types an isolated sanitized resource-error event. |
+| `ResourceLoadErrorEvent` | `const onLoadError = (event: ResourceLoadErrorEvent) => retry(event.keys);` | Types a failed resource-batch load and its underlying error. |
+| `ResourceLoadEvent` | `const onLoad = (event: ResourceLoadEvent) => trace(event.reason, event.keys);` | Types the URL, keys, and reason for a resource-batch lifecycle event. |
+| `ResourceLoadReason` | `const reason: ResourceLoadReason = "deferred";` | Identifies why the runtime is loading resources. |
+| `ResourcePatch` | `const patch: ResourcePatch = { op: "remove-item", id: 102 };` | Types one supported resource mutation operation. |
+| `ResourceRecord` | `const record: ResourceRecord<Room[]> = router.resourceStore.getRecord<Room[]>("rooms")!;` | Exposes one stored value together with its version and update timestamp. |
+| `ResourceStateSnapshot` | `const state: ResourceStateSnapshot<Room[]> = router.resourceStore.getStateSnapshot<Room[]>("rooms");` | Reads stable data, status, error, and stale metadata for one resource. |
+| `ResourceStatus` | `const status: ResourceStatus = "ready";` | Restricts resource lifecycle state to missing, pending, loading, ready, or error. |
+| `ResourceStore` | `const resources = new ResourceStore({ maxResources: 128 });` | Stores versioned resource values with key-level subscriptions and bounded eviction. |
+| `TransportError` | `if (error instanceof TransportError && error.status === 503) retryLater();` | Identifies an HTTP/network transport failure and its status/details. |
+| `ValidationError` | `if (error instanceof ValidationError) renderIssues(error.details);` | Carries structured validation details from validator assertion or mutation handling. |
+| `ValidationIssue` | `const issue: ValidationIssue = { path: ["name"], code: "required", message: "Name is required" };` | Describes one stable machine-readable validation failure. |
+| `ValidationLimits` | `const limits: ValidationLimits = { maxDepth: 32, maxIssues: 20 };` | Bounds validation depth, issues, operations, and compared properties. |
+| `ValidationOptions` | `const options: ValidationOptions = { limits: { maxIssues: 20 } };` | Passes evaluator limits when creating or compiling a validator. |
+| `ValidationPath` | `const path: ValidationPath = ["addresses", 0, "postcode"];` | Represents a nested field path using string and array-index segments. |
+| `ValidationPathSegment` | `const segment: ValidationPathSegment = 0;` | Types one string property or numeric array index in a validation path. |
+| `ValidationResult` | `const result: ValidationResult<RoomInput> = validator.validate(input);` | Returns either a typed valid value or structured issues without throwing. |
+| `ValidatorRefinement` | `const uniqueName: ValidatorRefinement<RoomInput> = value => value.name === "admin" ? createValidationIssue(["name"], "reserved", "Reserved") : null;` | Adds one synchronous application-specific rule after structural validation succeeds. |
+| `VersionMismatchError` | `if (error instanceof VersionMismatchError) requestFullReload();` | Identifies an unsupported browser protocol version. |
+| `VisitOptions` | `const options: VisitOptions = { replace: true, preserveScroll: true };` | Configures navigation history, scroll/state preservation, prefetch use, headers, and partial resource selection. |
+| `applyPatchToValue` | `const nextRooms = applyPatchToValue(rooms, { op: "append-item", value: created });` | Applies one immutable patch operation to an in-memory value. |
+| `createFluxRuntime` | `const router = createFluxRuntime({ initialEnvelope, deferHistory: true });` | Creates the same framework-neutral `FluxRouter` through a factory API. |
+| `createValidationIssue` | `const issue = createValidationIssue(["name"], "reserved", "Reserved name");` | Creates a normalized immutable validation issue. |
+| `createValidator` | `const validator = createValidator<RoomInput>({ kind: "object", required: ["name"] });` | Compiles a deterministic validation plan into the ordinary validator interface. |
+| `displayValidationKey` | `const label = displayValidationKey("room-name");` | Produces bounded JSON diagnostic text for a possibly hostile property key. |
+| `formatValidationPath` | `const field = formatValidationPath(["addresses", 0, "postcode"]);` | Converts a path to canonical form such as `addresses[0].postcode`. |
+| `refineValidator` | `const strictValidator = refineValidator(RoomInputValidator, uniqueName);` | Composes one typed application rule with an existing validator. |
+<!-- stable-api-examples-core:end -->
+
+### `@fluxfast/next` Stable APIs
+
+Use the root or `/client` entry for client components, `/server` for server
+helpers, `/generate` for Node.js tooling, and `/next-config` for Next config.
+
+```ts
+import { Link, useForm, useResource } from "@fluxfast/next";
+```
+
+<!-- stable-api-examples-next:start -->
+| API | One-line declaration or use | What it actually does |
+| --- | --- | --- |
+| `ComponentModule` | `const module: ComponentModule = { default: RoomsPage };` | Types an eagerly or lazily loaded page module with a default React component. |
+| `ComponentRegistry` | `const registry: ComponentRegistry = { "rooms/index": RoomsPage };` | Maps server-selected identifiers to allowlisted React components or lazy entries. |
+| `ComponentRegistryEntry` | `const entry: ComponentRegistryEntry = RoomsPage;` | Accepts either a component or a lazy component descriptor in the registry. |
+| `DEFAULT_FLUXFAST_BACKEND_URL` | `const localBackend = DEFAULT_FLUXFAST_BACKEND_URL;` | Exposes the documented local server default used when no backend URL is configured. |
+| `DeferredResourceResult` | `const analytics: DeferredResourceResult<Analytics> = useDeferredResource<Analytics>("analytics");` | Types deferred data plus pending/loading/ready/error flags and `retry()`. |
+| `FetchInitialEnvelopeOptions` | `const options: FetchInitialEnvelopeOptions = { backendUrl, path: "/rooms" };` | Configures the server-side initial page-envelope request. |
+| `FluxApplicationProps` | `const envelope = (props: FluxApplicationProps) => props.initialEnvelope;` | Types the generated application component's initial envelope, client URL, and cache bounds. |
+| `FluxCacheConfig` | `const cache: FluxCacheConfig = { maxResources: 128, maxPages: 32 };` | Bounds browser resource and page caches. |
+| `FluxFastGenerationCheckResult` | `const check: FluxFastGenerationCheckResult = checkFluxFastProject();` | Describes current/stale generated files and validator diagnostics without writing. |
+| `FluxFastGenerationOptions` | `const options: FluxFastGenerationOptions = { generatedDir: "src/.fluxfast" };` | Configures full registry, schema, types, routes, mutations, and validator generation. |
+| `FluxFastGenerationResult` | `const result: FluxFastGenerationResult = generateFluxFastProject();` | Reports the files and validators written by full project generation. |
+| `FluxFastNextOptions` | `const options: FluxFastNextOptions = { generate: false, backendUrl };` | Configures `withFluxFast()` generation and development proxy behavior. |
+| `FluxNextConfig` | `const config: FluxNextConfig = { application: FluxApplication };` | Connects the generated application component, backend URL, headers, and cache bounds to SSR. |
+| `FluxNextPageProps` | `const pathSegments = (props: FluxNextPageProps) => props.params;` | Types catch-all App Router params and search params received by the generated page. |
+| `FluxProvider` | `return <FluxProvider router={router}>{children}</FluxProvider>;` | Provides one router and component registry to client hooks. |
+| `FluxProviderProps` | `const providerProps: FluxProviderProps = { router, children };` | Types custom-router or initial-envelope provider configuration. |
+| `FluxRoot` | `return <FluxRoot initialEnvelope={envelope} registry={registry} />;` | Provides the runtime and renders the currently selected registered page component. |
+| `FluxRootProps` | `const rootProps: FluxRootProps = { initialEnvelope, registry };` | Types the root envelope, registry, client URL, cache bounds, and error fallback. |
+| `FluxSearchParams` | `const search: FluxSearchParams = { tag: ["suite", "sea-view"] };` | Represents Next.js search parameters accepted by the server page helper. |
+| `FormOptions` | `const options: FormOptions = { method: "PATCH", preserveScroll: true };` | Configures one `useForm().submit()` mutation and its callbacks. |
+| `GenerateOptions` | `const options: GenerateOptions = { pagesDir: "src/flux-pages", log: false };` | Configures page-registry scanning and output. |
+| `LazyComponentEntry` | `const lazy: LazyComponentEntry = { load: () => import("./rooms") };` | Defers loading a registered page module until the backend selects it. |
+| `Link` | `return <Link href="/rooms" prefetch="hover">Rooms</Link>;` | Performs accessible same-origin FluxFast navigation while preserving normal link behavior. |
+| `LinkProps` | `const link: LinkProps = { href: "/rooms", preserveScroll: true };` | Types FluxFast navigation options plus normal anchor attributes. |
+| `LiveConnectionStatus` | `const status: LiveConnectionStatus = useLiveStatus().status;` | Restricts the live connection to its documented lifecycle states. |
+| `LiveStatusSnapshot` | `const live: LiveStatusSnapshot = useLiveStatus();` | Exposes connection status, retry count, and last-event time. |
+| `UseFormOptions` | `const options: UseFormOptions<RoomInput> = { validator: RoomInputValidator };` | Supplies an optional generated validator to `useForm`. |
+| `UseFormReturn` | `const form: UseFormReturn<RoomInput> = useForm({ name: "" });` | Types form data, errors, issues, processing state, setters, validation, and submit/reset actions. |
+| `checkFluxFastProject` | `const check = checkFluxFastProject({ generatedDir: "src/.fluxfast" });` | Computes generated artifacts and reports drift without modifying files. |
+| `createFluxNextPage` | `export default createFluxNextPage({ application: FluxApplication });` | Creates the server catch-all page that fetches the FastAPI envelope and handles real 404s. |
+| `defineFluxConfig` | `export const fluxConfig = defineFluxConfig({ application: FluxApplication });` | Preserves and type-checks the adapter configuration used by the server page. |
+| `fetchInitialEnvelope` | `const envelope = await fetchInitialEnvelope({ backendUrl, path: "/rooms" });` | Fetches and validates one initial FastAPI page envelope on the server. |
+| `generateFluxFastProject` | `const result = generateFluxFastProject({ generatedDir: "src/.fluxfast" });` | Writes the page registry and any supplied schema-derived artifacts atomically. |
+| `generatePagesRegistry` | `generatePagesRegistry({ pagesDir: "src/flux-pages" });` | Scans page modules and writes the allowlisted registry file. |
+| `getComponentRegistry` | `const registry = getComponentRegistry();` | Reads the registry previously installed for component resolution. |
+| `resolveComponent` | `const PageComponent = resolveComponent("rooms/index", registry);` | Resolves one server-selected identifier or throws a component-resolution error. |
+| `resolveFluxBackendUrl` | `const backendUrl = resolveFluxBackendUrl(process.env.FLUXFAST_BACKEND_URL);` | Validates and normalizes the private server-side backend URL. |
+| `setComponentRegistry` | `setComponentRegistry(registry);` | Installs the allowlisted registry used by default component resolution. |
+| `useDeferredResource` | `const analytics = useDeferredResource(resourceKeys.analytics);` | Subscribes to deferred data and exposes lifecycle flags plus retry. |
+| `useFlux` | `const { router, registry } = useFlux();` | Reads the current provider's router and component registry. |
+| `useFluxContext` | `const context = useFluxContext();` | Reads the provider context directly for wrapper-level integrations. |
+| `useForm` | `const form = useForm({ name: "" }, { validator: RoomInputValidator });` | Manages typed form state, local validation, server errors, and mutations. |
+| `useLiveStatus` | `const live = useLiveStatus();` | Subscribes a component to the current live-connection snapshot. |
+| `usePage` | `const page = usePage();` | Subscribes to the current component identifier, URL, and metadata. |
+| `useResource` | `const rooms = useResource(resourceKeys.rooms);` | Subscribes to the ready value of one typed resource. |
+| `useResourceState` | `const roomsState = useResourceState(resourceKeys.rooms);` | Subscribes to data, status, error, and stale metadata. |
+| `useRouter` | `const router = useRouter();` | Exposes navigation, refresh, mutation, prefetch, and resource-loading operations. |
+| `withFluxFast` | `export default withFluxFast(nextConfig);` | Adds registry generation and the header-gated same-origin backend rewrite to Next config. |
+<!-- stable-api-examples-next:end -->
+
 ## End-to-end stable example
 
 This example uses only the normal application surface. The backend owns the
