@@ -21,6 +21,9 @@ src/flux-pages/
 src/fluxfast.config.ts
 src/app/(flux)/[[...flux]]/page.tsx
 src/.fluxfast/pages.generated.ts
+src/.fluxfast/agent-knowledge.md
+AGENTS.md
+CLAUDE.md
 next.config.ts
 ```
 
@@ -28,6 +31,21 @@ For a root-layout or JavaScript project it uses the corresponding root paths and
 file extensions. Existing FluxFast configuration is preserved, and an existing
 `withFluxFast()` wrapper is not duplicated. Running `init` again is safe and
 regenerates the page registry.
+
+The initializer also installs a detailed, version-aware agent guide beside the
+other generated artifacts and adds a small managed reference block to the
+project-root `AGENTS.md` and `CLAUDE.md`. The guide explains FluxFast ownership,
+package boundaries, cache scoping, resources, mutations, deferred/live behavior,
+typed generation, transport, common code patterns, verification commands, and
+the maintained documentation routes. Existing agent instructions are preserved;
+only the section between the FluxFast marker comments is managed on later runs.
+
+If either instruction file does not exist, `init` creates it. If
+`agent-knowledge.md` already contains unrelated content, FluxFast preserves it
+and reports a manual action; preview and deliberately replace that collision
+with `init --dry-run --force` followed by `init --force`. An incomplete managed
+marker block in an instruction file is never guessed at or overwritten—repair
+or remove that block and rerun the initializer.
 
 Preview the exact file plan without writing anything:
 
@@ -107,6 +125,7 @@ The detected `.fluxfast` directory contains:
 | `routes.generated.ts` | Typed FastAPI page URL builders. |
 | `mutations.generated.ts` | Typed JSON helpers consuming reusable body contracts. |
 | `pages.generated.ts` | Allowlisted lazy page-component registry. |
+| `agent-knowledge.md` | Generated integration knowledge imported by project agent instruction files. It is refreshed by `fluxfast init`, not by schema generation. |
 
 Do not edit these files manually. The complete declaration, generation,
 frontend usage, compatibility, and drift workflow is documented in the
