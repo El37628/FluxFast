@@ -60,12 +60,23 @@ function assertSafeTarget(root: string, realRoot: string, target: string): void 
 
 function operationTargets(operation: InitOperation): string[] {
   if (operation.type === "move") {
-    return [operation.from, operation.to];
+    return [
+      operation.from,
+      operation.to,
+      ...(operation.pruneEmptyParentsThrough
+        ? [operation.pruneEmptyParentsThrough]
+        : []),
+    ];
   }
   if (operation.type === "skip") {
     return operation.path ? [operation.path] : [];
   }
-  return [operation.path];
+  return [
+    operation.path,
+    ...(operation.type === "remove" && operation.pruneEmptyParentsThrough
+      ? [operation.pruneEmptyParentsThrough]
+      : []),
+  ];
 }
 
 function assertPlanStillApplies(plan: InitPlan): void {
@@ -110,6 +121,16 @@ function assertPlanStillApplies(plan: InitPlan): void {
         );
       }
     }
+    if (operation.type === "remove") {
+      if (
+        !exists(operation.path) ||
+        fs.readFileSync(operation.path, "utf8") !== operation.before
+      ) {
+        throw new Error(
+          `${operation.path} changed after FluxFast analyzed it; run fluxfast init again.`
+        );
+      }
+    }
   }
 
   assertSafeTarget(root, realRoot, plan.project.fluxPagesDir);
@@ -123,6 +144,7 @@ export function applyInitPlan(
 ): ApplyInitResult {
   assertPlanStillApplies(plan);
   const rollback: Array<() => void> = [];
+  const pruneRequests: Array<{ from: string; through: string }> = [];
 
   const ensureDirectory = (directory: string): void => {
     if (exists(directory)) return;
@@ -165,6 +187,7 @@ export function applyInitPlan(
       } else if (operation.type === "move") {
         ensureDirectory(path.dirname(operation.to));
         rollback.push(() => {
+          fs.mkdirSync(path.dirname(operation.from), { recursive: true });
           fs.writeFileSync(operation.from, operation.before, "utf8");
           if (exists(operation.to)) fs.unlinkSync(operation.to);
         });
@@ -173,11 +196,44 @@ export function applyInitPlan(
           throw new Error(`Could not verify migrated page at ${operation.to}.`);
         }
         fs.unlinkSync(operation.from);
+        if (operation.pruneEmptyParentsThrough) {
+          pruneRequests.push({
+            from: path.dirname(operation.from),
+            through: operation.pruneEmptyParentsThrough,
+          });
+        }
       } else if (operation.type === "remove") {
-        const before = fs.readFileSync(operation.path, "utf8");
-        rollback.push(() => fs.writeFileSync(operation.path, before, "utf8"));
+        rollback.push(() => {
+          fs.mkdirSync(path.dirname(operation.path), { recursive: true });
+          fs.writeFileSync(operation.path, operation.before, "utf8");
+        });
         fs.unlinkSync(operation.path);
+        if (operation.pruneEmptyParentsThrough) {
+          pruneRequests.push({
+            from: path.dirname(operation.path),
+            through: operation.pruneEmptyParentsThrough,
+          });
+        }
       }
+    }
+
+    const prunedDirectories: string[] = [];
+    for (const request of pruneRequests) {
+      let current = request.from;
+      while (isWithin(request.through, current) && exists(current)) {
+        if (fs.readdirSync(current).length > 0) break;
+        fs.rmdirSync(current);
+        prunedDirectories.push(current);
+        if (path.resolve(current) === path.resolve(request.through)) break;
+        current = path.dirname(current);
+      }
+    }
+    if (prunedDirectories.length > 0) {
+      rollback.push(() => {
+        for (const directory of [...prunedDirectories].reverse()) {
+          fs.mkdirSync(directory, { recursive: true });
+        }
+      });
     }
 
     const registryExisted = exists(plan.project.registryPath);

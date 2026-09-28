@@ -204,10 +204,10 @@ async function verifyProductionStart(fluxfast) {
     assert.equal(about.status, 200);
     assert.match(await about.text(), /About this app/);
 
-    const health = await fetch(`${publicUrl}/_fluxfast/healthz`);
+    const health = await fetch(`${publicUrl}/fluxfast/healthz`);
     assert.equal(health.status, 200);
     assert.deepEqual(await health.json(), { status: "ok" });
-    const ready = await fetch(`${publicUrl}/_fluxfast/readyz`);
+    const ready = await fetch(`${publicUrl}/fluxfast/readyz`);
     assert.equal(ready.status, 200);
     assert.deepEqual(await ready.json(), { status: "ready" });
 

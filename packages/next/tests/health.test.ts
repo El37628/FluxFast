@@ -26,7 +26,7 @@ describe("public FluxFast health handler", () => {
       });
 
       const response = await handler(
-        new Request(`https://app.example/_fluxfast/${probe}`)
+        new Request(`https://app.example/fluxfast/${probe}`)
       );
 
       expect(fetchMock).toHaveBeenCalledWith(
@@ -42,6 +42,27 @@ describe("public FluxFast health handler", () => {
       expect(await response.json()).toEqual({ status });
     }
   );
+
+  it("accepts the legacy public health route during migration", async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ status: "ok" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    const handler = createFluxHealthHandler({
+      backendUrl: "http://127.0.0.1:43123",
+    });
+
+    const response = await handler(
+      new Request("https://app.example/_fluxfast/healthz")
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:43123/_fluxfast/healthz",
+      expect.any(Object)
+    );
+  });
 
   it.each([
     new Error("connect ECONNREFUSED 127.0.0.1:43123"),
@@ -61,7 +82,7 @@ describe("public FluxFast health handler", () => {
     });
 
     const response = await handler(
-      new Request("https://app.example/_fluxfast/healthz")
+      new Request("https://app.example/fluxfast/healthz")
     );
 
     expect(response.status).toBe(503);
@@ -76,7 +97,7 @@ describe("public FluxFast health handler", () => {
     });
 
     const response = await handler(
-      new Request("https://app.example/_fluxfast/details")
+      new Request("https://app.example/fluxfast/details")
     );
 
     expect(response.status).toBe(404);

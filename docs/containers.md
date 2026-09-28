@@ -177,21 +177,21 @@ its permissions and do not commit it.
 Probe the public application path from inside the container:
 
 ```text
-http://127.0.0.1:3000/_fluxfast/readyz
+http://127.0.0.1:3000/fluxfast/readyz
 ```
 
 The reference image uses the Node runtime's built-in `fetch`, so it does not
 install `curl` solely for health checks. A successful response is exactly
 `200 {"status":"ready"}`. Configure the engine or platform start period to
-cover the production startup deadline. Use `/_fluxfast/healthz` for liveness
-and `/_fluxfast/readyz` for traffic admission.
+cover the production startup deadline. Use `/fluxfast/healthz` for liveness
+and `/fluxfast/readyz` for traffic admission.
 
 Check the running reference container with:
 
 ```bash
 docker inspect --format '{{json .State.Health}}' my-fluxfast-app
 docker exec my-fluxfast-app node -e \
-  "fetch('http://127.0.0.1:3000/_fluxfast/readyz').then(async r => { console.log(r.status, await r.text()); process.exit(r.ok ? 0 : 1) })"
+  "fetch('http://127.0.0.1:3000/fluxfast/readyz').then(async r => { console.log(r.status, await r.text()); process.exit(r.ok ? 0 : 1) })"
 ```
 
 Substitute `podman` for `docker` when using Podman.
@@ -216,7 +216,7 @@ Build a new immutable tag instead of changing a running container:
 
 ```text
 build and verify my-fluxfast-app:NEW
-  -> start NEW and wait for /_fluxfast/readyz
+  -> start NEW and wait for /fluxfast/readyz
   -> move or drain traffic from OLD
   -> stop OLD with SIGTERM
   -> retain the previous immutable tag for rollback

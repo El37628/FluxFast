@@ -25,7 +25,7 @@ services:
         - node
         - -e
         - >-
-          fetch('http://127.0.0.1:3000/_fluxfast/readyz')
+          fetch('http://127.0.0.1:3000/fluxfast/readyz')
           .then(response => process.exit(response.ok ? 0 : 1))
           .catch(() => process.exit(1))
       interval: 10s

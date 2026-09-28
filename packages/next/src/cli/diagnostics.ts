@@ -21,6 +21,8 @@ import {
   isFluxCatchAll,
   isFluxHealthRoute,
   isFluxTransportRoute,
+  legacyHealthRoutePath,
+  legacyTransportRoutePath,
 } from "./files.js";
 import { transformNextConfig } from "./next-config.js";
 import type {
@@ -741,6 +743,8 @@ export function validateFluxProject(
 
   const healthRoutePath = desiredHealthRoutePath(project);
   const healthRouteContent = readFile(healthRoutePath);
+  const legacyHealthPath = legacyHealthRoutePath(project);
+  const legacyHealthContent = readFile(legacyHealthPath);
   diagnostics.push(
     healthRouteContent && isFluxHealthRoute(healthRouteContent)
       ? diagnostic(
@@ -749,7 +753,15 @@ export function validateFluxProject(
           "pass",
           `FluxFast public health route at ${path.relative(project.root, healthRoutePath)}`
         )
-      : diagnostic(
+      : legacyHealthContent && isFluxHealthRoute(legacyHealthContent)
+        ? diagnostic(
+            "config.health-route",
+            "Configuration",
+            "warning",
+            `Legacy FluxFast public health route at ${path.relative(project.root, legacyHealthPath)} remains compatible.`,
+            { fix: "npx fluxfast init --force" }
+          )
+        : diagnostic(
           "config.health-route",
           "Configuration",
           "fail",
@@ -764,6 +776,8 @@ export function validateFluxProject(
 
   const transportRoutePath = desiredTransportRoutePath(project);
   const transportRouteContent = readFile(transportRoutePath);
+  const legacyTransportPath = legacyTransportRoutePath(project);
+  const legacyTransportContent = readFile(legacyTransportPath);
   diagnostics.push(
     transportRouteContent && isFluxTransportRoute(transportRouteContent)
       ? diagnostic(
@@ -772,7 +786,15 @@ export function validateFluxProject(
           "pass",
           `FluxFast production transport route at ${path.relative(project.root, transportRoutePath)}`
         )
-      : diagnostic(
+      : legacyTransportContent && isFluxTransportRoute(legacyTransportContent)
+        ? diagnostic(
+            "config.transport-route",
+            "Configuration",
+            "warning",
+            `Legacy FluxFast production transport route at ${path.relative(project.root, legacyTransportPath)} remains compatible.`,
+            { fix: "npx fluxfast init --force" }
+          )
+        : diagnostic(
           "config.transport-route",
           "Configuration",
           "fail",

@@ -2,7 +2,8 @@
 
 import { resolveFluxBackendUrl } from "./config.js";
 
-const HEALTH_PREFIX = "/_fluxfast/";
+const PUBLIC_HEALTH_PREFIXES = ["/fluxfast/", "/_fluxfast/"] as const;
+const BACKEND_HEALTH_PREFIX = "/_fluxfast/";
 const HEALTH_PROBES = new Set(["healthz", "readyz"]);
 const DEFAULT_HEALTH_TIMEOUT_MS = 3_000;
 
@@ -29,10 +30,15 @@ function unavailableResponse(): Response {
 
 function probeFromRequest(request: Request): "healthz" | "readyz" | undefined {
   const pathname = new URL(request.url).pathname.replace(/\/$/, "");
-  const marker = pathname.lastIndexOf(HEALTH_PREFIX);
-  if (marker < 0) return undefined;
-  const probe = pathname.slice(marker + HEALTH_PREFIX.length);
-  return HEALTH_PROBES.has(probe) ? probe as "healthz" | "readyz" : undefined;
+  for (const prefix of PUBLIC_HEALTH_PREFIXES) {
+    const marker = pathname.lastIndexOf(prefix);
+    if (marker < 0) continue;
+    const probe = pathname.slice(marker + prefix.length);
+    if (HEALTH_PROBES.has(probe)) {
+      return probe as "healthz" | "readyz";
+    }
+  }
+  return undefined;
 }
 
 function validPayload(value: unknown): value is { status: HealthStatus } {
@@ -47,7 +53,7 @@ function validPayload(value: unknown): value is { status: HealthStatus } {
 }
 
 /**
- * Create the GET handler used by the generated `/_fluxfast/[probe]` route.
+ * Create the GET handler used by the generated `/fluxfast/[probe]` route.
  *
  * The private backend address is resolved when a request arrives, rather than
  * being embedded in the Next.js build output. Only the documented minimal
@@ -73,7 +79,7 @@ export function createFluxHealthHandler(
 
     try {
       const backendUrl = resolveFluxBackendUrl(options.backendUrl);
-      const upstream = await fetch(`${backendUrl}${HEALTH_PREFIX}${probe}`, {
+      const upstream = await fetch(`${backendUrl}${BACKEND_HEALTH_PREFIX}${probe}`, {
         method: "GET",
         headers: { accept: "application/json" },
         cache: "no-store",

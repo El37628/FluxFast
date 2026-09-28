@@ -235,14 +235,18 @@ try {
   if (production) {
     assert.match(output, /\[fluxfast\] FastAPI: 127\.0\.0\.1:/);
     assert.match(output, /\[fluxfast\] application ready/);
-    const health = await fetch(`${frontendUrl}/_fluxfast/healthz`);
+    const health = await fetch(`${frontendUrl}/fluxfast/healthz`);
     assert.equal(health.status, 200);
     assert.equal(health.headers.get("cache-control"), "no-store");
     assert.deepEqual(await health.json(), { status: "ok" });
-    const readiness = await fetch(`${frontendUrl}/_fluxfast/readyz`);
+    const readiness = await fetch(`${frontendUrl}/fluxfast/readyz`);
     assert.equal(readiness.status, 200);
     assert.equal(readiness.headers.get("cache-control"), "no-store");
     assert.deepEqual(await readiness.json(), { status: "ready" });
+    const legacyReadiness = await fetch(`${frontendUrl}/_fluxfast/readyz`);
+    assert.equal(legacyReadiness.status, 200);
+    assert.equal(legacyReadiness.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await legacyReadiness.json(), { status: "ready" });
   }
 
   const protocolResponse = await fetch(frontendUrl, {

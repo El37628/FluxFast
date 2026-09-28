@@ -343,10 +343,10 @@ def _assert_runtime_contract(
     processes: dict[int, ProcessSnapshot],
 ) -> None:
     health_status, health = fetch_json(
-        f"http://127.0.0.1:{public_port}/_fluxfast/healthz"
+        f"http://127.0.0.1:{public_port}/fluxfast/healthz"
     )
     ready_status, readiness = fetch_json(
-        f"http://127.0.0.1:{public_port}/_fluxfast/readyz"
+        f"http://127.0.0.1:{public_port}/fluxfast/readyz"
     )
     if (health_status, health) != (200, {"status": "ok"}):
         raise AssertionError(f"unexpected public health response: {health!r}")
@@ -500,7 +500,7 @@ def benchmark_once(workers: int, sample: int) -> LifecycleMeasurement:
                 next_probe_at = now + 0.05
                 try:
                     status, body = fetch_json(
-                        f"http://127.0.0.1:{public_port}/_fluxfast/readyz",
+                        f"http://127.0.0.1:{public_port}/fluxfast/readyz",
                         timeout=0.15,
                     )
                     if status == 200 and body == {"status": "ready"}:

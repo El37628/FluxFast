@@ -33,7 +33,7 @@ const productionServer = {
     ...process.env,
     NEXT_TELEMETRY_DISABLED: "1",
   },
-  url: `http://127.0.0.1:${port}/_fluxfast/readyz`,
+  url: `http://127.0.0.1:${port}/fluxfast/readyz`,
   reuseExistingServer: false,
   timeout: 120_000,
   gracefulShutdown: { signal: "SIGTERM" as const, timeout: 15_000 },

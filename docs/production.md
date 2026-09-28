@@ -204,8 +204,8 @@ private connection to FastAPI:
 
 | Path | Success | Not ready |
 | --- | --- | --- |
-| `GET /_fluxfast/healthz` | `200 {"status":"ok"}` | `503 {"status":"not_ready"}` when the private probe cannot be validated |
-| `GET /_fluxfast/readyz` | `200 {"status":"ready"}` | `503 {"status":"not_ready"}` |
+| `GET /fluxfast/healthz` | `200 {"status":"ok"}` | `503 {"status":"not_ready"}` when the private probe cannot be validated |
+| `GET /fluxfast/readyz` | `200 {"status":"ready"}` | `503 {"status":"not_ready"}` |
 
 Both responses use `Cache-Control: no-store` and intentionally omit PIDs,
 ports, paths, resource identities, Redis details, and credentials. Readiness is
@@ -314,7 +314,7 @@ start the new one. FluxFast does not provide a zero-downtime or rolling
 orchestrator. A deployment platform may instead:
 
 1. start the new instance;
-2. wait for its public `/_fluxfast/readyz` response;
+2. wait for its public `/fluxfast/readyz` response;
 3. send new traffic to it and drain the old instance; and
 4. send SIGTERM to the old supervisor.
 

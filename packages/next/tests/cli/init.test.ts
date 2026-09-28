@@ -15,6 +15,8 @@ import {
   desiredHealthRoutePath,
   desiredHomePagePath,
   desiredTransportRoutePath,
+  legacyHealthRoutePath,
+  legacyTransportRoutePath,
   renderCatchAll,
   renderHealthRoute,
   renderTransportRoute,
@@ -273,6 +275,50 @@ describe("FluxFast init planner", () => {
       before: custom,
       after: renderHealthRoute(),
     });
+  });
+
+  it("keeps legacy generated routes compatible until force migrates them", () => {
+    createTestProject(tmpDir);
+    const project = detectFluxProject(tmpDir);
+    const legacyHealth = legacyHealthRoutePath(project);
+    const legacyTransport = legacyTransportRoutePath(project);
+    writeTestFile(
+      tmpDir,
+      path.relative(tmpDir, legacyHealth),
+      renderHealthRoute()
+    );
+    writeTestFile(
+      tmpDir,
+      path.relative(tmpDir, legacyTransport),
+      renderTransportRoute()
+    );
+
+    const safePlan = createInitPlan(detectFluxProject(tmpDir));
+    expect(safePlan.operations).toContainEqual(
+      expect.objectContaining({ type: "skip", path: legacyHealth })
+    );
+    expect(safePlan.operations).not.toContainEqual(
+      expect.objectContaining({
+        type: "create",
+        path: desiredHealthRoutePath(project),
+      })
+    );
+
+    const forcedPlan = createInitPlan(detectFluxProject(tmpDir), { force: true });
+    expect(forcedPlan.operations).toContainEqual(
+      expect.objectContaining({
+        type: "move",
+        from: legacyHealth,
+        to: desiredHealthRoutePath(project),
+      })
+    );
+    expect(forcedPlan.operations).toContainEqual(
+      expect.objectContaining({
+        type: "move",
+        from: legacyTransport,
+        to: desiredTransportRoutePath(project),
+      })
+    );
   });
 
   it("preserves an invalid catch-all unless force explicitly repairs it", () => {
