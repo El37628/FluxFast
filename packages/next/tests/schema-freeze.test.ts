@@ -111,16 +111,17 @@ describe("developer schema compatibility freeze", () => {
     expect(compileFluxFastMutations(manifest)).toContain("updateRoom");
   });
 
-  it("keeps the reader set at schema/1 and schema/2 for the v1 candidate", () => {
+  it("keeps the reader set at schema/1 and schema/2 throughout v1", () => {
     const baseline = readFixture("developer-schema-v2-v0.9.0.json");
-    expect(packageVersion).toBe(baseline.candidatePackage);
+    expect(baseline.candidatePackage).toBe("1.0.0");
+    expect(packageVersion).toMatch(/^1\.[0-9]+\.[0-9]+$/);
 
     expect([FLUXFAST_SCHEMA_MANIFEST_V1, FLUXFAST_SCHEMA_MANIFEST_V2]).toEqual(
       baseline.supportedReaders
     );
 
     const candidate = readFixture("fluxfast-schema-v2.json");
-    candidate.producer = baseline.candidateProducer;
+    candidate.producer = packageVersion;
     expect(validateFluxFastSchemaManifest(candidate)).toEqual(candidate);
 
     candidate.schema = "fluxfast-schema/3";
