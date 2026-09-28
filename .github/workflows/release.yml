@@ -435,11 +435,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          notes_file="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$notes_file" ]; then
+            notes_file="docs/releases/v1.0.0.md"
+          fi
+          if [ "$GITHUB_REF_NAME" = "v1.0.0" ]; then
+            release_title="FluxFast 1.0 — Stable server-driven applications for FastAPI with independently synchronized resources."
+          else
+            release_title="FluxFast ${GITHUB_REF_NAME#v}"
+          fi
           gh release create "$GITHUB_REF_NAME" \
             release/python/* \
             release/npm/* \
             release/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --notes-file docs/releases/v1.0.0.md \
-            --title "FluxFast 1.0 — Stable server-driven applications for FastAPI with independently synchronized resources."
+            --notes-file "$notes_file" \
+            --title "$release_title"

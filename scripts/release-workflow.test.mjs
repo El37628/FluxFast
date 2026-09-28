@@ -120,7 +120,8 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   assert.match(githubRelease, /pnpm build/);
   assert.match(githubRelease, /scripts\/verify_release_artifacts\.py/);
   assert.match(githubRelease, /--verify-checksums/);
-  assert.match(githubRelease, /--notes-file docs\/releases\/v1\.0\.0\.md/);
+  assert.match(githubRelease, /--notes-file "\$notes_file"/);
+  assert.match(githubRelease, /docs\/releases\/v1\.0\.0\.md/);
   assert.doesNotMatch(githubRelease, /--generate-notes/);
 
   for (const workflow of [smoke, release]) {
