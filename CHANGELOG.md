@@ -5,6 +5,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-28
+
 ### Added
 
 - Install a detailed, version-aware FluxFast agent guide during `fluxfast init`
@@ -538,7 +540,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v1.0.1...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
@@ -553,3 +555,4 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 [0.8.1]: https://github.com/El37628/FluxFast/releases/tag/v0.8.1
 [0.9.0]: https://github.com/El37628/FluxFast/releases/tag/v0.9.0
 [1.0.0]: https://github.com/El37628/FluxFast/releases/tag/v1.0.0
+[1.0.1]: https://github.com/El37628/FluxFast/releases/tag/v1.0.1

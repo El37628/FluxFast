@@ -33,7 +33,7 @@ importers:
   packages/next:
     dependencies:
       '@fluxfast/core':
-        specifier: ^1.0.0
+        specifier: ^1.0.1
         version: link:../core
     devDependencies:
       '@types/node':
