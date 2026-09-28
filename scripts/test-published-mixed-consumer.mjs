@@ -238,7 +238,9 @@ async function installPythonSpec(
   spec,
   { retryRegistry = false, forceReinstall = false } = {}
 ) {
-  const attempts = retryRegistry ? 18 : 1;
+  const attempts = retryRegistry
+    ? Number.parseInt(process.env.FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS ?? "60", 10)
+    : 1;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const installArgs = ["-m", "pip", "install", "--disable-pip-version-check"];
     if (forceReinstall) installArgs.push("--force-reinstall", "--no-deps");
@@ -268,7 +270,9 @@ async function installJavaScriptSpecs(
   selectedNextSpec,
   { retryRegistry = false, forceReinstall = false } = {}
 ) {
-  const attempts = retryRegistry ? 18 : 1;
+  const attempts = retryRegistry
+    ? Number.parseInt(process.env.FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS ?? "60", 10)
+    : 1;
   if (forceReinstall) {
     fs.rmSync(path.join(consumerRoot, "node_modules", "@fluxfast", "core"), {
       recursive: true,

@@ -118,7 +118,9 @@ async function installWithRetry(
   retryRegistryPropagation,
   extraEnvironment = {}
 ) {
-  const attempts = retryRegistryPropagation ? 18 : 1;
+  const attempts = retryRegistryPropagation
+    ? Number.parseInt(process.env.FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS ?? "60", 10)
+    : 1;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const status = execute(command, args, cwd, extraEnvironment);
     if (status === 0) return;

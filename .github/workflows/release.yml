@@ -344,6 +344,7 @@ jobs:
           FLUXFAST_PREVIOUS_VERSION: 0.9.0
           FLUXFAST_UPGRADE_SEQUENCE: "1"
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"
         run: node scripts/test-published-mixed-consumer.mjs
       - name: Verify previous Python with current JavaScript packages
         env:
@@ -353,6 +354,7 @@ jobs:
           FLUXFAST_PREVIOUS_VERSION: 0.9.0
           FLUXFAST_UPGRADE_SEQUENCE: "1"
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"
         run: node scripts/test-published-mixed-consumer.mjs
 
   verify-published-production:
@@ -379,6 +381,7 @@ jobs:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PUBLISHED_VERSION: ${{ github.ref_name }}
           FLUXFAST_RUN_PRODUCTION: "1"
+          FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"
         run: node scripts/test-next-init-consumer.mjs
 
   github-release:
