@@ -134,7 +134,7 @@ def test_schema_v2_producer_matches_shared_golden_fixture() -> None:
     assert manifest.model_dump(mode="json", by_alias=True, exclude_none=True) == fixture
 
 
-def test_v1_schema_candidate_changes_only_producer_metadata() -> None:
+def test_v1_schema_releases_change_only_producer_metadata() -> None:
     baseline = _read_fixture("developer-schema-v2-v0.9.0.json")
     fixture = _read_fixture("fluxfast-schema-v2.json")
     candidate = _build_frozen_manifest(
@@ -143,14 +143,14 @@ def test_v1_schema_candidate_changes_only_producer_metadata() -> None:
 
     assert baseline["packageBaseline"] == baseline["baselineProducer"] == "0.9.0"
     assert baseline["candidatePackage"] == baseline["candidateProducer"] == "1.0.0"
-    assert __version__ == baseline["candidatePackage"]
+    assert __version__.split(".", maxsplit=1)[0] == "1"
     assert fixture["producer"] == baseline["baselineProducer"]
     assert fixture["schema"] == baseline["producedSchema"]
     assert fixture["fingerprint"] == baseline["semanticFingerprint"]
     assert _canonical_sha256(fixture) == baseline["canonicalManifestSha256"]
     assert candidate == {
         **fixture,
-        "producer": baseline["candidateProducer"],
+        "producer": __version__,
     }
     assert candidate["fingerprint"] == fixture["fingerprint"]
 

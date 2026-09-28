@@ -515,7 +515,7 @@ describe("generated artifact compatibility contract", () => {
     expectGeneratedContractToTypeCheck(generatedDir);
   });
 
-  it("matches the v0.9 generated contract for the v1 candidate", () => {
+  it("matches the frozen v1.0 generated contract throughout v1", () => {
     const baseline = JSON.parse(
       fs.readFileSync(
         path.resolve(
@@ -526,7 +526,8 @@ describe("generated artifact compatibility contract", () => {
       )
     ) as GeneratedContractBaseline;
     expect(baseline.capturedFrom).toBe("@fluxfast/next@0.9.0");
-    expect(baseline.candidatePackage).toBe(packageVersion);
+    expect(baseline.candidatePackage).toBe("1.0.0");
+    expect(packageVersion).toMatch(/^1\.[0-9]+\.[0-9]+$/);
 
     const reference = createGeneratedContractSnapshot(
       prepareProject(temporaryProject()).generatedDir
@@ -541,7 +542,7 @@ describe("generated artifact compatibility contract", () => {
       string,
       unknown
     >;
-    candidateManifest.producer = baseline.candidatePackage;
+    candidateManifest.producer = packageVersion;
     const candidate = createGeneratedContractSnapshot(
       prepareProject(
         temporaryProject(),
