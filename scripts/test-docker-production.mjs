@@ -228,15 +228,15 @@ function inspectRuntime() {
 
 async function verifyPublicApplication(baseURL) {
   await waitFor("the public readiness endpoint", async () => {
-    const response = await fetch(`${baseURL}/_fluxfast/readyz`);
+    const response = await fetch(`${baseURL}/fluxfast/readyz`);
     return response.ok;
   });
 
-  const health = await fetch(`${baseURL}/_fluxfast/healthz`);
+  const health = await fetch(`${baseURL}/fluxfast/healthz`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { status: "ok" });
 
-  const readiness = await fetch(`${baseURL}/_fluxfast/readyz`);
+  const readiness = await fetch(`${baseURL}/fluxfast/readyz`);
   assert.equal(readiness.status, 200);
   assert.deepEqual(await readiness.json(), { status: "ready" });
 

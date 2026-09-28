@@ -17,6 +17,9 @@ import {
   isFluxCatchAll,
   isFluxHealthRoute,
   isFluxTransportRoute,
+  legacyHealthRoutePath,
+  legacyRouteRoot,
+  legacyTransportRoutePath,
   renderCatchAll,
   renderFluxConfig,
   renderHealthRoute,
@@ -31,8 +34,20 @@ export type InitOperation =
   | { type: "mkdir"; path: string }
   | { type: "create"; path: string; content: string }
   | { type: "modify"; path: string; before: string; after: string }
-  | { type: "move"; from: string; to: string; before: string; content: string }
-  | { type: "remove"; path: string }
+  | {
+      type: "move";
+      from: string;
+      to: string;
+      before: string;
+      content: string;
+      pruneEmptyParentsThrough?: string;
+    }
+  | {
+      type: "remove";
+      path: string;
+      before: string;
+      pruneEmptyParentsThrough?: string;
+    }
   | { type: "skip"; path?: string; reason: string };
 
 export interface InitPlan {
@@ -60,6 +75,104 @@ function isDirectory(directoryPath: string): boolean {
     return fs.statSync(directoryPath).isDirectory();
   } catch {
     return false;
+  }
+}
+
+interface GeneratedRoutePlanOptions {
+  label: string;
+  desiredPath: string;
+  legacyPath: string;
+  rendered: string;
+  isManaged(content: string): boolean;
+}
+
+function planGeneratedRoute(
+  project: FluxProjectInfo,
+  options: InitPlanOptions,
+  route: GeneratedRoutePlanOptions,
+  operations: InitOperation[],
+  warnings: string[],
+  manualActions: string[]
+): void {
+  const desiredExists = isFile(route.desiredPath);
+  const legacyExists = isFile(route.legacyPath);
+  const legacyBefore = legacyExists
+    ? fs.readFileSync(route.legacyPath, "utf8")
+    : undefined;
+  const legacyManaged = legacyBefore !== undefined && route.isManaged(legacyBefore);
+
+  if (!desiredExists && legacyManaged) {
+    if (options.force) {
+      operations.push({
+        type: "move",
+        from: route.legacyPath,
+        to: route.desiredPath,
+        before: legacyBefore,
+        content: route.rendered,
+        pruneEmptyParentsThrough: legacyRouteRoot(project),
+      });
+      warnings.push(
+        `${relativeProjectPath(project, route.legacyPath)} was migrated to ${relativeProjectPath(project, route.desiredPath)}.`
+      );
+    } else {
+      operations.push({
+        type: "skip",
+        path: route.legacyPath,
+        reason: `Legacy FluxFast ${route.label} remains compatible`,
+      });
+    }
+    return;
+  }
+
+  if (desiredExists) {
+    const before = fs.readFileSync(route.desiredPath, "utf8");
+    if (before === route.rendered || (route.isManaged(before) && !options.force)) {
+      operations.push({
+        type: "skip",
+        path: route.desiredPath,
+        reason: `FluxFast ${route.label} already exists`,
+      });
+    } else if (options.force) {
+      operations.push({
+        type: "modify",
+        path: route.desiredPath,
+        before,
+        after: route.rendered,
+      });
+      warnings.push(
+        `${relativeProjectPath(project, route.desiredPath)} was replaced because --force was used.`
+      );
+    } else {
+      const displayPath = relativeProjectPath(project, route.desiredPath);
+      const warning = `${displayPath} occupies FluxFast's reserved ${route.label}.`;
+      warnings.push(warning);
+      manualActions.push(
+        `Repair ${displayPath} manually or run npx fluxfast init --force.`
+      );
+      operations.push({ type: "skip", path: route.desiredPath, reason: warning });
+    }
+
+    if (legacyManaged && options.force) {
+      operations.push({
+        type: "remove",
+        path: route.legacyPath,
+        before: legacyBefore,
+        pruneEmptyParentsThrough: legacyRouteRoot(project),
+      });
+    }
+    return;
+  }
+
+  operations.push({
+    type: "create",
+    path: route.desiredPath,
+    content: route.rendered,
+  });
+  if (legacyBefore !== undefined && !legacyManaged) {
+    const legacyDisplayPath = relativeProjectPath(project, route.legacyPath);
+    const warning = `${legacyDisplayPath} was preserved because it is not managed by FluxFast.`;
+    warnings.push(warning);
+    manualActions.push(`Review and remove ${legacyDisplayPath} if it is no longer needed.`);
   }
 }
 
@@ -243,79 +356,35 @@ export function createInitPlan(
     });
   }
 
-  const healthRoutePath = desiredHealthRoutePath(project);
-  if (isFile(healthRoutePath)) {
-    const before = fs.readFileSync(healthRoutePath, "utf8");
-    const after = renderHealthRoute();
-    if (before === after || (isFluxHealthRoute(before) && !options.force)) {
-      operations.push({
-        type: "skip",
-        path: healthRoutePath,
-        reason: "FluxFast public health route already exists",
-      });
-    } else if (options.force) {
-      operations.push({
-        type: "modify",
-        path: healthRoutePath,
-        before,
-        after,
-      });
-      warnings.push(
-        `${relativeProjectPath(project, healthRoutePath)} was replaced because --force was used.`
-      );
-    } else {
-      const displayPath = relativeProjectPath(project, healthRoutePath);
-      const warning = `${displayPath} occupies FluxFast's reserved public health route.`;
-      warnings.push(warning);
-      manualActions.push(
-        `Repair ${displayPath} manually or run npx fluxfast init --force.`
-      );
-      operations.push({ type: "skip", path: healthRoutePath, reason: warning });
-    }
-  } else {
-    operations.push({
-      type: "create",
-      path: healthRoutePath,
-      content: renderHealthRoute(),
-    });
-  }
+  planGeneratedRoute(
+    project,
+    options,
+    {
+      label: "public health route",
+      desiredPath: desiredHealthRoutePath(project),
+      legacyPath: legacyHealthRoutePath(project),
+      rendered: renderHealthRoute(),
+      isManaged: isFluxHealthRoute,
+    },
+    operations,
+    warnings,
+    manualActions
+  );
 
-  const transportRoutePath = desiredTransportRoutePath(project);
-  if (isFile(transportRoutePath)) {
-    const before = fs.readFileSync(transportRoutePath, "utf8");
-    const after = renderTransportRoute();
-    if (before === after || (isFluxTransportRoute(before) && !options.force)) {
-      operations.push({
-        type: "skip",
-        path: transportRoutePath,
-        reason: "FluxFast production transport route already exists",
-      });
-    } else if (options.force) {
-      operations.push({
-        type: "modify",
-        path: transportRoutePath,
-        before,
-        after,
-      });
-      warnings.push(
-        `${relativeProjectPath(project, transportRoutePath)} was replaced because --force was used.`
-      );
-    } else {
-      const displayPath = relativeProjectPath(project, transportRoutePath);
-      const warning = `${displayPath} occupies FluxFast's reserved production transport route.`;
-      warnings.push(warning);
-      manualActions.push(
-        `Repair ${displayPath} manually or run npx fluxfast init --force.`
-      );
-      operations.push({ type: "skip", path: transportRoutePath, reason: warning });
-    }
-  } else {
-    operations.push({
-      type: "create",
-      path: transportRoutePath,
-      content: renderTransportRoute(),
-    });
-  }
+  planGeneratedRoute(
+    project,
+    options,
+    {
+      label: "production transport route",
+      desiredPath: desiredTransportRoutePath(project),
+      legacyPath: legacyTransportRoutePath(project),
+      rendered: renderTransportRoute(),
+      isManaged: isFluxTransportRoute,
+    },
+    operations,
+    warnings,
+    manualActions
+  );
 
   const homePagePath = desiredHomePagePath(project);
   if (project.rootPagePath) {

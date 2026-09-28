@@ -140,12 +140,12 @@ function prepareConsumer(projectRoot, manifestText) {
   );
   writeFile(
     projectRoot,
-    "src/app/%5Ffluxfast/[probe]/route.ts",
+    "src/app/fluxfast/[probe]/route.ts",
     renderHealthRoute(),
   );
   writeFile(
     projectRoot,
-    "src/app/%5Ffluxfast/transport/[[...path]]/route.ts",
+    "src/app/fluxfast/transport/[[...path]]/route.ts",
     renderTransportRoute(),
   );
   writeFile(

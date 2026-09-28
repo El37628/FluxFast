@@ -18,7 +18,7 @@ const healthRoute = path.join(
   root,
   "src",
   "app",
-  "%5Ffluxfast",
+  "fluxfast",
   "[probe]",
   "route.ts"
 );
@@ -26,7 +26,7 @@ const transportRoute = path.join(
   root,
   "src",
   "app",
-  "%5Ffluxfast",
+  "fluxfast",
   "transport",
   "[[...path]]",
   "route.ts"

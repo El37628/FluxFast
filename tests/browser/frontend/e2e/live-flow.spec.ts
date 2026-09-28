@@ -429,12 +429,12 @@ test("production build exposes minimal health checks through one origin", async 
     "production-only Next build coverage"
   );
 
-  const health = await request.get("/_fluxfast/healthz");
+  const health = await request.get("/fluxfast/healthz");
   expect(health.status()).toBe(200);
   expect(health.headers()["cache-control"]).toBe("no-store");
   expect(await health.json()).toEqual({ status: "ok" });
 
-  const readiness = await request.get("/_fluxfast/readyz");
+  const readiness = await request.get("/fluxfast/readyz");
   expect(readiness.status()).toBe(200);
   expect(readiness.headers()["cache-control"]).toBe("no-store");
   expect(await readiness.json()).toEqual({ status: "ready" });

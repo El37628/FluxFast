@@ -171,7 +171,7 @@ During supervised production startup, the resulting transport rewrite is:
   "has": [
     { "type": "header", "key": "x-fluxfast", "value": "1" }
   ],
-  "destination": "/_fluxfast/transport/:path*"
+  "destination": "/fluxfast/transport/:path*"
 }
 ```
 

@@ -12,6 +12,11 @@ import {
   desiredHealthRoutePath,
   desiredHomePagePath,
   desiredTransportRoutePath,
+  legacyHealthRoutePath,
+  legacyRouteRoot,
+  legacyTransportRoutePath,
+  renderHealthRoute,
+  renderTransportRoute,
 } from "../../src/cli/files";
 import { changedOperations, createInitPlan } from "../../src/cli/init";
 import { detectFluxProject } from "../../src/cli/project";
@@ -118,6 +123,33 @@ describe("FluxFast init plan application", () => {
     expect(fs.existsSync(path.join(tmpDir, "AGENTS.md"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, "CLAUDE.md"))).toBe(false);
     expect(fs.readFileSync(nextConfigPath, "utf8")).toBe(originalConfig);
+  });
+
+  it("migrates managed legacy routes and removes their empty source tree", () => {
+    createTestProject(tmpDir);
+    let project = detectFluxProject(tmpDir);
+    const legacyHealth = legacyHealthRoutePath(project);
+    const legacyTransport = legacyTransportRoutePath(project);
+    writeTestFile(tmpDir, path.relative(tmpDir, legacyHealth), renderHealthRoute());
+    writeTestFile(
+      tmpDir,
+      path.relative(tmpDir, legacyTransport),
+      renderTransportRoute()
+    );
+
+    applyInitPlan(createInitPlan(project, { force: true }), {
+      logRegistry: false,
+    });
+
+    expect(fs.existsSync(legacyRouteRoot(project))).toBe(false);
+    expect(fs.readFileSync(desiredHealthRoutePath(project), "utf8")).toBe(
+      renderHealthRoute()
+    );
+    expect(fs.readFileSync(desiredTransportRoutePath(project), "utf8")).toBe(
+      renderTransportRoute()
+    );
+    project = detectFluxProject(tmpDir);
+    expect(changedOperations(createInitPlan(project))).toEqual([]);
   });
 
   it("rejects source changes made after planning before writing anything", () => {

@@ -4,7 +4,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyInitPlan } from "../../src/cli/apply";
 import { validateFluxProject } from "../../src/cli/diagnostics";
-import { desiredCatchAllPath } from "../../src/cli/files";
+import {
+  desiredCatchAllPath,
+  desiredHealthRoutePath,
+  desiredTransportRoutePath,
+  legacyHealthRoutePath,
+  legacyTransportRoutePath,
+} from "../../src/cli/files";
 import { createInitPlan } from "../../src/cli/init";
 import { detectFluxProject } from "../../src/cli/project";
 import { generateFluxFastProject } from "../../src/generate";
@@ -91,6 +97,39 @@ describe("FluxFast project diagnostics", () => {
         expect.objectContaining({ id: "config.next", status: "pass" }),
         expect.objectContaining({ id: "config.catch-all", status: "pass" }),
         expect.objectContaining({ id: "registry.current", status: "pass" }),
+      ])
+    );
+  });
+
+  it("accepts managed legacy routes with migration warnings", () => {
+    const project = initialize();
+    fs.mkdirSync(path.dirname(legacyHealthRoutePath(project)), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.dirname(legacyTransportRoutePath(project)), {
+      recursive: true,
+    });
+    fs.renameSync(desiredHealthRoutePath(project), legacyHealthRoutePath(project));
+    fs.renameSync(
+      desiredTransportRoutePath(project),
+      legacyTransportRoutePath(project)
+    );
+
+    const report = validateFluxProject(detectFluxProject(tmpDir));
+
+    expect(report.valid).toBe(true);
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "config.health-route",
+          status: "warning",
+          fix: "npx fluxfast init --force",
+        }),
+        expect.objectContaining({
+          id: "config.transport-route",
+          status: "warning",
+          fix: "npx fluxfast init --force",
+        }),
       ])
     );
   });

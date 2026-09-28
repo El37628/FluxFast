@@ -221,7 +221,7 @@ export async function exerciseConsumer({ consumer, python, fluxfast, temporaryRo
         phase.startupMs = Date.now() - phaseStarted;
         report.counts.starts += 1;
         for (const endpoint of ["healthz", "readyz"]) {
-          const response = await fetch(`${origin}/_fluxfast/${endpoint}`);
+          const response = await fetch(`${origin}/fluxfast/${endpoint}`);
           assert.equal(response.status, 200);
           assert.equal(response.headers.get("cache-control"), "no-store");
         }

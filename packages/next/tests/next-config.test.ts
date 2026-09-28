@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveFluxBackendUrl } from "../src/config";
 import { generatePagesRegistry } from "../src/generate";
@@ -13,6 +16,7 @@ const originalNodeEnvironment = process.env.NODE_ENV;
 
 afterEach(() => {
   vi.mocked(generatePagesRegistry).mockClear();
+  vi.restoreAllMocks();
   if (originalBackendUrl === undefined) {
     delete process.env.FLUXFAST_BACKEND_URL;
   } else {
@@ -87,9 +91,41 @@ describe("same-origin Next configuration", () => {
 
     expect(Array.isArray(rewrites)).toBe(false);
     if (Array.isArray(rewrites)) throw new Error("Expected phased rewrites");
-    expect(rewrites.beforeFiles[0]?.destination).toBe(
-      "/_fluxfast/transport/:path*"
+    expect(rewrites.beforeFiles).toEqual([
+      {
+        source: "/_fluxfast/:probe(healthz|readyz)",
+        destination: "/fluxfast/:probe",
+      },
+      expect.objectContaining({ destination: "/fluxfast/transport/:path*" }),
+    ]);
+  });
+
+  it("keeps the legacy runtime route for an existing encoded scaffold", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-legacy-route-"));
+    const legacyTransport = path.join(
+      tmpDir,
+      "src/app/%5Ffluxfast/transport/[[...path]]/route.ts"
     );
+    fs.mkdirSync(path.dirname(legacyTransport), {
+      recursive: true,
+    });
+    fs.writeFileSync(legacyTransport, "export const GET = () => null;\n");
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    process.env.NODE_ENV = "production";
+
+    try {
+      const config = withFluxFast({}, { generate: false });
+      const rewrites = await config.rewrites!();
+      expect(Array.isArray(rewrites)).toBe(false);
+      if (Array.isArray(rewrites)) throw new Error("Expected phased rewrites");
+      expect(rewrites.beforeFiles).toEqual([
+        expect.objectContaining({
+          destination: "/_fluxfast/transport/:path*",
+        }),
+      ]);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it("preserves an explicitly configured static backend destination", async () => {

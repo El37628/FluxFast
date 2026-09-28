@@ -81,7 +81,7 @@ def wait_for_readiness(base_url: str, timeout: float = 120) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            status, payload = fetch_json(f"{base_url}/_fluxfast/readyz")
+            status, payload = fetch_json(f"{base_url}/fluxfast/readyz")
             if status == 200 and payload == {"status": "ready"}:
                 return
         except (HTTPError, URLError, TimeoutError, ConnectionError):
@@ -177,8 +177,8 @@ def run_benchmark(engine: str) -> None:
         wait_for_readiness(base_url)
         startup_ms = (time.perf_counter() - startup_started_at) * 1_000
 
-        health_status, health = fetch_json(f"{base_url}/_fluxfast/healthz")
-        ready_status, readiness = fetch_json(f"{base_url}/_fluxfast/readyz")
+        health_status, health = fetch_json(f"{base_url}/fluxfast/healthz")
+        ready_status, readiness = fetch_json(f"{base_url}/fluxfast/readyz")
         if (health_status, health) != (200, {"status": "ok"}):
             raise AssertionError(f"unexpected public health response: {health!r}")
         if (ready_status, readiness) != (200, {"status": "ready"}):

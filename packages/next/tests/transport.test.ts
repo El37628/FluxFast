@@ -15,7 +15,7 @@ describe("production runtime transport handler", () => {
       },
     }));
     const handler = createFluxTransportHandler({ backendUrl: "http://127.0.0.1:8123", fetch: fetchMock });
-    const response = await handler(new Request("https://app.example/_fluxfast/transport/", {
+    const response = await handler(new Request("https://app.example/fluxfast/transport/", {
       headers: {
         "x-fluxfast": "1",
         connection: "X-Request-Hop, Authorization",
@@ -49,7 +49,7 @@ describe("production runtime transport handler", () => {
     });
 
     const response = await handler(
-      new Request("https://app.example/_fluxfast/transport/hotels/101?tag=sea", {
+      new Request("https://app.example/fluxfast/transport/hotels/101?tag=sea", {
         headers: {
           authorization: "Bearer opaque",
           "x-fluxfast": "1",
@@ -83,7 +83,7 @@ describe("production runtime transport handler", () => {
       fetch: fetchMock,
     });
     const response = await handler(
-      new Request("https://app.example/_fluxfast/transport/rooms", {
+      new Request("https://app.example/fluxfast/transport/rooms", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -119,7 +119,7 @@ describe("production runtime transport handler", () => {
     });
 
     const response = await handler(
-      new Request("https://app.example/_fluxfast/transport/live", {
+      new Request("https://app.example/fluxfast/transport/live", {
         headers: { "x-fluxfast": "1" },
       }),
       context(["live"])
@@ -134,11 +134,11 @@ describe("production runtime transport handler", () => {
     const handler = createFluxTransportHandler({ fetch: fetchMock });
 
     const ordinary = await handler(
-      new Request("https://app.example/_fluxfast/transport/rooms"),
+      new Request("https://app.example/fluxfast/transport/rooms"),
       context(["rooms"])
     );
     const unsafe = await handler(
-      new Request("https://app.example/_fluxfast/transport/unsafe", {
+      new Request("https://app.example/fluxfast/transport/unsafe", {
         headers: { "x-fluxfast": "1" },
       }),
       context(["..", "unsafe"])
@@ -158,7 +158,7 @@ describe("production runtime transport handler", () => {
     });
 
     const response = await handler(
-      new Request("https://app.example/_fluxfast/transport/rooms", {
+      new Request("https://app.example/fluxfast/transport/rooms", {
         headers: { "x-fluxfast": "1" },
       }),
       context(["rooms"])

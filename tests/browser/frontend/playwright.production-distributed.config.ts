@@ -34,7 +34,7 @@ export default defineConfig({
       FLUXFAST_TEST_WORKER_NAME: "production",
       NEXT_TELEMETRY_DISABLED: "1",
     },
-    url: `http://127.0.0.1:${frontendPort}/_fluxfast/readyz`,
+    url: `http://127.0.0.1:${frontendPort}/fluxfast/readyz`,
     reuseExistingServer: false,
     timeout: 120_000,
     gracefulShutdown: { signal: "SIGTERM", timeout: 20_000 },

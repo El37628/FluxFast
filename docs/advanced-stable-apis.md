@@ -362,7 +362,7 @@ handlers directly only when your application deliberately owns the files or
 needs explicit server-only options.
 
 Transport route at
-`src/app/_fluxfast/transport/[[...path]]/route.ts`:
+`src/app/fluxfast/transport/[[...path]]/route.ts`:
 
 ```ts
 import { createFluxTransportHandler } from "@fluxfast/next/server";
@@ -381,7 +381,7 @@ export const PATCH = transport;
 export const DELETE = transport;
 ```
 
-Health route at `src/app/_fluxfast/[probe]/route.ts`:
+Health route at `src/app/fluxfast/[probe]/route.ts`:
 
 ```ts
 import { createFluxHealthHandler } from "@fluxfast/next/server";
@@ -397,7 +397,7 @@ export const GET = createFluxHealthHandler({
 Input:
 
 ```http
-GET /_fluxfast/readyz HTTP/1.1
+GET /fluxfast/readyz HTTP/1.1
 Host: app.example.com
 ```
 

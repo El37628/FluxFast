@@ -11,6 +11,12 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   and maintain bounded references to it in project-root `AGENTS.md` and
   `CLAUDE.md` files without replacing existing user instructions.
 
+### Fixed
+
+- Generate public Next.js handlers under the routable `app/fluxfast` segment
+  instead of `%5Ffluxfast`, while retaining compatibility with existing
+  initialized projects and the backend-private `/_fluxfast` endpoints.
+
 ## [1.0.0] - 2026-09-24
 
 ### Added
