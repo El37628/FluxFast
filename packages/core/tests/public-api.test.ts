@@ -18,6 +18,12 @@ const baselinePath = path.join(
   repositoryRoot,
   "tests/fixtures/public-api-v0.9.0.json"
 );
+const v11Additions = [
+  "FluxDiagnosticEvent",
+  "FluxDiagnosticEventType",
+  "FluxDiagnosticListener",
+  "FluxDiagnosticsHub",
+];
 
 function namesBetween(start: string, end: string): string[] {
   const document = fs.readFileSync(apiDocumentPath, "utf8");
@@ -42,8 +48,8 @@ function baselineNames(): string[] {
   ).flat();
 }
 
-describe("v0.9 promotion baseline classification", () => {
-  it("classifies every v0.9 root export exactly once", () => {
+describe("1.x public API classification", () => {
+  it("retains every v0.9 export and classifies reviewed v1.1 additions", () => {
     const stable = namesBetween(
       "<!-- core-api-stable:start -->",
       "<!-- core-api-stable:end -->"
@@ -55,9 +61,14 @@ describe("v0.9 promotion baseline classification", () => {
     const classified = [...stable, ...advanced];
 
     expect(stable).toHaveLength(49);
-    expect(advanced).toHaveLength(107);
+    expect(advanced).toHaveLength(111);
     expect(new Set(classified).size).toBe(classified.length);
-    expect(classified.toSorted()).toEqual(baselineNames().toSorted());
+    expect(classified.toSorted()).toEqual(
+      [...baselineNames(), ...v11Additions].toSorted()
+    );
+    expect(advanced.filter(name => v11Additions.includes(name))).toEqual(
+      v11Additions
+    );
   });
 
   it("keeps the principal core families intentionally classified", () => {
@@ -92,6 +103,8 @@ describe("v0.9 promotion baseline classification", () => {
     }
     for (const name of [
       "FluxTransport",
+      "FluxDiagnosticsHub",
+      "FluxDiagnosticEvent",
       "HistoryManager",
       "PrefetchManager",
       "LiveManager",
