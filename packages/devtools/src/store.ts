@@ -20,6 +20,7 @@ export interface DevtoolsSnapshot {
   readonly live: LiveStatusSnapshot;
   readonly liveResourceCount: number;
   readonly clientId: string;
+  readonly selectedEventId: string | null;
 }
 
 type StoreListener = () => void;
@@ -71,6 +72,7 @@ export class DevtoolsStore {
   private page: DevtoolsPageSnapshot = EMPTY_PAGE;
   private live: LiveStatusSnapshot = EMPTY_LIVE;
   private liveResourceCount = 0;
+  private selectedEventId: string | null = null;
   private snapshot: DevtoolsSnapshot = Object.freeze({
     events: this.events,
     resources: this.resources,
@@ -78,6 +80,7 @@ export class DevtoolsStore {
     live: this.live,
     liveResourceCount: this.liveResourceCount,
     clientId: "",
+    selectedEventId: null,
   });
   private stopDiagnostics?: () => void;
   private stopResources?: () => void;
@@ -107,6 +110,12 @@ export class DevtoolsStore {
     this.stopDiagnostics = this.router.diagnostics.subscribe(event => {
       const start = Math.max(0, this.events.length - this.maxEvents + 1);
       this.events = Object.freeze([...this.events.slice(start), event]);
+      if (
+        this.selectedEventId !== null &&
+        !this.events.some(item => item.id === this.selectedEventId)
+      ) {
+        this.selectedEventId = null;
+      }
       this.publish();
     });
     this.stopResources = this.router.resourceStore.subscribeAll(() => {
@@ -150,8 +159,18 @@ export class DevtoolsStore {
   }
 
   clearTimeline(): void {
-    if (this.events.length === 0) return;
+    if (this.events.length === 0 && this.selectedEventId === null) return;
     this.events = Object.freeze([]);
+    this.selectedEventId = null;
+    this.publish();
+  }
+
+  selectEvent(eventId: string | null): void {
+    const next = eventId !== null && this.events.some(event => event.id === eventId)
+      ? eventId
+      : null;
+    if (next === this.selectedEventId) return;
+    this.selectedEventId = next;
     this.publish();
   }
 
@@ -163,6 +182,7 @@ export class DevtoolsStore {
       live: this.live,
       liveResourceCount: this.liveResourceCount,
       clientId: this.router.clientId.slice(0, 128),
+      selectedEventId: this.selectedEventId,
     });
     for (const listener of [...this.listeners]) {
       try {

@@ -21,6 +21,7 @@ describe("deriveDevtoolsInsights", () => {
     const snapshot: DevtoolsSnapshot = {
       page: { component: "rooms/index", url: "/rooms" },
       clientId: "ff_client-1",
+      selectedEventId: null,
       live: {
         status: "connected",
         connected: true,
@@ -119,6 +120,7 @@ describe("deriveDevtoolsInsights", () => {
     const snapshot: DevtoolsSnapshot = {
       page: { component: "", url: "/" },
       clientId: "ff_client-1",
+      selectedEventId: null,
       live: {
         status: "idle",
         connected: false,

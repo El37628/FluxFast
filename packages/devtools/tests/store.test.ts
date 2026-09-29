@@ -50,19 +50,27 @@ describe("DevtoolsStore", () => {
       connected: false,
     }));
     expect(snapshot.liveResourceCount).toBe(1);
+    expect(snapshot.selectedEventId).toBeNull();
     expect(snapshot.resources).toEqual([
       expect.objectContaining({ key: "rooms", version: "rooms-v1" }),
     ]);
     expect(JSON.stringify(snapshot.resources)).not.toContain("must-not-be-inspected");
     expect(JSON.stringify(snapshot.page)).not.toContain("secret");
 
+    store.selectEvent("event-2");
+    expect(store.getSnapshot().selectedEventId).toBe("event-2");
+    router.diagnostics.emit(event(5));
+    expect(store.getSnapshot().selectedEventId).toBeNull();
+
     router.pageStore.setPage({ component: "rooms/live", url: "/rooms/live" });
     router.liveManager.updateManifest("/rooms/live", ["rooms", "messages"]);
     await Promise.resolve();
     expect(store.getSnapshot().liveResourceCount).toBe(2);
 
+    store.selectEvent("event-4");
     store.clearTimeline();
     expect(store.getSnapshot().events).toEqual([]);
+    expect(store.getSnapshot().selectedEventId).toBeNull();
     expect(store.getSnapshot().resources).toHaveLength(1);
 
     stop();

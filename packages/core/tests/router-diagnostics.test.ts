@@ -203,6 +203,16 @@ describe("FluxRouter diagnostics", () => {
       expect(observations[0].correlationId).toBeDefined();
       expect(observations[1].correlationId).toBe(observations[0].correlationId);
     }
+    const deferredCorrelationId = events.find(event => (
+      event.type === "deferred" && payload(event).phase === "start"
+    ))?.correlationId;
+    const deferredLoads = events.filter(event => (
+      event.type === "resource-load" && payload(event).reason === "deferred"
+    ));
+    expect(deferredLoads).toHaveLength(2);
+    expect(deferredLoads.every(
+      event => event.correlationId === deferredCorrelationId
+    )).toBe(true);
     expect(events.filter(event => event.type === "lifecycle")
       .map(event => payload(event).phase)).toEqual(["clear", "destroy"]);
     expect(router.diagnostics.active).toBe(false);
@@ -210,5 +220,55 @@ describe("FluxRouter diagnostics", () => {
     expect(serialized).not.toContain("request-secret");
     expect(serialized).not.toContain("response-secret");
     expect(serialized).not.toContain("prefetch-secret");
+  });
+
+  it("correlates mutation-triggered canonical refreshes", async () => {
+    const transport = new MockTransport();
+    transport.mutateMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      mutation: { invalidate: ["rooms"] },
+    });
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "rooms/index", url: "/rooms" },
+      resources: {
+        rooms: { version: "rooms-v2", value: [{ private: "hidden" }] },
+      },
+      resourceKeys: ["rooms"],
+    });
+    const router = new FluxRouter({
+      transport,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: {
+          rooms: { version: "rooms-v1", value: [] },
+        },
+      },
+    });
+    const stopResource = router.resourceStore.subscribe("rooms", () => undefined);
+    const events: FluxDiagnosticEvent[] = [];
+    router.diagnostics.subscribe(event => events.push(event));
+
+    await router.mutate("/rooms/12", { private: "request-secret" });
+
+    const mutationId = events.find(event => (
+      event.type === "mutation" && payload(event).phase === "start"
+    ))?.correlationId;
+    const refreshEvents = events.filter(event => (
+      (event.type === "resource-load" && payload(event).reason === "mutation") ||
+      (event.type === "resource-update" && payload(event).source === "mutation")
+    ));
+    expect(mutationId).toBeDefined();
+    expect(refreshEvents.length).toBeGreaterThanOrEqual(3);
+    expect(refreshEvents.every(event => event.correlationId === mutationId)).toBe(
+      true
+    );
+    expect(JSON.stringify(events)).not.toContain("request-secret");
+    expect(JSON.stringify(events)).not.toContain("hidden");
+
+    stopResource();
+    router.destroy();
   });
 });

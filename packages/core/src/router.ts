@@ -49,6 +49,9 @@ export interface MutateOptions {
   preserveScroll?: boolean;
 }
 
+const RESOURCE_LOAD_CORRELATIONS = new WeakMap<LoadResourcesOptions, string>();
+const LIVE_REFRESH_CORRELATIONS = new WeakMap<object, Set<string>>();
+
 export interface FluxRuntimeOptions {
   resourceStore?: ResourceStore;
   pageStore?: PageStore;
@@ -466,6 +469,8 @@ export class FluxRouter {
     keys: string[],
     options: LoadResourcesOptions
   ): Promise<void> {
+    const diagnosticCorrelationId = RESOURCE_LOAD_CORRELATIONS.get(options);
+    RESOURCE_LOAD_CORRELATIONS.delete(options);
     const lifecycleGeneration = this.lifecycleGeneration;
     const requestedKeys = Array.from(new Set(
       keys.filter((key): key is string => typeof key === "string" && key.length > 0)
@@ -474,7 +479,8 @@ export class FluxRouter {
 
     const url = options.url ?? (this.pageStore.getSnapshot().url || "/");
     const knownVersions = this.resourceStore.exportKnownVersions();
-    const loadId = `resource_${options.reason}_${++this.resourceLoadCounter}_${Date.now().toString(36)}`;
+    const loadId = diagnosticCorrelationId ??
+      `resource_${options.reason}_${++this.resourceLoadCounter}_${Date.now().toString(36)}`;
     const capturedEpochs = new Map<string, number>();
     for (const key of requestedKeys) {
       capturedEpochs.set(key, this.bumpResourceEpoch(key));
@@ -844,10 +850,14 @@ export class FluxRouter {
           this.hardNavigate(envelope.mutation.redirect);
         }
       } else if (activeInvalidations.length > 0) {
-        await this.loadResources(activeInvalidations, {
+        const refreshOptions: LoadResourcesOptions = {
           url: this.pageStore.getSnapshot().url || "/",
           reason: "mutation",
-        });
+        };
+        if (mutationId !== undefined) {
+          RESOURCE_LOAD_CORRELATIONS.set(refreshOptions, mutationId);
+        }
+        await this.loadResources(activeInvalidations, refreshOptions);
       }
 
       this.events.emit("mutation:success", { url });
@@ -1117,7 +1127,7 @@ export class FluxRouter {
           }
         }
       }
-      this.queueLiveRefresh(keys, "live");
+      this.queueLiveRefresh(keys, "live", liveCorrelationId);
       return;
     }
     if (event.type !== "invalidate" && event.type !== "resync") return;
@@ -1137,13 +1147,16 @@ export class FluxRouter {
     }
     this.queueLiveRefresh(
       keys,
-      event.type === "resync" ? "live-reconnect" : "live"
+      event.type === "resync" ? "live-reconnect" : "live",
+      liveCorrelationId
     );
   }
 
   private handleLiveDiagnostic(event: LiveManagerDiagnostic): void {
     const liveCorrelationId = this.nextDiagnosticOperationId("live");
-    if (this.diagnostics.active) {
+    const routerEmitsDetailedEvent =
+      event.type === "event" && event.eventType !== "ready";
+    if (this.diagnostics.active && !routerEmitsDetailedEvent) {
       this.emitDiagnostic("live", {
         phase: event.type,
         ...("keyCount" in event ? { keyCount: event.keyCount } : {}),
@@ -1202,10 +1215,16 @@ export class FluxRouter {
 
   private queueLiveRefresh(
     keys: string[],
-    reason: "live" | "live-reconnect"
+    reason: "live" | "live-reconnect",
+    correlationId?: string
   ): void {
     for (const key of keys) this.pendingLiveRefreshKeys.add(key);
     if (keys.length === 0) return;
+    if (correlationId !== undefined) {
+      const correlations = LIVE_REFRESH_CORRELATIONS.get(this) ?? new Set();
+      correlations.add(correlationId);
+      LIVE_REFRESH_CORRELATIONS.set(this, correlations);
+    }
     if (reason === "live-reconnect") {
       this.pendingLiveRefreshReason = reason;
     }
@@ -1218,13 +1237,26 @@ export class FluxRouter {
         .filter(key => stillActive.has(key))
         .sort();
       const pendingReason = this.pendingLiveRefreshReason;
+      const correlations = LIVE_REFRESH_CORRELATIONS.get(this);
+      const diagnosticCorrelationId =
+        correlations?.size === 1
+          ? correlations.values().next().value
+          : undefined;
       this.pendingLiveRefreshKeys.clear();
+      LIVE_REFRESH_CORRELATIONS.delete(this);
       this.pendingLiveRefreshReason = "live";
       if (!manifest || pending.length === 0 || !this.liveStarted) return;
-      void this.loadResources(pending, {
+      const refreshOptions: LoadResourcesOptions = {
         url: manifest.url,
         reason: pendingReason,
-      }).catch(() => undefined);
+      };
+      if (diagnosticCorrelationId !== undefined) {
+        RESOURCE_LOAD_CORRELATIONS.set(
+          refreshOptions,
+          diagnosticCorrelationId
+        );
+      }
+      void this.loadResources(pending, refreshOptions).catch(() => undefined);
     }, this.liveBatchDelayMs);
   }
 
@@ -1234,6 +1266,7 @@ export class FluxRouter {
       this.liveRefreshTimer = undefined;
     }
     this.pendingLiveRefreshKeys.clear();
+    LIVE_REFRESH_CORRELATIONS.delete(this);
     this.pendingLiveRefreshReason = "live";
   }
 
@@ -1306,11 +1339,15 @@ export class FluxRouter {
         ...this.diagnosticKeys(keys),
       }, deferredId);
     }
-    const promise = this.loadResources(keys, {
+    const loadOptions: LoadResourcesOptions = {
       url,
       reason: "deferred",
       signal: controller.signal,
-    });
+    };
+    if (deferredId !== undefined) {
+      RESOURCE_LOAD_CORRELATIONS.set(loadOptions, deferredId);
+    }
+    const promise = this.loadResources(keys, loadOptions);
     this.activeDeferredEpochs = new Map(
       keys.map(key => [key, this.resourceEpochs.get(key)?.epoch ?? 0])
     );
