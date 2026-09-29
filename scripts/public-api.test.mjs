@@ -80,6 +80,14 @@ const v11DevtoolsContract = Object.freeze({
   exportMap: Object.freeze({
     ".": Object.freeze({
       types: "./dist/index.d.ts",
+      development: Object.freeze({
+        import: "./dist/esm/index.js",
+        require: "./dist/index.js",
+      }),
+      production: Object.freeze({
+        import: "./dist/esm/disabled.js",
+        require: "./dist/disabled.js",
+      }),
       import: "./dist/esm/index.js",
       require: "./dist/index.js",
       default: "./dist/index.js",
