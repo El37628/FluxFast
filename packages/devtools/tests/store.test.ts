@@ -19,7 +19,7 @@ function event(index: number): FluxDiagnosticEvent {
 }
 
 describe("DevtoolsStore", () => {
-  it("records a bounded timeline and value-free runtime snapshots", () => {
+  it("records a bounded timeline and value-free runtime snapshots", async () => {
     const router = new FluxRouter({
       deferHistory: true,
       initialPage: { component: "rooms/index", url: "/rooms?token=secret" },
@@ -29,6 +29,7 @@ describe("DevtoolsStore", () => {
       version: "rooms-v1",
       value: { token: "must-not-be-inspected" },
     });
+    router.liveManager.updateManifest("/rooms", ["rooms"]);
     const store = new DevtoolsStore(router, 3);
     const stop = store.start();
 
@@ -43,11 +44,22 @@ describe("DevtoolsStore", () => {
       "event-4",
     ]);
     expect(snapshot.page).toEqual({ component: "rooms/index", url: "/rooms" });
+    expect(snapshot.clientId).toMatch(/^ff_/);
+    expect(snapshot.live).toEqual(expect.objectContaining({
+      status: "idle",
+      connected: false,
+    }));
+    expect(snapshot.liveResourceCount).toBe(1);
     expect(snapshot.resources).toEqual([
       expect.objectContaining({ key: "rooms", version: "rooms-v1" }),
     ]);
     expect(JSON.stringify(snapshot.resources)).not.toContain("must-not-be-inspected");
     expect(JSON.stringify(snapshot.page)).not.toContain("secret");
+
+    router.pageStore.setPage({ component: "rooms/live", url: "/rooms/live" });
+    router.liveManager.updateManifest("/rooms/live", ["rooms", "messages"]);
+    await Promise.resolve();
+    expect(store.getSnapshot().liveResourceCount).toBe(2);
 
     store.clearTimeline();
     expect(store.getSnapshot().events).toEqual([]);

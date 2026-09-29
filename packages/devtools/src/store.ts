@@ -1,6 +1,7 @@
 import type {
   FluxDiagnosticEvent,
   FluxRouter,
+  LiveStatusSnapshot,
   ResourceMetadataSnapshot,
 } from "@fluxfast/core";
 
@@ -16,6 +17,9 @@ export interface DevtoolsSnapshot {
   readonly events: readonly FluxDiagnosticEvent[];
   readonly resources: readonly ResourceMetadataSnapshot[];
   readonly page: DevtoolsPageSnapshot;
+  readonly live: LiveStatusSnapshot;
+  readonly liveResourceCount: number;
+  readonly clientId: string;
 }
 
 type StoreListener = () => void;
@@ -23,6 +27,13 @@ type StoreListener = () => void;
 const EMPTY_PAGE: DevtoolsPageSnapshot = Object.freeze({
   component: "",
   url: "/",
+});
+
+const EMPTY_LIVE: LiveStatusSnapshot = Object.freeze({
+  status: "idle",
+  connected: false,
+  reconnectAttempt: 0,
+  lastEventAt: null,
 });
 
 function safePath(value: string): string {
@@ -58,14 +69,20 @@ export class DevtoolsStore {
   private events: readonly FluxDiagnosticEvent[] = Object.freeze([]);
   private resources: readonly ResourceMetadataSnapshot[] = Object.freeze([]);
   private page: DevtoolsPageSnapshot = EMPTY_PAGE;
+  private live: LiveStatusSnapshot = EMPTY_LIVE;
+  private liveResourceCount = 0;
   private snapshot: DevtoolsSnapshot = Object.freeze({
     events: this.events,
     resources: this.resources,
     page: this.page,
+    live: this.live,
+    liveResourceCount: this.liveResourceCount,
+    clientId: "",
   });
   private stopDiagnostics?: () => void;
   private stopResources?: () => void;
   private stopPage?: () => void;
+  private stopLive?: () => void;
 
   constructor(router: FluxRouter, maxEvents: number = DEFAULT_MAX_EVENTS) {
     this.router = router;
@@ -84,6 +101,9 @@ export class DevtoolsStore {
 
     this.resources = this.router.resourceStore.getRecordsSnapshot();
     this.page = pageSnapshot(this.router);
+    this.live = this.router.liveManager.getSnapshot();
+    this.liveResourceCount =
+      this.router.liveManager.getManifest()?.keys.length ?? 0;
     this.stopDiagnostics = this.router.diagnostics.subscribe(event => {
       const start = Math.max(0, this.events.length - this.maxEvents + 1);
       this.events = Object.freeze([...this.events.slice(start), event]);
@@ -95,6 +115,23 @@ export class DevtoolsStore {
     });
     this.stopPage = this.router.pageStore.subscribe(() => {
       this.page = pageSnapshot(this.router);
+      this.liveResourceCount =
+        this.router.liveManager.getManifest()?.keys.length ?? 0;
+      this.publish();
+      // FluxRouter applies the live manifest immediately after publishing the
+      // page. Refresh once that synchronous envelope application has settled.
+      queueMicrotask(() => {
+        if (!this.stopPage) return;
+        const count = this.router.liveManager.getManifest()?.keys.length ?? 0;
+        if (count === this.liveResourceCount) return;
+        this.liveResourceCount = count;
+        this.publish();
+      });
+    });
+    this.stopLive = this.router.liveManager.subscribe(() => {
+      this.live = this.router.liveManager.getSnapshot();
+      this.liveResourceCount =
+        this.router.liveManager.getManifest()?.keys.length ?? 0;
       this.publish();
     });
     this.publish();
@@ -105,9 +142,11 @@ export class DevtoolsStore {
     this.stopDiagnostics?.();
     this.stopResources?.();
     this.stopPage?.();
+    this.stopLive?.();
     this.stopDiagnostics = undefined;
     this.stopResources = undefined;
     this.stopPage = undefined;
+    this.stopLive = undefined;
   }
 
   clearTimeline(): void {
@@ -121,6 +160,9 @@ export class DevtoolsStore {
       events: this.events,
       resources: this.resources,
       page: this.page,
+      live: this.live,
+      liveResourceCount: this.liveResourceCount,
+      clientId: this.router.clientId.slice(0, 128),
     });
     for (const listener of [...this.listeners]) {
       try {
