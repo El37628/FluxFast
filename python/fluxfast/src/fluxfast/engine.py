@@ -8,6 +8,11 @@ from typing import Any
 import anyio
 
 from .cache import CachedResource, ResourceCacheBackend
+from .devtools import (
+    RequestDiagnosticCollector,
+    ResourceDiagnostic,
+    classify_cache_backend,
+)
 from .errors import ResourceContractError, ResourceError
 from .page import Page
 from .protocol import ResourceErrorDetail, ResourceWireRecord
@@ -43,6 +48,7 @@ class ResourceEngine:
         *,
         client_supports_deferred: bool = False,
         debug: bool = False,
+        diagnostics: RequestDiagnosticCollector | None = None,
     ) -> ResourceResolution:
         t0 = time.perf_counter()
 
@@ -54,12 +60,61 @@ class ResourceEngine:
         deferred_keys: list[str] = []
         resource_errors: dict[str, ResourceErrorDetail] = {}
         pending_misses: list[ResourceSpec] = []
+        resource_diagnostics: dict[str, ResourceDiagnostic] | None = (
+            {} if diagnostics is not None else None
+        )
+        cache_backend = (
+            classify_cache_backend(cache) if diagnostics is not None else None
+        )
 
         # 1. Evaluate cache hits
         for spec in specs_to_process:
+            diagnostic = None
+            if diagnostics is not None:
+                assert cache_backend is not None
+                diagnostic = diagnostics.start_resource(
+                    key=spec.key,
+                    scope_type=spec.scope.scope_type.value,
+                    ttl=spec.ttl,
+                    deferred=spec.defer,
+                    live=spec.live,
+                    cache_backend=cache_backend,
+                )
+                if diagnostic is not None:
+                    assert resource_diagnostics is not None
+                    resource_diagnostics[spec.key] = diagnostic
             if spec.scope.is_cacheable and spec.ttl > 0:
                 cache_key = cls.get_cache_key(spec)
-                cached = await cache.get(cache_key)
+                cache_started_at = (
+                    time.perf_counter() if diagnostics is not None else None
+                )
+                try:
+                    cached = await cache.get(cache_key)
+                except Exception:
+                    if diagnostics is not None:
+                        assert cache_started_at is not None
+                        diagnostics.record_cache(
+                            diagnostic,
+                            hit=False,
+                            duration_ms=(
+                                time.perf_counter() - cache_started_at
+                            )
+                            * 1000.0,
+                        )
+                        diagnostics.finish_resource(
+                            diagnostic,
+                            result="error",
+                            error_type="ResourceCacheError",
+                        )
+                    raise
+                if diagnostics is not None:
+                    assert cache_started_at is not None
+                    diagnostics.record_cache(
+                        diagnostic,
+                        hit=cached is not None,
+                        duration_ms=(time.perf_counter() - cache_started_at)
+                        * 1000.0,
+                    )
                 if cached is not None:
                     metrics.cache_hits += 1
                     if spec.defer:
@@ -69,6 +124,12 @@ class ResourceEngine:
                     if client_ver == cached.version:
                         # Client already has identical version -> omit
                         metrics.resources_omitted += 1
+                        if diagnostics is not None:
+                            diagnostics.finish_resource(
+                                diagnostic,
+                                result="omitted-known",
+                                known_version=True,
+                            )
                     else:
                         # Client has different or no version -> send cached record
                         metrics.resources_sent += 1
@@ -76,6 +137,12 @@ class ResourceEngine:
                             version=cached.version,
                             value=cached.value,
                         )
+                        if diagnostics is not None:
+                            diagnostics.finish_resource(
+                                diagnostic,
+                                result="cache-hit",
+                                sent=True,
+                            )
                     continue
 
             # Cache miss or uncacheable
@@ -83,6 +150,11 @@ class ResourceEngine:
             if spec.defer and client_supports_deferred and only_keys is None:
                 deferred_keys.append(spec.key)
                 metrics.resources_deferred += 1
+                if diagnostics is not None:
+                    diagnostics.finish_resource(
+                        diagnostic,
+                        result="deferred",
+                    )
                 continue
             pending_misses.append(spec)
 
@@ -91,6 +163,14 @@ class ResourceEngine:
             miss_results: dict[str, tuple[str, Any, ResourceSpec]] = {}
 
             async def _resolve_single(spec: ResourceSpec) -> None:
+                diagnostic = (
+                    resource_diagnostics.get(spec.key)
+                    if resource_diagnostics is not None
+                    else None
+                )
+                loader_started_at = (
+                    time.perf_counter() if diagnostics is not None else None
+                )
                 try:
                     loader = spec.loader
                     if inspect.iscoroutinefunction(loader):
@@ -128,7 +208,19 @@ class ResourceEngine:
                             ),
                             details=error.details if debug else None,
                         )
+                        if diagnostics is not None:
+                            diagnostics.finish_resource(
+                                diagnostic,
+                                result="error",
+                                error_type="ResourceContractError",
+                            )
                         return
+                    if diagnostics is not None:
+                        diagnostics.finish_resource(
+                            diagnostic,
+                            result="error",
+                            error_type="ResourceContractError",
+                        )
                     raise
                 except Exception as e:
                     if (
@@ -146,8 +238,28 @@ class ResourceEngine:
                             type="ResourceError",
                             message=message,
                         )
+                        if diagnostics is not None:
+                            diagnostics.finish_resource(
+                                diagnostic,
+                                result="error",
+                                error_type="ResourceError",
+                            )
                         return
+                    if diagnostics is not None:
+                        diagnostics.finish_resource(
+                            diagnostic,
+                            result="error",
+                            error_type="ResourceError",
+                        )
                     raise ResourceError(f"Error loading resource '{spec.key}': {e}") from e
+                finally:
+                    if diagnostics is not None:
+                        assert loader_started_at is not None
+                        diagnostics.record_loader(
+                            diagnostic,
+                            duration_ms=(time.perf_counter() - loader_started_at)
+                            * 1000.0,
+                        )
 
             try:
                 async with anyio.create_task_group() as tg:
@@ -163,6 +275,11 @@ class ResourceEngine:
             # Store in cache and prepare response
             now = time.monotonic()
             for key, (version, value, spec) in miss_results.items():
+                diagnostic = (
+                    resource_diagnostics.get(key)
+                    if resource_diagnostics is not None
+                    else None
+                )
                 if spec.scope.is_cacheable and spec.ttl > 0:
                     cache_key = cls.get_cache_key(spec)
                     cached_entry = CachedResource(
@@ -171,18 +288,39 @@ class ResourceEngine:
                         expires_at=now + spec.ttl,
                         tags=spec.tags,
                     )
-                    await cache.set(cache_key, cached_entry, spec.ttl)
+                    try:
+                        await cache.set(cache_key, cached_entry, spec.ttl)
+                    except Exception:
+                        if diagnostics is not None:
+                            diagnostics.finish_resource(
+                                diagnostic,
+                                result="error",
+                                error_type="ResourceCacheError",
+                            )
+                        raise
 
                 client_ver = known_versions.get(key)
                 if client_ver == version:
                     # Client already knows this version -> omit
                     metrics.resources_omitted += 1
+                    if diagnostics is not None:
+                        diagnostics.finish_resource(
+                            diagnostic,
+                            result="omitted-known",
+                            known_version=True,
+                        )
                 else:
                     metrics.resources_sent += 1
                     resolved_records[key] = ResourceWireRecord(
                         version=version,
                         value=value,
                     )
+                    if diagnostics is not None:
+                        diagnostics.finish_resource(
+                            diagnostic,
+                            result="loader",
+                            sent=True,
+                        )
 
         metrics.resources_dur_ms = (time.perf_counter() - t0) * 1000.0
         return ResourceResolution(

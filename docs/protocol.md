@@ -491,3 +491,31 @@ reload. No persistent replay or `Last-Event-ID` contract is defined for 0.4.
   client opens no stream and retains ordinary 0.3 behavior.
 - **Unknown additive fields or capabilities:** existing bounded parsing rules
   apply and the protocol identifier remains `fluxfast/1`.
+
+## Development diagnostic channel
+
+The optional DevTools trace is a separate development protocol. It does not add
+fields to `PageEnvelope`, `MutationEnvelope`, or any other `fluxfast/1` model.
+
+```http
+X-FluxFast-DevTools: 1
+X-FluxFast-DevTools-Trace: <base64url-json-without-padding>
+```
+
+The server returns a trace only when its explicit FluxFast debug mode is enabled
+and the request header is exactly `1`. A production server ignores a forged
+opt-in header. The decoded response uses `"protocol":"fluxfast-devtools/1"`
+and contains only bounded execution metadata: generated request ID, request
+type, durations, logical resource keys, scope types, TTLs, cache backend/result
+classifications, sent/known/deferred/live flags, and fixed error categories.
+
+The trace never contains resource values, scope fingerprints, user or tenant
+identifiers, cache keys or tags, URLs or query strings, cookies, authorization
+headers, request/mutation bodies, connection strings, exception messages, or
+tracebacks. Each encoded header is capped at 7 KiB—below common 8 KiB proxy
+limits. Resource entries are dropped from the end and `truncated` is set before
+the bound can be exceeded; if even fixed metadata cannot fit, the header is
+omitted and the application response proceeds unchanged.
+
+`fluxfast-devtools/1` is versioned independently. Package releases and future
+`fluxfast/1` revisions do not imply a diagnostic-protocol version change.

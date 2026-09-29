@@ -17,6 +17,13 @@ from .capabilities import (
     CAPABILITY_LIVE_RESOURCES,
     client_supports,
 )
+from .devtools import (
+    HEADER_DEVTOOLS,
+    HEADER_DEVTOOLS_TRACE,
+    RequestDiagnosticCollector,
+    diagnostics_requested,
+    encode_diagnostic_trace,
+)
 from .engine import ResourceEngine
 from .errors import ProtocolError
 from .headers import (
@@ -179,6 +186,17 @@ class FluxRouter(APIRouter):
                 metrics = TimingMetrics()
                 t0 = time.perf_counter()
                 assert request is not None, "Request must be present for FluxFast page rendering"
+                debug_enabled = bool(
+                    getattr(request.app.state, "fluxfast_debug", False)
+                )
+                diagnostics = (
+                    RequestDiagnosticCollector("page")
+                    if diagnostics_requested(
+                        debug=debug_enabled,
+                        header_value=request.headers.get(HEADER_DEVTOOLS),
+                    )
+                    else None
+                )
                 validate_protocol_header(request)
                 origin_client_id = validate_live_client_id(
                     request.headers.get(HEADER_CLIENT_ID)
@@ -264,9 +282,8 @@ class FluxRouter(APIRouter):
                         cache=cache,
                         metrics=metrics,
                         client_supports_deferred=supports_deferred,
-                        debug=bool(
-                            getattr(request.app.state, "fluxfast_debug", False)
-                        ),
+                        debug=debug_enabled,
+                        diagnostics=diagnostics,
                     )
 
                     t_ser = time.perf_counter()
@@ -310,6 +327,16 @@ class FluxRouter(APIRouter):
                     }
                     if supports_live:
                         headers[HEADER_LIVE_RESOURCES] = str(len(live_keys))
+                    if diagnostics is not None:
+                        trace = encode_diagnostic_trace(
+                            diagnostics.build(
+                                page_ms=metrics.page_dur_ms,
+                                resources_ms=metrics.resources_dur_ms,
+                                serialize_ms=metrics.serialize_dur_ms,
+                            )
+                        )
+                        if trace is not None:
+                            headers[HEADER_DEVTOOLS_TRACE] = trace
 
                     return JSONResponse(
                         content=payload,
