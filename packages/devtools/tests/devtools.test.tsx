@@ -40,6 +40,11 @@ describe("FluxDevtools", () => {
       deferHistory: true,
       initialPage: { component: "rooms/index", url: "/rooms?secret=query-secret-42" },
     });
+    router.resourceStore.set({
+      key: "rooms",
+      version: "rooms-v2",
+      value: { secret: "resource-value-secret-42" },
+    });
 
     await mountDevtools(
       <StrictMode>
@@ -55,15 +60,68 @@ describe("FluxDevtools", () => {
     expect(router.diagnostics.active).toBe(true);
     const shadow = hosts[0].shadowRoot!;
     const button = shadow.querySelector("button")!;
+    await act(async () => {
+      router.diagnostics.emit({
+        id: "server-trace-1",
+        timestamp: Date.now(),
+        type: "server-trace",
+        correlationId: "visit-1",
+        data: {
+          type: "page",
+          durationMs: 12.4,
+          resources: [{
+            key: "rooms",
+            result: "cache-hit",
+            durationMs: 2.2,
+            scope: "tenant",
+            ttl: 30_000,
+            deferred: false,
+            live: true,
+            cacheBackend: "redis",
+            cacheResult: "hit",
+            cacheMs: 1.1,
+            loaderMs: 0,
+          }],
+        },
+      });
+    });
     expect(button.textContent).toContain("FluxFast");
     expect(button.textContent).toContain("/rooms");
+    expect(button.textContent).toContain("1 Resources");
+    expect(button.textContent).toContain("H1 M0");
+    expect(button.textContent).toContain("Live 1");
+    expect(button.textContent).toContain("12 ms");
     expect(shadow.textContent).not.toContain("query-secret-42");
+    expect(shadow.textContent).not.toContain("resource-value-secret-42");
     expect(shadow.querySelector(".ff-panel")).toBeNull();
 
     await act(async () => button.click());
 
     expect(shadow.querySelector(".ff-panel")).not.toBeNull();
     expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(shadow.textContent).toContain("rooms/index");
+    expect(shadow.textContent).toContain("Cache hits");
+    expect(shadow.textContent).toContain("Client session");
+
+    const resourcesTab = shadow.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-controls="fluxfast-panel-resources"]'
+    )!;
+    await act(async () => resourcesTab.click());
+
+    expect(resourcesTab.getAttribute("aria-selected")).toBe("true");
+    expect(shadow.querySelector("table")?.textContent).toContain("Resource");
+    expect(shadow.querySelector("table")?.textContent).toContain("rooms");
+    expect(shadow.querySelector("table")?.textContent).toContain("cache");
+
+    const inspect = shadow.querySelector<HTMLButtonElement>(
+      '[aria-label="Inspect rooms"]'
+    )!;
+    await act(async () => inspect.click());
+    const details = shadow.querySelector(".ff-resource-detail")!;
+    expect(details.textContent).toContain("Server result");
+    expect(details.textContent).toContain("cache-hit");
+    expect(details.textContent).toContain("tenant");
+    expect(details.textContent).not.toContain("resource-value-secret-42");
 
     const entry = [...mounted][0];
     await act(async () => entry.root.unmount());
