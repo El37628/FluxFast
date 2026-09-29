@@ -136,7 +136,14 @@ describe("DevTools diagnostic security", () => {
     })).rejects.toBe(failure);
 
     const serialized = JSON.stringify(events);
-    expect(serialized).not.toMatch(/Bearer-secret|request body contained|<script>|<img/);
+    for (const forbidden of [
+      "Bearer-secret",
+      "request body contained",
+      "<script>",
+      "<img",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
     expect(events).toHaveLength(2);
     expect(events[0].correlationId).toMatch(/^transport_/);
     expect(events[1].data).toMatchObject({
