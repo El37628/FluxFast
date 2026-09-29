@@ -1,6 +1,7 @@
 """FastAPI application used by the repository-owned browser tests."""
 
 import asyncio
+import os
 
 from fastapi import FastAPI, Request
 from fluxfast import (
@@ -17,7 +18,7 @@ from fluxfast import (
 from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI()
-flux = FluxFast(app)
+flux = FluxFast(app, debug=os.environ.get("FLUXFAST_E2E_DEVTOOLS") == "1")
 
 rooms = [{"id": 1, "name": "Garden Suite"}]
 activity_attempts = 0

@@ -102,6 +102,9 @@ importers:
       '@fluxfast/core':
         specifier: workspace:*
         version: link:../../../packages/core
+      '@fluxfast/devtools':
+        specifier: workspace:*
+        version: link:../../../packages/devtools
       '@fluxfast/next':
         specifier: workspace:*
         version: link:../../../packages/next

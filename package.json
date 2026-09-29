@@ -11,6 +11,7 @@
     "typecheck": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm -r --if-present run typecheck",
     "test": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --filter @fluxfast/devtools run build && pnpm -r --if-present run test && pnpm test:release && pnpm test:schema-compatibility",
     "test:e2e": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --dir tests/browser/frontend run test:e2e",
+    "test:e2e:devtools": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --filter @fluxfast/devtools run build && pnpm --dir tests/browser/frontend run test:e2e:devtools",
     "test:e2e:distributed": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && pnpm --dir tests/browser/frontend run test:e2e:distributed",
     "test:e2e:distributed:production": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && node scripts/test-production-distributed-browser.mjs",
     "test:e2e:production": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/next run build && node scripts/test-production-browser.mjs",
