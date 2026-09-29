@@ -70,6 +70,23 @@ const v11NextDeclarationChanges = Object.freeze({
   }),
 });
 
+const v11DevtoolsContract = Object.freeze({
+  entries: Object.freeze({
+    ".": Object.freeze({
+      typeOnly: ["FluxDevtoolsProps"],
+      valueOnly: ["FluxDevtools"],
+    }),
+  }),
+  exportMap: Object.freeze({
+    ".": Object.freeze({
+      types: "./dist/index.d.ts",
+      import: "./dist/esm/index.js",
+      require: "./dist/index.js",
+      default: "./dist/index.js",
+    }),
+  }),
+});
+
 test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () => {
   const expected = JSON.parse(fs.readFileSync(v09BaselinePath, "utf8"));
   const current = createPublicApiSnapshot();
@@ -145,6 +162,22 @@ test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () =>
     }
     assert.deepEqual(Object.keys(currentFiles), Object.keys(declaration.files));
   }
+
+  assert.deepEqual(
+    current.packages["@fluxfast/devtools"].entries,
+    v11DevtoolsContract.entries
+  );
+  assert.deepEqual(
+    current.packages["@fluxfast/devtools"].exportMap,
+    v11DevtoolsContract.exportMap
+  );
+  assert.deepEqual(
+    current.packages["@fluxfast/devtools"].declarations["."].files,
+    {
+      "devtools.d.ts": "85f4df704170801f75481e2ce54ca0e9ad45bf4da3f4bf22336c1ca3bed619c5",
+      "index.d.ts": "e419f4c8182428f3ebbbe175307b0cfae0b54cb4a02615f6ac6958027622d71b",
+    }
+  );
 });
 
 test("retains the historical v0.8.1 baseline and its reviewed v0.9 delta", () => {
