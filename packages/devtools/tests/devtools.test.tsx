@@ -295,6 +295,146 @@ describe("FluxDevtools", () => {
     expect(shadow.textContent).not.toMatch(/cache-secret|transport-secret|resource-secret|request-secret|validation-secret/);
   });
 
+  it("shows LiveManager history and safe protocol request metadata", async () => {
+    const router = new FluxRouter({ deferHistory: true });
+    await mountDevtools(
+      <FluxProvider router={router}>
+        <FluxDevtools defaultOpen />
+      </FluxProvider>,
+      router
+    );
+    const emit = (
+      id: string,
+      type: Parameters<typeof router.diagnostics.emit>[0]["type"],
+      data: unknown,
+      correlationId: string
+    ) => router.diagnostics.emit({
+      id,
+      type,
+      data,
+      correlationId,
+      timestamp: Date.now(),
+    });
+
+    await act(async () => {
+      emit("connected", "live", {
+        phase: "connect:open",
+        keyCount: 2,
+        reconnectAttempt: 0,
+      }, "connection-1");
+      emit("reconnect", "live", {
+        phase: "reconnect",
+        keyCount: 2,
+        reconnectAttempt: 1,
+      }, "connection-2");
+      emit("resync", "live", {
+        phase: "event",
+        eventType: "resync",
+        reason: "overflow",
+        keyCount: 2,
+      }, "live-1");
+      emit("refresh", "resource-load", {
+        phase: "success",
+        reason: "live-reconnect",
+        keyCount: 2,
+      }, "live-1");
+      emit("request-start", "transport", {
+        phase: "start",
+        requestType: "page",
+        method: "GET",
+        path: "/dashboard?request-secret=hidden",
+        protocol: "fluxfast/1",
+        capabilities: ["deferred-resources", "live-resources"],
+        knownVersions: [{ key: "rooms", version: "rooms-v123456789" }],
+        only: ["rooms"],
+        headers: { Authorization: "Bearer header-secret" },
+      }, "visit-protocol");
+      emit("request-trace", "server-trace", {
+        protocol: "fluxfast-devtools/1",
+        type: "page",
+        durationMs: 12,
+        truncated: false,
+        resources: [
+          {
+            key: "rooms",
+            result: "loader",
+            sent: true,
+            knownVersion: false,
+            deferred: false,
+            value: "resource-secret",
+          },
+          {
+            key: "profile",
+            result: "omitted-known",
+            sent: false,
+            knownVersion: true,
+            deferred: false,
+          },
+          {
+            key: "analytics",
+            result: "deferred",
+            sent: false,
+            knownVersion: false,
+            deferred: true,
+          },
+        ],
+      }, "visit-protocol");
+      emit("request-finish", "transport", {
+        phase: "success",
+        requestType: "page",
+        method: "GET",
+        path: "/dashboard",
+        status: 200,
+        durationMs: 18,
+        serverTrace: "valid",
+      }, "visit-protocol");
+    });
+
+    const shadow = document.querySelector(
+      "[data-fluxfast-devtools-host]"
+    )!.shadowRoot!;
+    const liveTab = shadow.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-controls="fluxfast-panel-live"]'
+    )!;
+    await act(async () => liveTab.click());
+    expect(shadow.textContent).toContain("Live timeline");
+    expect(shadow.textContent).toContain("RECONNECT");
+    expect(shadow.textContent).toContain("RESYNC");
+    expect(shadow.textContent).toContain("CANONICAL REFRESH");
+    expect(shadow.textContent).toContain("Queue overflow count");
+
+    const protocolTab = shadow.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-controls="fluxfast-panel-protocol"]'
+    )!;
+    await act(async () => protocolTab.click());
+    expect(shadow.textContent).toContain("fluxfast/1");
+    expect(shadow.textContent).toContain("fluxfast-devtools/1");
+    expect(shadow.textContent).toContain("deferred-resources");
+    expect(shadow.textContent).toContain("Known versions");
+    expect(shadow.textContent).toContain("rooms-v1234…");
+    expect(shadow.textContent).toContain("Resources sent");
+    expect(shadow.textContent).toContain("Resources omitted");
+    expect(shadow.textContent).not.toMatch(/request-secret|header-secret|resource-secret|Authorization|Bearer/);
+
+    await act(async () => {
+      emit("unsupported-start", "transport", {
+        phase: "start",
+        requestType: "page",
+        method: "GET",
+        path: "/future",
+        protocol: "fluxfast/1",
+      }, "visit-future");
+      emit("unsupported-finish", "transport", {
+        phase: "success",
+        requestType: "page",
+        serverTrace: "unsupported",
+        serverTraceProtocol: "fluxfast-devtools/2",
+      }, "visit-future");
+    });
+    expect(shadow.textContent).toContain("Unsupported DevTools trace version");
+    expect(shadow.textContent).toContain("fluxfast-devtools/2");
+  });
+
   it("has no host, store, or diagnostic subscription in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     const router = new FluxRouter({ deferHistory: true });

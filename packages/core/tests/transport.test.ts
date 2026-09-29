@@ -121,6 +121,11 @@ describe("FetchTransport", () => {
     await transport.visit({
       url: "/rooms?token=request-secret",
       visitId: "visit_correlated",
+      knownVersions: {
+        rooms: "rooms-v1",
+        "bad\u007fkey": "unsafe-version",
+      },
+      only: ["rooms", "bad\u007fkey"],
     });
 
     expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get(HEADER_DEVTOOLS))
@@ -132,6 +137,16 @@ describe("FetchTransport", () => {
     ]);
     expect(events.every(event => event.correlationId === "visit_correlated"))
       .toBe(true);
+    expect(events[0].data).toEqual({
+      phase: "start",
+      requestType: "page",
+      method: "GET",
+      path: "/rooms",
+      protocol: "fluxfast/1",
+      capabilities: ["deferred-resources", "live-resources"],
+      knownVersions: [{ key: "rooms", version: "rooms-v1" }],
+      only: ["rooms"],
+    });
     expect(events[1].data).toEqual(trace);
     expect(events[2].data).toMatchObject({
       phase: "success",
@@ -143,6 +158,7 @@ describe("FetchTransport", () => {
       durationMs: expect.any(Number),
     });
     expect(JSON.stringify(events)).not.toContain("request-secret");
+    expect(JSON.stringify(events)).not.toContain("unsafe-version");
   });
 
   it("rejects unsafe or oversized traces without breaking the application response", async () => {
@@ -191,6 +207,39 @@ describe("FetchTransport", () => {
       expect.objectContaining({ serverTrace: "invalid" }),
     ]);
     expect(JSON.stringify(events)).not.toContain("server-secret");
+  });
+
+  it("reports an unsupported diagnostic protocol without failing the response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      protocol: "fluxfast/1",
+      page: { component: "rooms/index", url: "/rooms" },
+      resources: {},
+    }), {
+      headers: {
+        "content-type": "application/json",
+        [HEADER_DEVTOOLS_TRACE]: encodeTrace(pageTrace({
+          protocol: "fluxfast-devtools/2",
+        })),
+      },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = new FetchTransport();
+    const hub = new FluxDiagnosticsHub();
+    const events: FluxDiagnosticEvent[] = [];
+    hub.subscribe(event => events.push(event));
+    transport.attachDiagnostics(hub);
+
+    await expect(transport.visit({
+      url: "/rooms",
+      visitId: "visit_unsupported",
+    })).resolves.toMatchObject({ page: { url: "/rooms" } });
+
+    expect(events.filter(event => event.type === "server-trace")).toEqual([]);
+    expect(events.at(-1)?.data).toMatchObject({
+      phase: "success",
+      serverTrace: "unsupported",
+      serverTraceProtocol: "fluxfast-devtools/2",
+    });
   });
 
   it("emits a safe transport failure without URL query or error message data", async () => {

@@ -41,6 +41,11 @@ import {
   serverCacheResultLabel,
   type MutationInsight,
 } from "./cache-mutations.js";
+import {
+  abbreviatedVersion,
+  deriveLiveInsights,
+  deriveProtocolRequest,
+} from "./live-protocol.js";
 
 export interface FluxDevtoolsProps {
   position?: "bottom" | "right";
@@ -59,7 +64,9 @@ type PanelName =
   | "resources"
   | "timeline"
   | "cache"
-  | "mutations";
+  | "mutations"
+  | "live"
+  | "protocol";
 
 const PANELS: readonly PanelName[] = Object.freeze([
   "overview",
@@ -67,6 +74,8 @@ const PANELS: readonly PanelName[] = Object.freeze([
   "timeline",
   "cache",
   "mutations",
+  "live",
+  "protocol",
 ]);
 
 class DevtoolsErrorBoundary extends Component<
@@ -621,6 +630,258 @@ function MutationsPanel({ snapshot }: { snapshot: DevtoolsSnapshot }) {
   );
 }
 
+function LivePanel({ snapshot }: { snapshot: DevtoolsSnapshot }) {
+  const insights = useMemo(
+    () => deriveLiveInsights(snapshot.events),
+    [snapshot.events]
+  );
+  const lastEvent = insights.lastEvent;
+
+  return (
+    <>
+      <p className="ff-panel-intro">
+        This panel observes the existing LiveManager connection and its
+        canonical refreshes. It does not create a second connection or live
+        state machine.
+      </p>
+      <dl className="ff-metric-grid ff-live-metrics">
+        <Metric
+          label="Connection status"
+          value={(
+            <span className={`ff-live-status ff-live-${snapshot.live.status}`}>
+              {snapshot.live.status}
+            </span>
+          )}
+        />
+        <Metric label="Connected resources" value={snapshot.liveResourceCount} />
+        <Metric
+          label="Reconnect attempts"
+          value={insights.reconnectCount}
+        />
+        <Metric
+          label="Last live event"
+          value={lastEvent
+            ? `${lastEvent.label} · ${formatAge(lastEvent.timestamp)}`
+            : snapshot.live.lastEventAt === null
+              ? "—"
+              : formatAge(snapshot.live.lastEventAt)}
+        />
+        <Metric label="Resync count" value={insights.resyncCount} />
+        <Metric
+          label="Queue overflow count"
+          value={insights.queueOverflowCount}
+        />
+      </dl>
+      <section className="ff-inspector-section" aria-labelledby="ff-live-timeline">
+        <header className="ff-section-heading">
+          <div>
+            <p className="ff-eyebrow">Connection and synchronization</p>
+            <h3 id="ff-live-timeline">Live timeline</h3>
+          </div>
+          <span>
+            Current attempt {snapshot.live.reconnectAttempt}
+          </span>
+        </header>
+        {insights.observations.length === 0 ? (
+          <p className="ff-empty">
+            No live connection or synchronization events recorded yet.
+          </p>
+        ) : (
+          <ol className="ff-live-timeline" aria-label="Live synchronization timeline">
+            {insights.observations.map(observation => (
+              <li key={observation.id} data-error={observation.error || undefined}>
+                <time dateTime={new Date(observation.timestamp).toISOString()}>
+                  {formatTimelineTime(observation.timestamp)}
+                </time>
+                <span className="ff-live-marker" aria-hidden="true" />
+                <span className="ff-live-event">
+                  <strong>{observation.label}</strong>
+                  {observation.detail && <small>{observation.detail}</small>}
+                </span>
+                <span className="ff-live-meta">
+                  {observation.keyCount === null
+                    ? "—"
+                    : `${observation.keyCount} resources`}
+                  {observation.reconnectAttempt === null
+                    ? ""
+                    : ` · attempt ${observation.reconnectAttempt}`}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    </>
+  );
+}
+
+function ProtocolPanel({ snapshot }: { snapshot: DevtoolsSnapshot }) {
+  const request = useMemo(
+    () => deriveProtocolRequest(snapshot.events),
+    [snapshot.events]
+  );
+
+  if (request === null) {
+    return (
+      <p className="ff-empty">
+        No FluxFast transport request has been observed yet.
+      </p>
+    );
+  }
+
+  const response = request.response;
+  return (
+    <>
+      {request.serverTrace === "unsupported" && (
+        <p className="ff-protocol-warning" role="status">
+          Unsupported DevTools trace version
+          {request.diagnosticProtocol ? `: ${request.diagnosticProtocol}` : "."}
+          {" "}The FluxFast request continued normally.
+        </p>
+      )}
+      {request.serverTrace === "invalid" && (
+        <p className="ff-protocol-warning" role="status">
+          Invalid DevTools trace metadata was ignored. The FluxFast request
+          continued normally.
+        </p>
+      )}
+      <section className="ff-context-grid ff-protocol-context" aria-label="Latest request">
+        <div className="ff-context-card">
+          <span>Request</span>
+          <strong title={`${request.method} ${request.path}`}>
+            {request.method} {request.path}
+          </strong>
+        </div>
+        <div className="ff-context-card">
+          <span>Result</span>
+          <strong className={`ff-status-${request.status}`}>
+            {request.status}
+            {request.httpStatus === null ? "" : ` · HTTP ${request.httpStatus}`}
+          </strong>
+        </div>
+        <div className="ff-context-card">
+          <span>Duration</span>
+          <strong>{formatDuration(request.durationMs)}</strong>
+        </div>
+        <div className="ff-context-card">
+          <span>Source</span>
+          <strong>{request.source === "ssr" ? "initial SSR" : "browser"}</strong>
+        </div>
+      </section>
+
+      <section className="ff-inspector-section" aria-labelledby="ff-protocol-versions">
+        <header className="ff-section-heading">
+          <div>
+            <p className="ff-eyebrow">Version-independent contracts</p>
+            <h3 id="ff-protocol-versions">Protocols</h3>
+          </div>
+          <span>{request.requestType} request</span>
+        </header>
+        <dl className="ff-detail-list ff-protocol-versions">
+          <Metric label="Application protocol" value={request.protocol ?? "—"} />
+          <Metric
+            label="DevTools protocol"
+            value={request.diagnosticProtocol ?? "—"}
+          />
+          <Metric label="Trace status" value={request.serverTrace} />
+          <Metric label="Trace body" value={request.truncated ? "truncated" : "complete"} />
+        </dl>
+      </section>
+
+      <section className="ff-protocol-grid">
+        <section aria-labelledby="ff-capabilities">
+          <h3 id="ff-capabilities">Capabilities</h3>
+          {request.capabilities.length === 0 ? (
+            <p className="ff-protocol-empty">—</p>
+          ) : (
+            <ul className="ff-token-list">
+              {request.capabilities.map(capability => (
+                <li key={capability}>{capability}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section aria-labelledby="ff-only-resources">
+          <h3 id="ff-only-resources">Only</h3>
+          {request.only.length === 0 ? (
+            <p className="ff-protocol-empty">—</p>
+          ) : (
+            <ul className="ff-token-list">
+              {request.only.map(key => <li key={key}>{key}</li>)}
+            </ul>
+          )}
+        </section>
+      </section>
+
+      <section className="ff-inspector-section" aria-labelledby="ff-known-versions">
+        <header className="ff-section-heading">
+          <div>
+            <p className="ff-eyebrow">Request optimization</p>
+            <h3 id="ff-known-versions">Known versions</h3>
+          </div>
+          <span>{request.knownVersions.length} advertised</span>
+        </header>
+        {request.knownVersions.length === 0 ? (
+          <p className="ff-empty">No known resource versions were advertised.</p>
+        ) : (
+          <div
+            className="ff-table-scroll ff-known-versions"
+            tabIndex={0}
+            role="region"
+            aria-label="Known resource versions"
+          >
+            <table className="ff-table">
+              <caption>Known resource versions sent by FluxFast</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Resource</th>
+                  <th scope="col">Version</th>
+                </tr>
+              </thead>
+              <tbody>
+                {request.knownVersions.map(item => (
+                  <tr key={item.key}>
+                    <th scope="row">{item.key}</th>
+                    <td title={item.version}>{abbreviatedVersion(item.version)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="ff-inspector-section" aria-labelledby="ff-protocol-response">
+        <header className="ff-section-heading">
+          <div>
+            <p className="ff-eyebrow">Safe response metadata</p>
+            <h3 id="ff-protocol-response">Response</h3>
+          </div>
+        </header>
+        {request.requestType === "page" ? (
+          <dl className="ff-metric-grid ff-response-metrics">
+            <Metric label="Observed" value={response.resourceObservations} />
+            <Metric label="Resources sent" value={response.resourcesSent} />
+            <Metric label="Resources omitted" value={response.resourcesOmitted} />
+            <Metric label="Deferred" value={response.deferred} />
+            <Metric label="Errors" value={response.errors} />
+          </dl>
+        ) : (
+          <dl className="ff-metric-grid ff-response-metrics">
+            <Metric label="Patch resources" value={response.patchResources} />
+            <Metric label="Invalidations" value={response.invalidations} />
+            <Metric label="Live signals" value={response.liveSignals} />
+          </dl>
+        )}
+      </section>
+      <p className="ff-scope-note">
+        Cookies, authorization, CSRF tokens, custom headers, request bodies,
+        and resource values are intentionally excluded.
+      </p>
+    </>
+  );
+}
+
 function FluxDevtoolsInner({
   position = "bottom",
   theme = "system",
@@ -916,6 +1177,28 @@ function FluxDevtoolsInner({
             >
               {activePanel === "mutations" && (
                 <MutationsPanel snapshot={snapshot} />
+              )}
+            </div>
+
+            <div
+              id="fluxfast-panel-live"
+              role="tabpanel"
+              aria-labelledby="fluxfast-tab-live"
+              className="ff-tab-panel"
+              hidden={activePanel !== "live"}
+            >
+              {activePanel === "live" && <LivePanel snapshot={snapshot} />}
+            </div>
+
+            <div
+              id="fluxfast-panel-protocol"
+              role="tabpanel"
+              aria-labelledby="fluxfast-tab-protocol"
+              className="ff-tab-panel"
+              hidden={activePanel !== "protocol"}
+            >
+              {activePanel === "protocol" && (
+                <ProtocolPanel snapshot={snapshot} />
               )}
             </div>
           </section>
