@@ -170,14 +170,14 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `ErrorEnvelope` | `const envelope: ErrorEnvelope = { protocol: "fluxfast/1", error: detail };` | Types a complete versioned protocol error response. |
 | `FLUX_CAPABILITIES` | `const advertised = FLUX_CAPABILITIES.join(",");` | Reads the complete supported capability list in canonical order. |
 | `FetchSseLiveTransport` | `const liveTransport = new FetchSseLiveTransport("https://app.example.com");` | Opens validated, abortable, credentialed SSE streams with standard FluxFast headers. |
-| `FetchTransport` | `const transport = new FetchTransport("https://app.example.com");` | Implements visits and mutations with Fetch, protocol validation, and structured errors. |
+| `FetchTransport` | `const transport = new FetchTransport("https://app.example.com");` | Implements visits and mutations with Fetch, protocol validation, structured errors, and optional subscriber-gated DevTools traces. |
 | `FluxCapability` | `const capability: FluxCapability = CAPABILITY_LIVE_RESOURCES;` | Restricts an adapter capability value to the supported token union. |
 | `FluxDiagnosticEvent` | `const event: FluxDiagnosticEvent = { id: "visit-1", timestamp: Date.now(), type: "navigation", data: {} };` | Describes one structured, correlation-ready development observation without storing application state. |
 | `FluxDiagnosticEventType` | `const type: FluxDiagnosticEventType = "resource-load";` | Restricts diagnostic events to the supported high-level runtime areas. |
 | `FluxDiagnosticListener` | `const listener: FluxDiagnosticListener = event => record(event.id);` | Types an isolated observer that cannot participate in runtime correctness. |
 | `FluxDiagnosticsHub` | `const stop = router.diagnostics.subscribe(listener);` | Distributes the router's optional, bounded development diagnostics and exposes an inactive fast-path signal without retaining a timeline. |
 | `FluxSseParser` | `const events = new FluxSseParser().push(chunk);` | Incrementally parses arbitrarily chunked SSE bytes into validated live events. |
-| `FluxTransport` | `const transport: FluxTransport = { visit, mutate };` | Defines the framework-neutral visit and mutation boundary consumed by `FluxRouter`. |
+| `FluxTransport` | `const transport: FluxTransport = { visit, mutate };` | Defines the framework-neutral visit and mutation boundary plus an optional diagnostics attachment consumed by `FluxRouter`. |
 | `HEADER_CAPABILITIES` | `headers[HEADER_CAPABILITIES] = serializeCapabilities();` | Writes the documented capability-negotiation request header. |
 | `HEADER_CLIENT_ID` | `headers[HEADER_CLIENT_ID] = clientId;` | Writes the router identity used to suppress an originating tab's echoed event. |
 | `HEADER_LIVE` | `headers[HEADER_LIVE] = "1";` | Marks a request as a live SSE stream request. |
@@ -211,7 +211,7 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `MAX_LIVE_RESOURCE_KEY_LENGTH` | `if (key.length > MAX_LIVE_RESOURCE_KEY_LENGTH) rejectKey();` | Applies the maximum logical resource-key length in live metadata. |
 | `MutationEnvelope` | `const envelope: MutationEnvelope = await transport.mutate(request);` | Types the complete versioned mutation response. |
 | `MutationPayload` | `const payload: MutationPayload = { invalidate: ["rooms"] };` | Types wire-level patches, invalidations, and redirects. |
-| `MutationTransportRequest` | `const request: MutationTransportRequest = { url: "/rooms/102", method: "PATCH", data };` | Configures one transport mutation including identity, headers, signal, and body. |
+| `MutationTransportRequest` | `const request: MutationTransportRequest = { url: "/rooms/102", method: "PATCH", data };` | Configures one transport mutation including identity, headers, signal, body, and an adapter-supplied diagnostic correlation ID. |
 | `PROTOCOL_MEDIA_TYPE` | `headers.accept = PROTOCOL_MEDIA_TYPE;` | Uses the official JSON media type for protocol requests. |
 | `PROTOCOL_VERSION` | `if (input.protocol !== PROTOCOL_VERSION) rejectVersion();` | Checks the independent browser protocol identifier. |
 | `PageCache` | `const pageCache = new PageCache(32);` | Caches bounded page shells while resource values remain in `ResourceStore`. |

@@ -38,6 +38,7 @@ const v11CoreAdditions = Object.freeze({
 const v11CoreDeclarationChanges = Object.freeze({
   "router.d.ts": "a48826c75584952c90b78bcdb22ac767a508712c2c040aa9afb8002525d45866",
   "store.d.ts": "17990d96eaf8f238d2edb3a1b395dc5e181ee1755422b5fca420750b4c9c13e0",
+  "transport.d.ts": "b7320ac740792c77abd79234d95e9ad720822b39983c7723ee25d018d21a67f5",
 });
 
 test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () => {
