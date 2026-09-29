@@ -175,7 +175,7 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `FluxDiagnosticEvent` | `const event: FluxDiagnosticEvent = { id: "visit-1", timestamp: Date.now(), type: "navigation", data: {} };` | Describes one structured, correlation-ready development observation without storing application state. |
 | `FluxDiagnosticEventType` | `const type: FluxDiagnosticEventType = "resource-load";` | Restricts diagnostic events to the supported high-level runtime areas. |
 | `FluxDiagnosticListener` | `const listener: FluxDiagnosticListener = event => record(event.id);` | Types an isolated observer that cannot participate in runtime correctness. |
-| `FluxDiagnosticsHub` | `const stop = new FluxDiagnosticsHub().subscribe(listener);` | Distributes optional development diagnostics and exposes an inactive fast-path signal without retaining a timeline. |
+| `FluxDiagnosticsHub` | `const stop = router.diagnostics.subscribe(listener);` | Distributes the router's optional, bounded development diagnostics and exposes an inactive fast-path signal without retaining a timeline. |
 | `FluxSseParser` | `const events = new FluxSseParser().push(chunk);` | Incrementally parses arbitrarily chunked SSE bytes into validated live events. |
 | `FluxTransport` | `const transport: FluxTransport = { visit, mutate };` | Defines the framework-neutral visit and mutation boundary consumed by `FluxRouter`. |
 | `HEADER_CAPABILITIES` | `headers[HEADER_CAPABILITIES] = serializeCapabilities();` | Writes the documented capability-negotiation request header. |
@@ -223,6 +223,7 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `PrefetchManager` | `const prefetch = new PrefetchManager(10_000);` | Deduplicates in-flight prefetches and caches version-safe results with bounded eviction. |
 | `ProtocolVersion` | `const version: ProtocolVersion = "fluxfast/1";` | Restricts a protocol version value to the supported wire identifier. |
 | `ResourceErrorDetail` | `const detail: ResourceErrorDetail = { type: "timeout", message: "Unavailable" };` | Types sanitized partial resource failure data. |
+| `ResourceMetadataSnapshot` | `const resources: readonly ResourceMetadataSnapshot[] = router.resourceStore.getRecordsSnapshot();` | Reports keys, versions, timestamps, status, staleness, and subscriber presence without exposing resource values or errors. |
 | `ResourceWireRecord` | `const record: ResourceWireRecord<Room[]> = { version: "v1", value: rooms };` | Pairs a browser resource value with its opaque version. |
 | `VALIDATION_FORMATS` | `const formats = [...VALIDATION_FORMATS];` | Reads every supported native string-format validator. |
 | `VALIDATION_PATTERN_MAX_LENGTH` | `if (pattern.length > VALIDATION_PATTERN_MAX_LENGTH) rejectPattern();` | Applies the maximum accepted regex source length. |

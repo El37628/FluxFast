@@ -75,6 +75,50 @@ Output:
 Use `createFluxRuntime(options)` when a factory is more convenient; it returns
 the same `FluxRouter` public runtime.
 
+### Observe development diagnostics
+
+Every `FluxRouter` owns a `diagnostics` hub. It is inactive until a development
+tool subscribes, so normal application execution does not allocate diagnostic
+events. The hub distributes observations only; it does not retain a timeline.
+
+```ts
+const stop = router.diagnostics.subscribe(event => {
+  console.log(event.type, event.correlationId, event.data);
+});
+
+await router.visit("/rooms?token=not-recorded");
+stop();
+```
+
+A navigation emits correlated `navigation`, `page-cache`, and
+`resource-update` observations. Runtime diagnostics contain bounded metadata
+such as route paths, resource keys, versions, counts, phases, and error types.
+They omit query strings, headers, request bodies, resource values, and raw
+error messages. DevTools consumers should still treat the channel as
+development-only and keep their own bounded history.
+
+For the current store state, use the value-free inspection snapshot:
+
+```ts
+console.log(router.resourceStore.getRecordsSnapshot());
+```
+
+```json
+[
+  {
+    "key": "rooms",
+    "version": "rooms-v1",
+    "updatedAt": 1760000000000,
+    "status": "ready",
+    "stale": false,
+    "hasSubscribers": true
+  }
+]
+```
+
+Pending or error-only resources use `null` for `version` and `updatedAt`. The
+snapshot never contains `value`, error messages, or error detail objects.
+
 ### Validate unknown input
 
 Generated validators use this API internally. A custom integration can also
@@ -301,6 +345,7 @@ PrefetchEntry
 PrefetchManager
 ProtocolVersion
 ResourceErrorDetail
+ResourceMetadataSnapshot
 ResourceWireRecord
 VALIDATION_FORMATS
 VALIDATION_PATTERN_MAX_LENGTH

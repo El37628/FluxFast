@@ -2,6 +2,10 @@
 
 import { PageCache } from "./cache.js";
 import {
+  FluxDiagnosticsHub,
+  type FluxDiagnosticEventType,
+} from "./diagnostics.js";
+import {
   EventEmitter,
   FluxEventListener,
   FluxEventName,
@@ -69,6 +73,7 @@ export class FluxRouter {
   public readonly pageStore: PageStore;
   public readonly transport: FluxTransport;
   public readonly events: EventEmitter;
+  public readonly diagnostics: FluxDiagnosticsHub;
   public readonly history: HistoryManager;
   public readonly prefetchManager: PrefetchManager;
   public readonly pageCache: PageCache;
@@ -80,9 +85,13 @@ export class FluxRouter {
   private activeDeferredController: AbortController | null = null;
   private activeDeferredKeys: string[] = [];
   private activeDeferredEpochs = new Map<string, number>();
+  private activeDeferredDiagnosticId?: string;
+  private activeDeferredUrl = "/";
   private visitCounter = 0;
   private lifecycleGeneration = 0;
   private resourceLoadCounter = 0;
+  private diagnosticEventCounter = 0;
+  private diagnosticOperationCounter = 0;
   private resourceEpochCounter = 0;
   private readonly resourceEpochs = new ResourceEpochMap();
   private initialDeferredBatch?: { keys: string[]; url: string };
@@ -109,6 +118,7 @@ export class FluxRouter {
     this.pageStore = options.pageStore ?? new PageStore(initialPage);
     this.transport = options.transport ?? createFetchTransport();
     this.events = new EventEmitter();
+    this.diagnostics = new FluxDiagnosticsHub();
     this.history = options.history ?? new HistoryManager();
     this.prefetchManager = options.prefetchManager ?? new PrefetchManager();
     this.pageCache = options.pageCache ?? new PageCache(options.maxPages);
@@ -193,6 +203,13 @@ export class FluxRouter {
         );
         if (this.liveStarted) this.liveManager.connect();
         this.events.emit("cache:hit", { key: url });
+        if (this.diagnostics.active) {
+          this.emitDiagnostic("page-cache", {
+            action: "hit",
+            source: "history",
+            url: this.diagnosticUrl(url),
+          });
+        }
         if (cached.pendingDeferred.length > 0) {
           void this.startDeferredBatch(
             cached.pendingDeferred,
@@ -202,6 +219,13 @@ export class FluxRouter {
         return;
       }
       this.events.emit("cache:miss", { key: url });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("page-cache", {
+          action: "miss",
+          source: "history",
+          url: this.diagnosticUrl(url),
+        });
+      }
       void this.visit(url, {
         preserveState: true,
         replace: true,
@@ -239,6 +263,14 @@ export class FluxRouter {
     const controller = new AbortController();
     this.activeController = controller;
     this.events.emit("visit:start", { visitId, url });
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("navigation", {
+        phase: "start",
+        url: this.diagnosticUrl(url),
+        requestedResourceCount: options.only?.length ?? 0,
+        partial: Boolean(options.only?.length),
+      }, visitId);
+    }
 
     try {
       const knownVersions = this.resourceStore.exportKnownVersions();
@@ -246,15 +278,38 @@ export class FluxRouter {
 
       if (options.usePrefetch !== false && !options.only?.length) {
         envelope = this.prefetchManager.getCached(url, knownVersions);
-        if (envelope) this.events.emit("cache:hit", { key: url });
+        if (envelope) {
+          this.events.emit("cache:hit", { key: url });
+          if (this.diagnostics.active) {
+            this.emitDiagnostic("page-cache", {
+              action: "hit",
+              source: "navigation-prefetch",
+              url: this.diagnosticUrl(url),
+            }, visitId);
+          }
+        }
       }
 
       if (!envelope && options.usePrefetch !== false && !options.only?.length) {
         envelope = await this.prefetchManager.getPending(url, knownVersions);
+        if (envelope && this.diagnostics.active) {
+          this.emitDiagnostic("page-cache", {
+            action: "hit",
+            source: "navigation-pending-prefetch",
+            url: this.diagnosticUrl(url),
+          }, visitId);
+        }
       }
 
       if (!envelope) {
         this.events.emit("cache:miss", { key: url });
+        if (this.diagnostics.active) {
+          this.emitDiagnostic("page-cache", {
+            action: "miss",
+            source: "navigation",
+            url: this.diagnosticUrl(url),
+          }, visitId);
+        }
         envelope = await this.transport.visit({
           url,
           visitId,
@@ -267,6 +322,12 @@ export class FluxRouter {
 
       if (this.currentVisitId !== visitId) {
         this.events.emit("visit:cancel", { visitId, url });
+        if (this.diagnostics.active) {
+          this.emitDiagnostic("navigation", {
+            phase: "cancel",
+            url: this.diagnosticUrl(url),
+          }, visitId);
+        }
         return;
       }
 
@@ -287,6 +348,13 @@ export class FluxRouter {
         url: envelope.page.url || url,
         component: envelope.page.component,
       });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("navigation", {
+          phase: "success",
+          url: this.diagnosticUrl(envelope.page.url || url),
+          component: this.diagnosticText(envelope.page.component),
+        }, visitId);
+      }
       if (this.currentVisitId !== visitId) return;
       this.startDeferredEnvelope(appliedEnvelope);
       // Eviction can forget a key's exact history, or remove a value the server
@@ -319,10 +387,23 @@ export class FluxRouter {
         controller.signal.aborted
       ) {
         this.events.emit("visit:cancel", { visitId, url });
+        if (this.diagnostics.active) {
+          this.emitDiagnostic("navigation", {
+            phase: "cancel",
+            url: this.diagnosticUrl(url),
+          }, visitId);
+        }
         return;
       }
       const normalized = error instanceof Error ? error : new Error(String(error));
       this.events.emit("visit:error", { visitId, url, error: normalized });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("navigation", {
+          phase: "error",
+          url: this.diagnosticUrl(url),
+          errorType: this.diagnosticErrorType(error),
+        }, visitId);
+      }
       throw error;
     } finally {
       if (this.activeController === controller) this.activeController = null;
@@ -363,6 +444,9 @@ export class FluxRouter {
   startLive(): void {
     this.liveStarted = true;
     this.liveManager.connect();
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("lifecycle", { phase: "live-start" });
+    }
   }
 
   /** Stop live synchronization while retaining the current page manifest. */
@@ -371,6 +455,9 @@ export class FluxRouter {
     this.supersedeLiveWork();
     this.cancelPendingLiveRefresh();
     this.liveManager.disconnect();
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("lifecycle", { phase: "live-stop" });
+    }
   }
 
   /** Load a resource batch without changing the current page or browser history. */
@@ -405,6 +492,14 @@ export class FluxRouter {
       reason: options.reason,
     };
     this.events.emit("resource:load:start", loadEvent);
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("resource-load", {
+        phase: "start",
+        url: this.diagnosticUrl(url),
+        reason: options.reason,
+        ...this.diagnosticKeys(requestedKeys),
+      }, loadId);
+    }
     if (lifecycleGeneration !== this.lifecycleGeneration) return;
 
     try {
@@ -433,6 +528,13 @@ export class FluxRouter {
           })) {
             if (lifecycleGeneration !== this.lifecycleGeneration) return;
             this.events.emit("resource:update", { key, version: record.version });
+            if (this.diagnostics.active) {
+              this.emitDiagnostic("resource-update", {
+                key: this.diagnosticText(key),
+                version: this.diagnosticText(record.version),
+                source: options.reason,
+              }, loadId);
+            }
           }
           settledKeys.push(key);
           continue;
@@ -446,6 +548,14 @@ export class FluxRouter {
             key,
             error: resourceError,
           });
+          if (this.diagnostics.active) {
+            this.emitDiagnostic("resource-update", {
+              key: this.diagnosticText(key),
+              state: "error",
+              errorType: this.diagnosticText(resourceError.type, 128),
+              source: options.reason,
+            }, loadId);
+          }
           settledKeys.push(key);
           continue;
         }
@@ -459,15 +569,37 @@ export class FluxRouter {
           })) {
             if (lifecycleGeneration !== this.lifecycleGeneration) return;
             this.events.emit("resource:update", { key, version: record.version });
+            if (this.diagnostics.active) {
+              this.emitDiagnostic("resource-update", {
+                key: this.diagnosticText(key),
+                version: this.diagnosticText(record.version),
+                source: options.reason,
+              }, loadId);
+            }
           }
         } else {
           this.resourceStore.invalidate(key);
+          if (this.diagnostics.active) {
+            this.emitDiagnostic("resource-invalidate", {
+              key: this.diagnosticText(key),
+              source: options.reason,
+            }, loadId);
+          }
         }
         settledKeys.push(key);
       }
       if (lifecycleGeneration !== this.lifecycleGeneration) return;
       this.pageCache.settleResources(url, settledKeys, this.resourceStore);
       this.events.emit("resource:load:success", loadEvent);
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("resource-load", {
+          phase: "success",
+          url: this.diagnosticUrl(url),
+          reason: options.reason,
+          ...this.diagnosticKeys(requestedKeys),
+          settledCount: settledKeys.length,
+        }, loadId);
+      }
     } catch (error) {
       // Preserve the caller's failure without writing to or notifying a new
       // session (or a destroyed router), even if transport abort was ignored.
@@ -505,6 +637,14 @@ export class FluxRouter {
             key,
             error: resourceError,
           });
+          if (this.diagnostics.active) {
+            this.emitDiagnostic("resource-update", {
+              key: this.diagnosticText(key),
+              state: "error",
+              errorType: this.diagnosticText(resourceError.type, 128),
+              source: options.reason,
+            }, loadId);
+          }
           settledKeys.push(key);
         }
       }
@@ -516,6 +656,15 @@ export class FluxRouter {
         ...loadEvent,
         error: normalized,
       });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("resource-load", {
+          phase: aborted ? "abort" : "error",
+          url: this.diagnosticUrl(url),
+          reason: options.reason,
+          errorType: this.diagnosticErrorType(error),
+          ...this.diagnosticKeys(requestedKeys),
+        }, loadId);
+      }
       throw error;
     } finally {
       this.activeLiveLoadEpochs.delete(loadId);
@@ -524,14 +673,33 @@ export class FluxRouter {
 
   async prefetch(url: string): Promise<PageEnvelope> {
     const lifecycleGeneration = this.lifecycleGeneration;
+    const prefetchId = this.nextDiagnosticOperationId("prefetch");
     this.events.emit("prefetch:start", { url });
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("prefetch", {
+        phase: "start",
+        url: this.diagnosticUrl(url),
+      }, prefetchId);
+    }
     const knownVersions = this.resourceStore.exportKnownVersions();
     const startedAtEpoch = this.resourceEpochCounter;
-    const envelope = await this.prefetchManager.fetch(
-      url,
-      this.transport,
-      knownVersions
-    );
+    let envelope: PageEnvelope;
+    try {
+      envelope = await this.prefetchManager.fetch(
+        url,
+        this.transport,
+        knownVersions
+      );
+    } catch (error) {
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("prefetch", {
+          phase: "error",
+          url: this.diagnosticUrl(url),
+          errorType: this.diagnosticErrorType(error),
+        }, prefetchId);
+      }
+      throw error;
+    }
     if (lifecycleGeneration !== this.lifecycleGeneration) return envelope;
     const resourceEntries = Object.entries(envelope.resources);
     const safeResources = Object.fromEntries(
@@ -553,11 +721,20 @@ export class FluxRouter {
       if (lifecycleGeneration !== this.lifecycleGeneration) return envelope;
       const updated = this.resourceStore.set({ key, version: record.version, value: record.value });
       if (lifecycleGeneration !== this.lifecycleGeneration) return envelope;
-      if (updated) this.events.emit("resource:update", { key, version: record.version });
+      if (updated) {
+        this.events.emit("resource:update", { key, version: record.version });
+        if (this.diagnostics.active) {
+          this.emitDiagnostic("resource-update", {
+            key: this.diagnosticText(key),
+            version: this.diagnosticText(record.version),
+            source: "prefetch",
+          }, prefetchId);
+        }
+      }
     }
     if (lifecycleGeneration !== this.lifecycleGeneration) return envelope;
     if (!hasResourceRace) {
-      this.cachePageEnvelope(envelope);
+      this.cachePageEnvelope(envelope, prefetchId);
     } else {
       // A missing/evicted current version can otherwise make this obsolete
       // envelope reusable later. Reject only this envelope; another prefetch
@@ -565,6 +742,14 @@ export class FluxRouter {
       rejectPrefetchEnvelope(this.prefetchManager, envelope);
     }
     this.events.emit("prefetch:success", { url });
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("prefetch", {
+        phase: "success",
+        url: this.diagnosticUrl(url),
+        resourceCount: Object.keys(envelope.resources).length,
+        cacheable: !hasResourceRace,
+      }, prefetchId);
+    }
     return envelope;
   }
 
@@ -575,13 +760,22 @@ export class FluxRouter {
   ): Promise<MutationEnvelope> {
     const lifecycleGeneration = this.lifecycleGeneration;
     const visitCounter = this.visitCounter;
+    const mutationId = this.nextDiagnosticOperationId("mutation");
+    const method = options.method ?? "POST";
     this.events.emit("mutation:start", { url });
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("mutation", {
+        phase: "start",
+        url: this.diagnosticUrl(url),
+        method: this.diagnosticText(method, 32),
+      }, mutationId);
+    }
 
     try {
       const envelope = await this.transport.mutate({
         url,
         data,
-        method: options.method ?? "POST",
+        method,
         headers: options.headers,
         clientId: this.clientId,
       });
@@ -594,8 +788,21 @@ export class FluxRouter {
         if (this.resourceStore.patch(key, patches)) {
           const version = this.resourceStore.getRecord(key)?.version ?? "";
           this.events.emit("resource:update", { key, version });
+          if (this.diagnostics.active) {
+            this.emitDiagnostic("resource-update", {
+              key: this.diagnosticText(key),
+              version: this.diagnosticText(version),
+              source: "mutation",
+            }, mutationId);
+          }
         } else {
           this.resourceStore.invalidate(key);
+          if (this.diagnostics.active) {
+            this.emitDiagnostic("resource-invalidate", {
+              key: this.diagnosticText(key),
+              source: "mutation-patch-miss",
+            }, mutationId);
+          }
         }
       }
 
@@ -609,6 +816,13 @@ export class FluxRouter {
           this.resourceStore.invalidate(key);
         }
         this.events.emit("resource:invalidate", { key });
+        if (this.diagnostics.active) {
+          this.emitDiagnostic("resource-invalidate", {
+            key: this.diagnosticText(key),
+            source: "mutation",
+            subscribed: this.resourceStore.hasSubscribers(key),
+          }, mutationId);
+        }
       }
 
       const canRedirect = visitCounter === this.visitCounter;
@@ -633,11 +847,33 @@ export class FluxRouter {
       }
 
       this.events.emit("mutation:success", { url });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("mutation", {
+          phase: "success",
+          url: this.diagnosticUrl(url),
+          method: this.diagnosticText(method, 32),
+          patchResourceCount: Object.keys(envelope.mutation.patches ?? {}).length,
+          invalidationCount: envelope.mutation.invalidate?.length ?? 0,
+          redirect: envelope.mutation.externalRedirect
+            ? "external"
+            : envelope.mutation.redirect
+              ? "internal"
+              : "none",
+        }, mutationId);
+      }
       return envelope;
     } catch (error) {
       if (lifecycleGeneration !== this.lifecycleGeneration) throw error;
       const normalized = error instanceof Error ? error : new Error(String(error));
       this.events.emit("mutation:error", { url, error: normalized });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("mutation", {
+          phase: "error",
+          url: this.diagnosticUrl(url),
+          method: this.diagnosticText(method, 32),
+          errorType: this.diagnosticErrorType(error),
+        }, mutationId);
+      }
       throw error;
     }
   }
@@ -655,6 +891,9 @@ export class FluxRouter {
     this.pageCache.clear();
     this.prefetchManager.clear();
     this.resourceEpochs.clear();
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("lifecycle", { phase: "clear" });
+    }
   }
 
   destroy(): void {
@@ -674,6 +913,10 @@ export class FluxRouter {
     this.history.destroy();
     this.events.removeAllListeners();
     this.resourceEpochs.clear();
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("lifecycle", { phase: "destroy" });
+    }
+    this.diagnostics.removeAllListeners();
   }
 
   private applyPageEnvelope(
@@ -714,7 +957,16 @@ export class FluxRouter {
       if (!isCurrent()) return appliedEnvelope;
       const updated = this.resourceStore.set({ key, version: record.version, value: record.value });
       if (!isCurrent()) return appliedEnvelope;
-      if (updated) this.events.emit("resource:update", { key, version: record.version });
+      if (updated) {
+        this.events.emit("resource:update", { key, version: record.version });
+        if (this.diagnostics.active) {
+          this.emitDiagnostic("resource-update", {
+            key: this.diagnosticText(key),
+            version: this.diagnosticText(record.version),
+            source: "navigation",
+          }, visitId ?? undefined);
+        }
+      }
     }
     for (const [key, error] of Object.entries(envelope.resourceErrors ?? {})) {
       if (!isCurrent()) return appliedEnvelope;
@@ -735,11 +987,14 @@ export class FluxRouter {
     if (!isCurrent()) return appliedEnvelope;
     if (this.liveStarted) this.liveManager.connect();
     if (!isCurrent()) return appliedEnvelope;
-    this.cachePageEnvelope(appliedEnvelope);
+    this.cachePageEnvelope(appliedEnvelope, visitId ?? undefined);
     return appliedEnvelope;
   }
 
-  private cachePageEnvelope(envelope: PageEnvelope): void {
+  private cachePageEnvelope(
+    envelope: PageEnvelope,
+    correlationId?: string
+  ): void {
     const allKnownVersions = this.resourceStore.exportKnownVersions();
     const liveKeys = Array.from(new Set(envelope.live ?? []));
     if (!envelope.resourceKeys) {
@@ -748,6 +1003,14 @@ export class FluxRouter {
         pendingDeferred: [],
         liveKeys,
       });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("page-cache", {
+          action: "write",
+          url: this.diagnosticUrl(envelope.page.url || "/"),
+          resourceCount: Object.keys(allKnownVersions).length,
+          pendingDeferredCount: 0,
+        }, correlationId);
+      }
       return;
     }
 
@@ -764,27 +1027,67 @@ export class FluxRouter {
       pendingDeferred,
       liveKeys,
     });
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("page-cache", {
+        action: "write",
+        url: this.diagnosticUrl(envelope.page.url || "/"),
+        resourceCount: resourceKeys.length,
+        pendingDeferredCount: pendingDeferred.length,
+      }, correlationId);
+    }
   }
 
   private emitResourceUpdates(keys: string[]): void {
     for (const key of keys) {
       const version = this.resourceStore.getRecord(key)?.version ?? "";
       this.events.emit("resource:update", { key, version });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("resource-update", {
+          key: this.diagnosticText(key),
+          version: this.diagnosticText(version),
+          source: "initial",
+        });
+      }
     }
   }
 
   private handleLiveEvent(event: LiveEvent): void {
+    const liveCorrelationId = this.nextDiagnosticOperationId("live");
     if (event.type === "invalidate") {
       this.events.emit("live:invalidate", { keyCount: event.keys.length });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("live", {
+          phase: "event",
+          eventType: event.type,
+          keyCount: event.keys.length,
+          selfOriginated: event.originClientId === this.clientId,
+        }, liveCorrelationId);
+      }
     } else if (event.type === "patch") {
       this.events.emit("live:patch", {
         resourceCount: Object.keys(event.patches).length,
       });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("live", {
+          phase: "event",
+          eventType: event.type,
+          keyCount: Object.keys(event.patches).length,
+          selfOriginated: event.originClientId === this.clientId,
+        }, liveCorrelationId);
+      }
     } else if (event.type === "resync") {
       this.events.emit("live:resync", {
         keyCount: event.keys.length,
         reason: event.reason,
       });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("live", {
+          phase: "event",
+          eventType: event.type,
+          keyCount: event.keys.length,
+          reason: event.reason,
+        }, liveCorrelationId);
+      }
     }
     if (
       (event.type === "invalidate" || event.type === "patch") &&
@@ -801,6 +1104,13 @@ export class FluxRouter {
         if (this.resourceStore.patch(key, event.patches[key])) {
           const version = this.resourceStore.getRecord(key)?.version ?? "";
           this.events.emit("resource:update", { key, version });
+          if (this.diagnostics.active) {
+            this.emitDiagnostic("resource-update", {
+              key: this.diagnosticText(key),
+              version: this.diagnosticText(version),
+              source: "live",
+            }, liveCorrelationId);
+          }
         }
       }
       this.queueLiveRefresh(keys, "live");
@@ -814,6 +1124,12 @@ export class FluxRouter {
       this.bumpResourceEpoch(key);
       this.resourceStore.markStale(key);
       this.events.emit("resource:invalidate", { key });
+      if (this.diagnostics.active) {
+        this.emitDiagnostic("resource-invalidate", {
+          key: this.diagnosticText(key),
+          source: event.type,
+        }, liveCorrelationId);
+      }
     }
     this.queueLiveRefresh(
       keys,
@@ -822,6 +1138,22 @@ export class FluxRouter {
   }
 
   private handleLiveDiagnostic(event: LiveManagerDiagnostic): void {
+    const liveCorrelationId = this.nextDiagnosticOperationId("live");
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("live", {
+        phase: event.type,
+        ...("keyCount" in event ? { keyCount: event.keyCount } : {}),
+        ...("reconnectAttempt" in event
+          ? { reconnectAttempt: event.reconnectAttempt }
+          : {}),
+        ...("reason" in event ? { reason: event.reason } : {}),
+        ...("willReconnect" in event
+          ? { willReconnect: event.willReconnect }
+          : {}),
+        ...("errorType" in event ? { errorType: event.errorType } : {}),
+        ...("eventType" in event ? { eventType: event.eventType } : {}),
+      }, liveCorrelationId);
+    }
     switch (event.type) {
       case "connect:start":
         this.events.emit("live:connect:start", {
@@ -954,9 +1286,22 @@ export class FluxRouter {
 
   private startDeferredBatch(keys: string[], url: string): Promise<void> {
     this.abortActiveDeferred();
+    const deferredId = this.nextDiagnosticOperationId("deferred");
+    const diagnosticLifecycleGeneration = deferredId === undefined
+      ? undefined
+      : this.lifecycleGeneration;
     const controller = new AbortController();
     this.activeDeferredController = controller;
     this.activeDeferredKeys = [...keys];
+    if (deferredId !== undefined) {
+      this.activeDeferredDiagnosticId = deferredId;
+      this.activeDeferredUrl = url;
+      this.emitDiagnostic("deferred", {
+        phase: "start",
+        url: this.diagnosticUrl(url),
+        ...this.diagnosticKeys(keys),
+      }, deferredId);
+    }
     const promise = this.loadResources(keys, {
       url,
       reason: "deferred",
@@ -965,11 +1310,43 @@ export class FluxRouter {
     this.activeDeferredEpochs = new Map(
       keys.map(key => [key, this.resourceEpochs.get(key)?.epoch ?? 0])
     );
+    if (deferredId !== undefined) {
+      void promise.then(
+        () => {
+          if (
+            diagnosticLifecycleGeneration === this.lifecycleGeneration &&
+            this.diagnostics.active
+          ) {
+            this.emitDiagnostic("deferred", {
+              phase: "success",
+              url: this.diagnosticUrl(url),
+              ...this.diagnosticKeys(keys),
+            }, deferredId);
+          }
+        },
+        error => {
+          if (
+            diagnosticLifecycleGeneration === this.lifecycleGeneration &&
+            !controller.signal.aborted &&
+            this.diagnostics.active
+          ) {
+            this.emitDiagnostic("deferred", {
+              phase: "error",
+              url: this.diagnosticUrl(url),
+              errorType: this.diagnosticErrorType(error),
+              ...this.diagnosticKeys(keys),
+            }, deferredId);
+          }
+        }
+      );
+    }
     void promise.finally(() => {
       if (this.activeDeferredController === controller) {
         this.activeDeferredController = null;
         this.activeDeferredKeys = [];
         this.activeDeferredEpochs.clear();
+        this.activeDeferredDiagnosticId = undefined;
+        this.activeDeferredUrl = "/";
       }
     }).catch(() => undefined);
     return promise;
@@ -977,6 +1354,13 @@ export class FluxRouter {
 
   private abortActiveDeferred(): void {
     if (!this.activeDeferredController) return;
+    if (this.diagnostics.active) {
+      this.emitDiagnostic("deferred", {
+        phase: "abort",
+        url: this.diagnosticUrl(this.activeDeferredUrl),
+        ...this.diagnosticKeys(this.activeDeferredKeys),
+      }, this.activeDeferredDiagnosticId);
+    }
     for (const key of this.activeDeferredKeys) {
       if (this.resourceEpochs.get(key)?.epoch !== this.activeDeferredEpochs.get(key)) {
         continue;
@@ -998,6 +1382,66 @@ export class FluxRouter {
     this.activeDeferredController = null;
     this.activeDeferredKeys = [];
     this.activeDeferredEpochs.clear();
+    this.activeDeferredDiagnosticId = undefined;
+    this.activeDeferredUrl = "/";
+  }
+
+  private nextDiagnosticOperationId(prefix: string): string | undefined {
+    if (!this.diagnostics.active) return undefined;
+    return `${prefix}_${++this.diagnosticOperationCounter}_${Date.now().toString(36)}`;
+  }
+
+  private emitDiagnostic(
+    type: FluxDiagnosticEventType,
+    data: unknown,
+    correlationId?: string
+  ): void {
+    if (!this.diagnostics.active) return;
+    const timestamp = Date.now();
+    this.diagnostics.emit({
+      id: `diagnostic_${++this.diagnosticEventCounter}_${timestamp.toString(36)}`,
+      timestamp,
+      type,
+      ...(correlationId === undefined ? {} : { correlationId }),
+      data,
+    });
+  }
+
+  private diagnosticUrl(url: string): string {
+    try {
+      const parsed = new URL(url, "http://fluxfast.local");
+      return this.diagnosticText(parsed.pathname || "/", 2_048);
+    } catch {
+      return this.diagnosticText(url.split(/[?#]/, 1)[0] || "/", 2_048);
+    }
+  }
+
+  private diagnosticKeys(keys: Iterable<string>): {
+    keys: string[];
+    keyCount: number;
+    keysTruncated: boolean;
+  } {
+    const allKeys = Array.from(keys);
+    const maximumKeys = 100;
+    return {
+      keys: allKeys
+        .slice(0, maximumKeys)
+        .map(key => this.diagnosticText(key, 256)),
+      keyCount: allKeys.length,
+      keysTruncated: allKeys.length > maximumKeys,
+    };
+  }
+
+  private diagnosticErrorType(error: unknown): string {
+    return this.diagnosticText(error instanceof Error && error.name
+      ? error.name
+      : "UnknownError", 128);
+  }
+
+  private diagnosticText(value: string, maximumLength = 256): string {
+    return value.length <= maximumLength
+      ? value
+      : `${value.slice(0, maximumLength - 1)}…`;
   }
 }
 

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { FluxDiagnosticEvent } from "../src/diagnostics";
 import { HistoryManager } from "../src/history";
 import { LiveManager } from "../src/live/manager";
 import type { LiveEvent } from "../src/live/protocol";
@@ -114,6 +115,8 @@ describe("FluxRouter live invalidation synchronization", () => {
       },
     });
     const observed: Array<[string, unknown]> = [];
+    const diagnostics: FluxDiagnosticEvent[] = [];
+    router.diagnostics.subscribe(event => diagnostics.push(event));
     const eventNames = [
       "live:connect:start",
       "live:connect:open",
@@ -174,6 +177,26 @@ describe("FluxRouter live invalidation synchronization", () => {
     ]));
     expect(JSON.stringify(observed)).not.toContain("secret");
     expect(JSON.stringify(observed)).not.toContain("summary");
+    const liveDiagnostics = diagnostics.filter(event => event.type === "live");
+    expect(liveDiagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        correlationId: expect.stringMatching(/^live_/),
+        data: expect.objectContaining({
+          phase: "event",
+          eventType: "invalidate",
+          keyCount: 1,
+        }),
+      }),
+      expect.objectContaining({
+        correlationId: expect.stringMatching(/^live_/),
+        data: expect.objectContaining({
+          phase: "connect:open",
+          keyCount: 1,
+        }),
+      }),
+    ]));
+    expect(JSON.stringify(liveDiagnostics)).not.toContain("secret");
+    expect(JSON.stringify(liveDiagnostics)).not.toContain("summary");
     router.destroy();
   });
 
