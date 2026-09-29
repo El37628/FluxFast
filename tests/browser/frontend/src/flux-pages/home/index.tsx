@@ -23,6 +23,12 @@ export default function HomePage() {
       <Link href={routes.hotelRooms({ hotel_id: 101 })}>
         View Hotel 101 rooms
       </Link>
+      <Link href="/deferred" prefetch={false}>
+        View deferred dashboard
+      </Link>
+      <Link href="/live" prefetch={false}>
+        View live dashboard
+      </Link>
     </main>
   );
 }

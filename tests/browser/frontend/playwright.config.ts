@@ -18,6 +18,7 @@ const developmentServer = {
   cwd: repositoryRoot,
   env: {
     ...localDevelopmentEnv,
+    FLUXFAST_E2E_DEVTOOLS: "0",
     NEXT_TELEMETRY_DISABLED: "1",
   },
   url: `http://127.0.0.1:${port}`,
@@ -31,6 +32,7 @@ const productionServer = {
   cwd: repositoryRoot,
   env: {
     ...process.env,
+    FLUXFAST_E2E_DEVTOOLS: "0",
     NEXT_TELEMETRY_DISABLED: "1",
   },
   url: `http://127.0.0.1:${port}/fluxfast/readyz`,
@@ -43,6 +45,7 @@ export default defineConfig({
   testDir: "./e2e",
   testIgnore: [
     "distributed-live.spec.ts",
+    "devtools.spec.ts",
     "production-distributed.spec.ts",
   ],
   fullyParallel: false,

@@ -1,8 +1,8 @@
 import { defineFluxConfig } from "@fluxfast/next";
-import { FluxApplication } from "@/.fluxfast/pages.generated";
+import { BrowserFixtureApplication } from "@/components/BrowserFixtureApplication";
 import type {} from "@/.fluxfast/types.generated";
 
 export const fluxConfig = defineFluxConfig({
-  application: FluxApplication,
+  application: BrowserFixtureApplication,
   cache: { maxResources: 32, maxPages: 8 },
 });
