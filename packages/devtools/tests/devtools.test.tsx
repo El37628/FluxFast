@@ -177,6 +177,124 @@ describe("FluxDevtools", () => {
     router.destroy();
   });
 
+  it("separates cache layers and exposes value-free mutation details", async () => {
+    const router = new FluxRouter({ deferHistory: true });
+    await mountDevtools(
+      <FluxProvider router={router}>
+        <FluxDevtools defaultOpen />
+      </FluxProvider>,
+      router
+    );
+
+    await act(async () => {
+      const emit = (
+        id: string,
+        type: Parameters<typeof router.diagnostics.emit>[0]["type"],
+        data: unknown,
+        correlationId: string
+      ) => router.diagnostics.emit({
+        id,
+        type,
+        data,
+        correlationId,
+        timestamp: Date.now(),
+      });
+      emit("page-cache", "page-cache", {
+        action: "miss",
+        source: "navigation",
+        url: "/rooms?cache-secret=hidden",
+      }, "visit-cache");
+      emit("page-transport", "transport", {
+        phase: "start",
+        requestType: "page",
+        method: "GET",
+        path: "/rooms?transport-secret=hidden",
+      }, "visit-cache");
+      emit("page-trace", "server-trace", {
+        type: "page",
+        durationMs: 13,
+        truncated: false,
+        resources: [{
+          key: "rooms",
+          result: "cache-hit",
+          cacheResult: "hit",
+          cacheBackend: "redis",
+          durationMs: 2.4,
+          cacheMs: 1.2,
+          loaderMs: 0,
+          knownVersion: false,
+          sent: true,
+          value: "resource-secret",
+        }],
+      }, "visit-cache");
+      emit("mutation-start", "mutation", {
+        phase: "start",
+        method: "PATCH",
+        url: "/rooms/12?token=hidden",
+        body: "request-secret",
+      }, "mutation-1");
+      emit("mutation-trace", "server-trace", {
+        type: "mutation",
+        durationMs: 42,
+        handlerMs: 32,
+        invalidationMs: 6,
+        serializeMs: 4,
+        patches: [{ key: "rooms", operations: { "merge-object": 1 } }],
+        invalidated: ["roomStats", "availability"],
+        invalidationCount: 2,
+        liveSignals: 2,
+        redirect: "none",
+        truncated: false,
+      }, "mutation-1");
+      emit("mutation-success", "mutation", {
+        phase: "success",
+        method: "PATCH",
+        url: "/rooms/12",
+      }, "mutation-1");
+      emit("mutation-error", "mutation", {
+        phase: "error",
+        method: "POST",
+        url: "/reservation",
+        errorType: "ValidationError",
+        detail: "validation-secret",
+      }, "mutation-2");
+    });
+
+    const shadow = document.querySelector(
+      "[data-fluxfast-devtools-host]"
+    )!.shadowRoot!;
+    const cacheTab = shadow.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-controls="fluxfast-panel-cache"]'
+    )!;
+    await act(async () => cacheTab.click());
+
+    expect(cacheTab.getAttribute("aria-selected")).toBe("true");
+    expect(shadow.textContent).toContain("Server resource cache");
+    expect(shadow.textContent).toContain("Browser page cache");
+    expect(shadow.textContent).toContain("1 / 1");
+    expect(shadow.textContent).toContain("redis");
+    expect(shadow.textContent).toContain("HIT");
+    expect(shadow.textContent).toContain("connection strings");
+
+    const mutationsTab = shadow.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-controls="fluxfast-panel-mutations"]'
+    )!;
+    await act(async () => mutationsTab.click());
+
+    expect(shadow.querySelectorAll(".ff-mutation-list button")).toHaveLength(2);
+    expect(shadow.textContent).toContain("validation error");
+    const patchMutation = [...shadow.querySelectorAll<HTMLButtonElement>(
+      ".ff-mutation-list button"
+    )].find(button => button.textContent?.includes("PATCH"))!;
+    await act(async () => patchMutation.click());
+    const details = shadow.querySelector(".ff-mutation-detail")!;
+    expect(details.textContent).toContain("PATCH /rooms/12");
+    expect(details.textContent).toContain("merge-object ×1");
+    expect(details.textContent).toContain("roomStats");
+    expect(details.textContent).toContain("2 events");
+    expect(shadow.textContent).not.toMatch(/cache-secret|transport-secret|resource-secret|request-secret|validation-secret/);
+  });
+
   it("has no host, store, or diagnostic subscription in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     const router = new FluxRouter({ deferHistory: true });
