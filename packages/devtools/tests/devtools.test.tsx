@@ -577,6 +577,99 @@ describe("FluxDevtools", () => {
     });
   });
 
+  it("renders hostile diagnostic strings as text and never exports raw values", async () => {
+    delete (Object.prototype as { fluxfastPolluted?: boolean }).fluxfastPolluted;
+    const writeText = vi.spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined);
+    const hostileKey = '<img src=x onerror="globalThis.fluxfastPolluted=true">';
+    const router = new FluxRouter({
+      deferHistory: true,
+      initialPage: {
+        component: "<script>globalThis.fluxfastPolluted=true</script>",
+        url: "/hostile?token=query-secret",
+      },
+    });
+    router.resourceStore.set({
+      key: hostileKey,
+      version: "v1",
+      value: { authorization: "Bearer resource-secret" },
+    });
+    const hostileData = JSON.parse(JSON.stringify({
+      protocol: "fluxfast-devtools/1",
+      type: "page",
+      durationMs: 1,
+      pageMs: 0.2,
+      resourcesMs: 0.6,
+      serializeMs: 0.2,
+      resources: [{
+        key: hostileKey,
+        result: "loader",
+        durationMs: 0.6,
+        scope: "tenant",
+        ttl: 60,
+        deferred: false,
+        live: false,
+        cacheBackend: "memory",
+        cacheResult: "miss",
+        sent: true,
+        knownVersion: false,
+        value: "raw-resource-secret",
+      }],
+      authorization: "Bearer trace-secret",
+      cookie: "session=trace-secret",
+      truncated: false,
+    })) as Record<string, unknown>;
+    Object.defineProperty(hostileData, "__proto__", {
+      enumerable: true,
+      value: { fluxfastPolluted: true },
+    });
+    await mountDevtools(
+      <FluxProvider router={router}>
+        <FluxDevtools defaultOpen />
+      </FluxProvider>,
+      router
+    );
+
+    await act(async () => {
+      router.diagnostics.emit({
+        id: "hostile-trace",
+        timestamp: Date.now(),
+        type: "server-trace",
+        correlationId: "visit-hostile",
+        data: hostileData,
+      });
+    });
+
+    const shadow = document.querySelector(
+      "[data-fluxfast-devtools-host]"
+    )!.shadowRoot!;
+    expect(shadow.textContent).toContain(
+      "<script>globalThis.fluxfastPolluted=true</script>"
+    );
+    expect(shadow.querySelector("script")).toBeNull();
+    expect(shadow.querySelector("img")).toBeNull();
+    expect(shadow.querySelector("[onerror]")).toBeNull();
+    expect(Object.prototype).not.toHaveProperty("fluxfastPolluted");
+
+    const resourcesTab = shadow.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-controls="fluxfast-panel-resources"]'
+    )!;
+    await act(async () => resourcesTab.click());
+    expect(shadow.textContent).toContain(hostileKey);
+    expect(shadow.querySelector("img")).toBeNull();
+
+    const copy = shadow.querySelector<HTMLButtonElement>(
+      '[aria-label="Copy safe FluxFast diagnostic trace"]'
+    )!;
+    await act(async () => copy.click());
+    const exported = writeText.mock.calls[0][0];
+    expect(() => JSON.parse(exported)).not.toThrow();
+    expect(exported).not.toMatch(
+      /query-secret|resource-secret|raw-resource-secret|trace-secret|Authorization|Bearer/
+    );
+    expect(Object.prototype).not.toHaveProperty("fluxfastPolluted");
+  });
+
   it("restores persisted UI preferences without restoring diagnostics", async () => {
     window.localStorage.setItem("fluxfast:devtools:ui:v1", JSON.stringify({
       open: true,

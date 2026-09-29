@@ -5,6 +5,7 @@ import {
   HEADER_CAPABILITIES,
   HEADER_DEVTOOLS,
   HEADER_DEVTOOLS_TRACE,
+  MAX_DEVTOOLS_TRACE_HEADER_CHARS,
   serializeCapabilities,
   TransportError,
 } from "@fluxfast/core";
@@ -296,6 +297,35 @@ describe("Next adapter paths", () => {
 
     expect(props.initialEnvelope).toEqual(initialEnvelope);
     expect(props).not.toHaveProperty("development");
+  });
+
+  it.each([
+    ["oversized", "A".repeat(MAX_DEVTOOLS_TRACE_HEADER_CHARS + 1)],
+    ["invalid base64url", "not+base64url"],
+    ["invalid JSON", Buffer.from("{").toString("base64url")],
+    ["unknown protocol", encodeTrace(pageTrace({
+      protocol: "fluxfast-devtools/2",
+    }))],
+    ["prototype-sensitive payload", encodeTrace(JSON.parse(
+      JSON.stringify(pageTrace()).replace(/}$/, ',"__proto__":{"polluted":true}}')
+    ))],
+  ])("fails closed for a %s SSR trace without affecting the page", async (_label, trace) => {
+    delete (Object.prototype as { polluted?: boolean }).polluted;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify(initialEnvelope),
+      { headers: { [HEADER_DEVTOOLS_TRACE]: trace } }
+    )));
+    const page = createFluxNextPage({
+      backendUrl: "http://127.0.0.1:8000",
+      application: () => null,
+    });
+
+    const result = await page({ params: {} });
+    const props = (result as React.ReactElement).props as Record<string, unknown>;
+
+    expect(props.initialEnvelope).toEqual(initialEnvelope);
+    expect(props).not.toHaveProperty("development");
+    expect(Object.prototype).not.toHaveProperty("polluted");
   });
 
   it("does not request or serialize SSR diagnostics in production", async () => {
