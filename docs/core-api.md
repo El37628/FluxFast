@@ -170,8 +170,8 @@ advanced stable API supports lower-level transport, cache, live, protocol, or
 generated-validation integrations. Both classifications are supported
 compatibility-sensitive API; advanced does not mean experimental.
 
-The following inventory is machine-checked against the v0.9.0 declaration
-snapshot. Every exported name must appear exactly once.
+The frozen v0.9.0 inventory remains machine-checked while reviewed, additive
+1.x APIs are recorded explicitly. Every exported name must appear exactly once.
 
 ### Stable
 
@@ -250,6 +250,10 @@ FLUX_CAPABILITIES
 FetchSseLiveTransport
 FetchTransport
 FluxCapability
+FluxDiagnosticEvent
+FluxDiagnosticEventType
+FluxDiagnosticListener
+FluxDiagnosticsHub
 FluxSseParser
 FluxTransport
 HEADER_CAPABILITIES

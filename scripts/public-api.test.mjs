@@ -25,9 +25,51 @@ const v09BaselinePath = path.join(
   "public-api-v0.9.0.json"
 );
 
-test("keeps the v0.9 JavaScript promotion baseline exact", () => {
+const v11CoreAdditions = Object.freeze({
+  typeOnly: [
+    "FluxDiagnosticEvent",
+    "FluxDiagnosticEventType",
+    "FluxDiagnosticListener",
+  ],
+  typeAndValue: ["FluxDiagnosticsHub"],
+});
+
+test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () => {
   const expected = JSON.parse(fs.readFileSync(v09BaselinePath, "utf8"));
-  assert.deepEqual(createPublicApiSnapshot(), { packages: expected.packages });
+  const current = createPublicApiSnapshot();
+  const expectedCoreEntries = structuredClone(
+    expected.packages["@fluxfast/core"].entries
+  );
+  for (const [group, names] of Object.entries(v11CoreAdditions)) {
+    expectedCoreEntries["."][group].push(...names);
+    expectedCoreEntries["."][group].sort();
+  }
+
+  assert.deepEqual(
+    current.packages["@fluxfast/core"].entries,
+    expectedCoreEntries
+  );
+  assert.deepEqual(
+    current.packages["@fluxfast/core"].exportMap,
+    expected.packages["@fluxfast/core"].exportMap
+  );
+  assert.deepEqual(
+    current.packages["@fluxfast/next"],
+    expected.packages["@fluxfast/next"]
+  );
+
+  const expectedCoreFiles =
+    expected.packages["@fluxfast/core"].declarations["."].files;
+  const currentCoreFiles =
+    current.packages["@fluxfast/core"].declarations["."].files;
+  for (const [file, fingerprint] of Object.entries(expectedCoreFiles)) {
+    if (file === "index.d.ts") continue;
+    assert.equal(currentCoreFiles[file], fingerprint, `${file} changed`);
+  }
+  assert.deepEqual(
+    Object.keys(currentCoreFiles).filter(file => !(file in expectedCoreFiles)),
+    ["diagnostics.d.ts"]
+  );
 });
 
 test("retains the historical v0.8.1 baseline and its reviewed v0.9 delta", () => {

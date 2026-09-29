@@ -172,6 +172,10 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `FetchSseLiveTransport` | `const liveTransport = new FetchSseLiveTransport("https://app.example.com");` | Opens validated, abortable, credentialed SSE streams with standard FluxFast headers. |
 | `FetchTransport` | `const transport = new FetchTransport("https://app.example.com");` | Implements visits and mutations with Fetch, protocol validation, and structured errors. |
 | `FluxCapability` | `const capability: FluxCapability = CAPABILITY_LIVE_RESOURCES;` | Restricts an adapter capability value to the supported token union. |
+| `FluxDiagnosticEvent` | `const event: FluxDiagnosticEvent = { id: "visit-1", timestamp: Date.now(), type: "navigation", data: {} };` | Describes one structured, correlation-ready development observation without storing application state. |
+| `FluxDiagnosticEventType` | `const type: FluxDiagnosticEventType = "resource-load";` | Restricts diagnostic events to the supported high-level runtime areas. |
+| `FluxDiagnosticListener` | `const listener: FluxDiagnosticListener = event => record(event.id);` | Types an isolated observer that cannot participate in runtime correctness. |
+| `FluxDiagnosticsHub` | `const stop = new FluxDiagnosticsHub().subscribe(listener);` | Distributes optional development diagnostics and exposes an inactive fast-path signal without retaining a timeline. |
 | `FluxSseParser` | `const events = new FluxSseParser().push(chunk);` | Incrementally parses arbitrarily chunked SSE bytes into validated live events. |
 | `FluxTransport` | `const transport: FluxTransport = { visit, mutate };` | Defines the framework-neutral visit and mutation boundary consumed by `FluxRouter`. |
 | `HEADER_CAPABILITIES` | `headers[HEADER_CAPABILITIES] = serializeCapabilities();` | Writes the documented capability-negotiation request header. |

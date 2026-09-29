@@ -25,6 +25,7 @@ export * from "./live/transport.js";
 export * from "./live/manager.js";
 export * from "./errors.js";
 export * from "./events.js";
+export * from "./diagnostics.js";
 export * from "./mutation.js";
 export * from "./store.js";
 export * from "./cache.js";
