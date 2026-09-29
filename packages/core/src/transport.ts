@@ -14,7 +14,11 @@ import {
   ValidationError,
   VersionMismatchError,
 } from "./errors.js";
-import { HEADER_CAPABILITIES, serializeCapabilities } from "./capabilities.js";
+import {
+  FLUX_CAPABILITIES,
+  HEADER_CAPABILITIES,
+  serializeCapabilities,
+} from "./capabilities.js";
 import {
   FluxDiagnosticsHub,
   type FluxDiagnosticEventType,
@@ -318,18 +322,42 @@ function sanitizeServerTrace(value: unknown): FluxServerDiagnosticTrace | undefi
   };
 }
 
+interface DiagnosticTraceObservation {
+  readonly status: "missing" | "valid" | "invalid" | "unsupported";
+  readonly protocol?: string;
+}
+
+interface InspectedServerTrace extends DiagnosticTraceObservation {
+  readonly trace?: FluxServerDiagnosticTrace;
+}
+
+function inspectServerDiagnosticTrace(value: string): InspectedServerTrace {
+  const decoded = decodeBase64Url(value);
+  if (decoded === undefined) return { status: "invalid" };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decoded);
+  } catch {
+    return { status: "invalid" };
+  }
+  if (
+    isObject(parsed) &&
+    isSafeDiagnosticText(parsed.protocol, 64) &&
+    parsed.protocol !== DEVTOOLS_PROTOCOL_VERSION &&
+    /^[a-z][a-z0-9-]*\/\d+$/.test(parsed.protocol)
+  ) {
+    return { status: "unsupported", protocol: parsed.protocol };
+  }
+  const trace = sanitizeServerTrace(parsed);
+  return trace ? { status: "valid", trace } : { status: "invalid" };
+}
+
 /** Decode and strictly validate one bounded development trace header. */
 export function decodeServerDiagnosticTrace(
   value: string | null
 ): FluxServerDiagnosticTrace | undefined {
   if (value === null) return undefined;
-  const decoded = decodeBase64Url(value);
-  if (decoded === undefined) return undefined;
-  try {
-    return sanitizeServerTrace(JSON.parse(decoded));
-  } catch {
-    return undefined;
-  }
+  return inspectServerDiagnosticTrace(value).trace;
 }
 
 function isSafeResourceKey(value: unknown): value is string {
@@ -359,13 +387,11 @@ function encodeBase64Url(bytes: Uint8Array): string {
   return encoded.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** Return an encoded safe header, or undefined when the optimization must be omitted. */
-export function encodeKnownVersions(
+function selectKnownVersions(
   knownVersions: Record<string, string> | undefined
-): string | undefined {
-  if (!knownVersions) return undefined;
-
+): Record<string, string> {
   const safe: Record<string, string> = {};
+  if (!knownVersions) return safe;
   for (const [key, version] of Object.entries(knownVersions)) {
     if (Object.keys(safe).length >= MAX_KNOWN_RESOURCES) break;
     if (
@@ -377,11 +403,35 @@ export function encodeKnownVersions(
       safe[key] = version;
     }
   }
+  return safe;
+}
 
+function encodeKnownVersionSelection(
+  safe: Record<string, string>
+): string | undefined {
   if (Object.keys(safe).length === 0) return undefined;
   const bytes = new TextEncoder().encode(JSON.stringify(safe));
   if (bytes.byteLength > MAX_KNOWN_BYTES) return undefined;
   return encodeBase64Url(bytes);
+}
+
+/** Return an encoded safe header, or undefined when the optimization must be omitted. */
+export function encodeKnownVersions(
+  knownVersions: Record<string, string> | undefined
+): string | undefined {
+  return encodeKnownVersionSelection(selectKnownVersions(knownVersions));
+}
+
+function selectOnlyResources(only: string[] | undefined): string[] {
+  if (!only) return [];
+  const safe = only.filter(isSafeResourceKey).slice(0, MAX_KNOWN_RESOURCES);
+  if (
+    safe.length === 0 ||
+    new TextEncoder().encode(safe.join(",")).byteLength > MAX_ONLY_HEADER_BYTES
+  ) {
+    return [];
+  }
+  return safe;
 }
 
 export function assertPageEnvelope(data: unknown): asserts data is PageEnvelope {
@@ -541,6 +591,11 @@ interface TransportDiagnosticContext {
   readonly startedAt: number;
 }
 
+interface VisitDiagnosticMetadata {
+  readonly knownVersions: readonly { key: string; version: string }[];
+  readonly only: readonly string[];
+}
+
 function removeReservedDevToolsHeader(headers: Record<string, string>): void {
   for (const key of Object.keys(headers)) {
     if (key.toLowerCase() === HEADER_DEVTOOLS.toLowerCase()) delete headers[key];
@@ -588,12 +643,26 @@ export class FetchTransport implements FluxTransport {
   }
 
   async visit(request: VisitTransportRequest): Promise<PageEnvelope> {
-    const diagnostic = this.beginDiagnostic(
-      "page",
-      "GET",
-      request.url,
-      request.visitId
-    );
+    const knownVersionSelection = selectKnownVersions(request.knownVersions);
+    const encodedKnown = encodeKnownVersionSelection(knownVersionSelection);
+    const only = selectOnlyResources(request.only);
+    const diagnostic = this.diagnostics?.active
+      ? this.beginDiagnostic(
+          "page",
+          "GET",
+          request.url,
+          request.visitId,
+          {
+            knownVersions: encodedKnown
+              ? Object.entries(knownVersionSelection).map(([key, version]) => ({
+                  key,
+                  version,
+                }))
+              : [],
+            only,
+          }
+        )
+      : undefined;
     const headers: Record<string, string> = {
       ...(request.headers ?? {}),
       Accept: PROTOCOL_MEDIA_TYPE,
@@ -604,23 +673,14 @@ export class FetchTransport implements FluxTransport {
     };
     removeReservedDevToolsHeader(headers);
     if (diagnostic) headers[HEADER_DEVTOOLS] = "1";
-    const encodedKnown = encodeKnownVersions(request.knownVersions);
     if (encodedKnown) headers["X-FluxFast-Known"] = encodedKnown;
-    if (request.only?.length) {
-      const only = request.only
-        .filter(isSafeResourceKey)
-        .slice(0, MAX_KNOWN_RESOURCES);
+    if (only.length) {
       const serializedOnly = only.join(",");
-      if (
-        serializedOnly &&
-        new TextEncoder().encode(serializedOnly).byteLength <= MAX_ONLY_HEADER_BYTES
-      ) {
-        headers["X-FluxFast-Only"] = serializedOnly;
-      }
+      headers["X-FluxFast-Only"] = serializedOnly;
     }
 
     let response: Response | undefined;
-    let traceStatus: "missing" | "valid" | "invalid" = "missing";
+    let traceStatus: DiagnosticTraceObservation = { status: "missing" };
     try {
       response = await fetch(this.resolveUrl(request.url), {
         method: "GET",
@@ -665,7 +725,7 @@ export class FetchTransport implements FluxTransport {
     if (diagnostic) headers[HEADER_DEVTOOLS] = "1";
     if (request.clientId) headers[HEADER_CLIENT_ID] = request.clientId;
     let response: Response | undefined;
-    let traceStatus: "missing" | "valid" | "invalid" = "missing";
+    let traceStatus: DiagnosticTraceObservation = { status: "missing" };
     try {
       response = await fetch(this.resolveUrl(request.url), {
         method,
@@ -694,7 +754,8 @@ export class FetchTransport implements FluxTransport {
     requestType: "page" | "mutation",
     method: string,
     url: string,
-    correlationId?: string
+    correlationId?: string,
+    visitMetadata?: VisitDiagnosticMetadata
   ): TransportDiagnosticContext | undefined {
     const hub = this.diagnostics;
     if (!hub?.active) return undefined;
@@ -712,6 +773,14 @@ export class FetchTransport implements FluxTransport {
       requestType,
       method: context.method,
       path: context.path,
+      protocol: PROTOCOL_VERSION,
+      capabilities: [...FLUX_CAPABILITIES],
+      ...(requestType === "page"
+        ? {
+            knownVersions: visitMetadata?.knownVersions ?? [],
+            only: visitMetadata?.only ?? [],
+          }
+        : {}),
     });
     return context;
   }
@@ -719,21 +788,27 @@ export class FetchTransport implements FluxTransport {
   private emitServerTrace(
     context: TransportDiagnosticContext | undefined,
     response: Response
-  ): "missing" | "valid" | "invalid" {
-    if (!context || !context.hub.active) return "missing";
+  ): DiagnosticTraceObservation {
+    if (!context || !context.hub.active) return { status: "missing" };
     const encoded = response.headers.get(HEADER_DEVTOOLS_TRACE);
-    if (encoded === null) return "missing";
-    const trace = decodeServerDiagnosticTrace(encoded);
-    if (!trace) return "invalid";
-    this.emitDiagnostic(context, "server-trace", trace);
-    return "valid";
+    if (encoded === null) return { status: "missing" };
+    const inspected = inspectServerDiagnosticTrace(encoded);
+    if (inspected.trace) {
+      this.emitDiagnostic(context, "server-trace", inspected.trace);
+    }
+    return {
+      status: inspected.status,
+      ...(inspected.protocol === undefined
+        ? {}
+        : { protocol: inspected.protocol }),
+    };
   }
 
   private finishDiagnostic(
     context: TransportDiagnosticContext | undefined,
     phase: "success" | "error",
     status: number | undefined,
-    serverTrace: "missing" | "valid" | "invalid",
+    serverTrace: DiagnosticTraceObservation,
     error?: unknown
   ): void {
     if (!context?.hub.active) return;
@@ -744,7 +819,10 @@ export class FetchTransport implements FluxTransport {
       path: context.path,
       durationMs: Math.max(0, diagnosticClock() - context.startedAt),
       ...(status === undefined ? {} : { status }),
-      serverTrace,
+      serverTrace: serverTrace.status,
+      ...(serverTrace.protocol === undefined
+        ? {}
+        : { serverTraceProtocol: serverTrace.protocol }),
       ...(phase === "error"
         ? { errorType: diagnosticErrorType(error) }
         : {}),
