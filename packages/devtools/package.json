@@ -29,6 +29,14 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "development": {
+        "import": "./dist/esm/index.js",
+        "require": "./dist/index.js"
+      },
+      "production": {
+        "import": "./dist/esm/disabled.js",
+        "require": "./dist/disabled.js"
+      },
       "import": "./dist/esm/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"

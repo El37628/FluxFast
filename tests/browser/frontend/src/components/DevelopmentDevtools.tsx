@@ -1,17 +1,9 @@
 "use client";
 
-import dynamic from "next/dynamic";
-
-const DevelopmentFluxDevtools = process.env.NODE_ENV === "development"
-  ? dynamic(
-      () => import("@fluxfast/devtools").then(module => module.FluxDevtools),
-      { ssr: false }
-    )
-  : function ProductionDevtoolsDisabled() {
-      return null;
-    };
+import { FluxDevtools } from "@fluxfast/devtools";
 
 /** Test-fixture mount that is erased from the production render path. */
 export function DevelopmentDevtools() {
-  return <DevelopmentFluxDevtools />;
+  if (process.env.NODE_ENV !== "development") return null;
+  return <FluxDevtools />;
 }
