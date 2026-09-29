@@ -23,6 +23,7 @@ const v11Additions = [
   "FluxDiagnosticEventType",
   "FluxDiagnosticListener",
   "FluxDiagnosticsHub",
+  "ResourceMetadataSnapshot",
 ];
 
 function namesBetween(start: string, end: string): string[] {
@@ -61,7 +62,7 @@ describe("1.x public API classification", () => {
     const classified = [...stable, ...advanced];
 
     expect(stable).toHaveLength(49);
-    expect(advanced).toHaveLength(111);
+    expect(advanced).toHaveLength(112);
     expect(new Set(classified).size).toBe(classified.length);
     expect(classified.toSorted()).toEqual(
       [...baselineNames(), ...v11Additions].toSorted()

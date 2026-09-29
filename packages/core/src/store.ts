@@ -27,6 +27,16 @@ export interface ResourceStateSnapshot<T = unknown> {
   readonly stale: boolean;
 }
 
+/** Value-free resource metadata intended for development inspection tools. */
+export interface ResourceMetadataSnapshot {
+  readonly key: string;
+  readonly version: string | null;
+  readonly updatedAt: number | null;
+  readonly status: ResourceStatus;
+  readonly stale: boolean;
+  readonly hasSubscribers: boolean;
+}
+
 const MISSING_RESOURCE_STATE: ResourceStateSnapshot = Object.freeze({
   data: undefined,
   status: "missing",
@@ -119,6 +129,28 @@ export class ResourceStore {
     const record = this.records.get(key) as ResourceRecord<T> | undefined;
     if (record) this.touchLru(key);
     return record;
+  }
+
+  /** Return a stable-order metadata snapshot without resource values or errors. */
+  getRecordsSnapshot(): readonly ResourceMetadataSnapshot[] {
+    const keys = new Set([
+      ...this.records.keys(),
+      ...this.stateSnapshots.keys(),
+      ...this.staleKeys,
+      ...this.subscribers.keys(),
+    ]);
+    return Object.freeze([...keys].sort().map(key => {
+      const record = this.records.get(key);
+      const state = this.stateSnapshots.get(key) ?? MISSING_RESOURCE_STATE;
+      return Object.freeze({
+        key,
+        version: record?.version ?? null,
+        updatedAt: record?.updatedAt ?? null,
+        status: state.status,
+        stale: state.stale,
+        hasSubscribers: this.hasSubscribers(key),
+      });
+    }));
   }
 
   /**

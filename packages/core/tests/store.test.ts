@@ -38,6 +38,59 @@ describe("ResourceStore", () => {
     });
   });
 
+  it("returns frozen value-free metadata for inspection tools", () => {
+    const store = new ResourceStore();
+    const stop = store.subscribe("missing", () => undefined);
+    store.markPending(["activity"]);
+    store.setResourceError("activity", {
+      type: "ResourceError",
+      message: "private upstream detail",
+      details: { token: "must-not-leak" },
+    });
+    store.set({
+      key: "summary",
+      version: "summary-v1",
+      value: { customer: "private value" },
+    });
+    store.markStale("summary");
+
+    const snapshot = store.getRecordsSnapshot();
+
+    expect(snapshot).toEqual([
+      {
+        key: "activity",
+        version: null,
+        updatedAt: null,
+        status: "error",
+        stale: false,
+        hasSubscribers: false,
+      },
+      {
+        key: "missing",
+        version: null,
+        updatedAt: null,
+        status: "missing",
+        stale: false,
+        hasSubscribers: true,
+      },
+      {
+        key: "summary",
+        version: "summary-v1",
+        updatedAt: expect.any(Number),
+        status: "ready",
+        stale: true,
+        hasSubscribers: false,
+      },
+    ]);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(snapshot.every(record => Object.isFrozen(record))).toBe(true);
+    const serialized = JSON.stringify(snapshot);
+    expect(serialized).not.toContain("private");
+    expect(serialized).not.toContain("must-not-leak");
+    expect(serialized).not.toContain("ResourceError");
+    stop();
+  });
+
   it("transitions missing to pending to loading to ready", () => {
     const store = new ResourceStore();
     const callback = vi.fn();

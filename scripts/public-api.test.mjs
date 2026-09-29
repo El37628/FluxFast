@@ -30,8 +30,14 @@ const v11CoreAdditions = Object.freeze({
     "FluxDiagnosticEvent",
     "FluxDiagnosticEventType",
     "FluxDiagnosticListener",
+    "ResourceMetadataSnapshot",
   ],
   typeAndValue: ["FluxDiagnosticsHub"],
+});
+
+const v11CoreDeclarationChanges = Object.freeze({
+  "router.d.ts": "a48826c75584952c90b78bcdb22ac767a508712c2c040aa9afb8002525d45866",
+  "store.d.ts": "17990d96eaf8f238d2edb3a1b395dc5e181ee1755422b5fca420750b4c9c13e0",
 });
 
 test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () => {
@@ -64,7 +70,11 @@ test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () =>
     current.packages["@fluxfast/core"].declarations["."].files;
   for (const [file, fingerprint] of Object.entries(expectedCoreFiles)) {
     if (file === "index.d.ts") continue;
-    assert.equal(currentCoreFiles[file], fingerprint, `${file} changed`);
+    assert.equal(
+      currentCoreFiles[file],
+      v11CoreDeclarationChanges[file] ?? fingerprint,
+      `${file} changed`
+    );
   }
   assert.deepEqual(
     Object.keys(currentCoreFiles).filter(file => !(file in expectedCoreFiles)),
