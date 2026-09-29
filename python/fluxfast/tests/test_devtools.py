@@ -7,7 +7,18 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from fluxfast import FluxFast, MemoryResourceCache, Page, resource, scope
+from fluxfast import (
+    FluxFast,
+    MemoryResourceCache,
+    Page,
+    append_item,
+    flux_external_redirect,
+    invalidate_resource,
+    merge_object,
+    mutation,
+    resource,
+    scope,
+)
 from fluxfast.devtools import (
     DEVTOOLS_PROTOCOL,
     HEADER_DEVTOOLS,
@@ -243,3 +254,147 @@ def test_trace_encoding_fails_closed_when_even_metadata_cannot_fit():
     trace = collector.build(page_ms=1, resources_ms=2, serialize_ms=3)
 
     assert encode_diagnostic_trace(trace, maximum_bytes=1) is None
+
+
+@pytest.mark.parametrize(
+    ("debug", "headers", "expected"),
+    [
+        (False, {HEADER_DEVTOOLS: "1"}, False),
+        (True, {}, False),
+        (True, {HEADER_DEVTOOLS: "1"}, True),
+    ],
+)
+def test_mutation_trace_activation_and_safe_counts(debug, headers, expected):
+    app = FastAPI()
+    flux = FluxFast(app, debug=debug)
+    tenant_scope = scope.tenant("private-hotel-42")
+
+    @flux.mutation("/rooms")
+    async def update_room(payload: dict[str, str]):
+        assert payload["password"] == "request-body-secret"
+        return mutation(
+            patches={
+                "rooms": [
+                    merge_object({"guest": "private-patch-value"}),
+                    merge_object({"status": "occupied"}),
+                    append_item({"card": "private-card-number"}),
+                ]
+            },
+            invalidates=[
+                "summary",
+                invalidate_resource("availability", scope=tenant_scope),
+            ],
+            redirect="/rooms?token=redirect-secret",
+        )
+
+    response = TestClient(app).post(
+        "/rooms?token=request-url-secret",
+        headers={HEADER_FLUXFAST: "1", **headers},
+        json={"password": "request-body-secret"},
+    )
+
+    assert response.status_code == 200
+    assert (HEADER_DEVTOOLS_TRACE in response.headers) is expected
+    if not expected:
+        return
+
+    trace = _decode_trace(response.headers[HEADER_DEVTOOLS_TRACE])
+    assert trace["protocol"] == DEVTOOLS_PROTOCOL
+    assert trace["type"] == "mutation"
+    assert trace["patches"] == [
+        {
+            "key": "rooms",
+            "operations": {"append-item": 1, "merge-object": 2},
+        }
+    ]
+    assert trace["invalidated"] == ["summary", "availability"]
+    assert trace["invalidationCount"] == 2
+    assert trace["liveSignals"] == 1
+    assert trace["redirect"] == "internal"
+    for timing in ("durationMs", "handlerMs", "invalidationMs", "serializeMs"):
+        assert trace[timing] >= 0
+    serialized = json.dumps(trace)
+    for forbidden in (
+        "request-body-secret",
+        "private-patch-value",
+        "private-card-number",
+        "private-hotel-42",
+        "redirect-secret",
+        "request-url-secret",
+        "password",
+    ):
+        assert forbidden not in serialized
+
+
+def test_page_decorator_mutation_result_uses_mutation_trace_shape():
+    app = FastAPI()
+    flux = FluxFast(app, debug=True)
+
+    @flux.page("/legacy-mutation")
+    def legacy_mutation():
+        return mutation(invalidate=["summary"])
+
+    response = TestClient(app).get(
+        "/legacy-mutation",
+        headers={HEADER_FLUXFAST: "1", HEADER_DEVTOOLS: "1"},
+    )
+
+    assert response.status_code == 200
+    trace = _decode_trace(response.headers[HEADER_DEVTOOLS_TRACE])
+    assert trace["type"] == "mutation"
+    assert trace["invalidated"] == ["summary"]
+    assert "resources" not in trace
+
+
+def test_external_redirect_trace_records_only_the_redirect_kind():
+    app = FastAPI()
+    flux = FluxFast(app, debug=True)
+
+    @flux.mutation("/login")
+    def login():
+        return flux_external_redirect(
+            "https://identity.example.com/login?token=private-redirect-token"
+        )
+
+    response = TestClient(app).post(
+        "/login",
+        headers={HEADER_FLUXFAST: "1", HEADER_DEVTOOLS: "1"},
+    )
+
+    trace = _decode_trace(response.headers[HEADER_DEVTOOLS_TRACE])
+    assert trace["redirect"] == "external"
+    assert "identity.example.com" not in json.dumps(trace)
+    assert "private-redirect-token" not in json.dumps(trace)
+
+
+def test_mutation_trace_drops_detail_lists_before_exceeding_header_bound():
+    collector = RequestDiagnosticCollector("mutation")
+    patches = {
+        f"resource-{index}-" + "x" * 100: [
+            {"op": "merge-object", "value": {"secret": "not-recorded"}}
+        ]
+        for index in range(100)
+    }
+    invalidated = [f"invalidated-{index}-" + "y" * 100 for index in range(100)]
+    collector.record_mutation(
+        handler_ms=1,
+        invalidation_ms=2,
+        serialize_ms=3,
+        patches=patches,
+        invalidated=invalidated,
+        live_signals=100,
+        redirect="none",
+    )
+
+    encoded = encode_diagnostic_trace(
+        collector.build(page_ms=0, resources_ms=0, serialize_ms=3),
+        maximum_bytes=700,
+    )
+
+    assert encoded is not None
+    assert len(encoded.encode("ascii")) <= 700
+    trace = _decode_trace(encoded)
+    assert trace["truncated"] is True
+    assert len(trace["patches"]) < 100
+    assert trace["invalidationCount"] == 100
+    assert "not-recorded" not in json.dumps(trace)
