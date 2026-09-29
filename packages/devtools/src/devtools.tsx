@@ -34,6 +34,13 @@ import {
   type TimelineItem,
   type TimelineWaterfallPhase,
 } from "./timeline.js";
+import {
+  deriveCacheInsights,
+  deriveMutationHistory,
+  mutationResultLabel,
+  serverCacheResultLabel,
+  type MutationInsight,
+} from "./cache-mutations.js";
 
 export interface FluxDevtoolsProps {
   position?: "bottom" | "right";
@@ -47,7 +54,20 @@ interface BoundaryState {
   failed: boolean;
 }
 
-type PanelName = "overview" | "resources" | "timeline";
+type PanelName =
+  | "overview"
+  | "resources"
+  | "timeline"
+  | "cache"
+  | "mutations";
+
+const PANELS: readonly PanelName[] = Object.freeze([
+  "overview",
+  "resources",
+  "timeline",
+  "cache",
+  "mutations",
+]);
 
 class DevtoolsErrorBoundary extends Component<
   { children: ReactNode },
@@ -328,6 +348,279 @@ function TimelinePanel({
   );
 }
 
+function CachePanel({ snapshot }: { snapshot: DevtoolsSnapshot }) {
+  const insights = useMemo(
+    () => deriveCacheInsights(snapshot.events),
+    [snapshot.events]
+  );
+  const server = insights.server;
+
+  return (
+    <>
+      <p className="ff-panel-intro">
+        Browser cache observations describe page-envelope reuse in this tab.
+        Server cache observations come from the latest backend request and do
+        not inspect Redis itself.
+      </p>
+      <section className="ff-inspector-section" aria-labelledby="ff-server-cache">
+        <header className="ff-section-heading">
+          <div>
+            <p className="ff-eyebrow">Backend observation</p>
+            <h3 id="ff-server-cache">Server resource cache</h3>
+          </div>
+          {server && (
+            <span title={server.path}>
+              {server.path} · {formatDuration(server.durationMs)}
+            </span>
+          )}
+        </header>
+        {server === null ? (
+          <p className="ff-empty">
+            No server resource-cache trace has been received yet.
+          </p>
+        ) : (
+          <>
+            <dl className="ff-metric-grid ff-cache-metrics">
+              <Metric
+                label="Hit ratio"
+                value={`${server.hitCount} / ${server.lookupCount}`}
+              />
+              <Metric
+                label="Redis"
+                value={server.redisActive ? "active" : "not observed"}
+              />
+              <Metric
+                label="Known-version omissions"
+                value={server.knownVersionOmissions}
+              />
+              <Metric
+                label="Trace"
+                value={server.truncated ? "truncated" : "complete"}
+              />
+            </dl>
+            {server.resources.length === 0 ? (
+              <p className="ff-empty ff-section-empty">
+                The latest request had no server resource observations.
+              </p>
+            ) : (
+              <div
+                className="ff-table-scroll ff-cache-table"
+                tabIndex={0}
+                role="region"
+                aria-label="Latest server resource-cache observations"
+              >
+                <table className="ff-table">
+                  <caption>Latest server resource-cache observations</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Resource</th>
+                      <th scope="col">Result</th>
+                      <th scope="col">Backend</th>
+                      <th scope="col">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {server.resources.map((resource, index) => (
+                      <tr key={`${resource.key}-${index}`}>
+                        <th scope="row">{resource.key}</th>
+                        <td>
+                          <span
+                            className={`ff-cache-result ff-cache-${resource.cacheResult}`}
+                          >
+                            {serverCacheResultLabel(resource)}
+                          </span>
+                        </td>
+                        <td>{resource.backend}</td>
+                        <td>{formatDuration(resource.durationMs)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="ff-inspector-section" aria-labelledby="ff-browser-cache">
+        <header className="ff-section-heading">
+          <div>
+            <p className="ff-eyebrow">Client observation</p>
+            <h3 id="ff-browser-cache">Browser page cache</h3>
+          </div>
+          <span>{insights.browser.observations.length} recent events</span>
+        </header>
+        <dl className="ff-metric-grid ff-browser-cache-metrics">
+          <Metric label="Hits" value={insights.browser.hits} />
+          <Metric label="Misses" value={insights.browser.misses} />
+          <Metric label="Writes" value={insights.browser.writes} />
+        </dl>
+        {insights.browser.observations.length === 0 ? (
+          <p className="ff-empty ff-section-empty">
+            No browser page-cache activity has been observed yet.
+          </p>
+        ) : (
+          <ol className="ff-cache-observations" aria-label="Browser page-cache activity">
+            {insights.browser.observations.map(observation => (
+              <li key={observation.id}>
+                <time dateTime={new Date(observation.timestamp).toISOString()}>
+                  {formatTimelineTime(observation.timestamp)}
+                </time>
+                <strong className={`ff-cache-${observation.action}`}>
+                  {observation.action.toLocaleUpperCase()}
+                </strong>
+                <span>{observation.source}</span>
+                <code title={observation.path}>{observation.path}</code>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+      <p className="ff-scope-note">
+        Redis keys, memory, databases, connection strings, and command traffic
+        are intentionally outside FluxFast DevTools.
+      </p>
+    </>
+  );
+}
+
+function MutationDetails({ mutation }: { mutation: MutationInsight }) {
+  const result = mutationResultLabel(mutation);
+  return (
+    <section
+      className="ff-mutation-detail"
+      aria-label={`${mutation.method} ${mutation.path} details`}
+    >
+      <header className="ff-detail-heading">
+        <div>
+          <p className="ff-eyebrow">Selected mutation</p>
+          <h3>{mutation.method} {mutation.path}</h3>
+        </div>
+        <span className={`ff-status ff-status-${mutation.result}`}>
+          {result}
+        </span>
+      </header>
+      <dl className="ff-detail-list ff-mutation-summary">
+        <Metric label="Request" value={`${mutation.method} ${mutation.path}`} />
+        <Metric label="Result" value={result} />
+        <Metric label="Duration" value={formatDuration(mutation.durationMs)} />
+        <Metric label="Live" value={`${mutation.liveSignals} events`} />
+        <Metric label="Redirect" value={mutation.redirect} />
+        <Metric label="Handler" value={formatDuration(mutation.handlerMs)} />
+        <Metric
+          label="Invalidation"
+          value={formatDuration(mutation.invalidationMs)}
+        />
+        <Metric label="Serialize" value={formatDuration(mutation.serializeMs)} />
+      </dl>
+      {mutation.errorType && (
+        <p className="ff-inline-error">Error type: {mutation.errorType}</p>
+      )}
+      {mutation.truncated && (
+        <p className="ff-trace-warning">
+          The server trace reached its metadata limit; counts may exceed the
+          visible keys below.
+        </p>
+      )}
+      <div className="ff-mutation-columns">
+        <section aria-labelledby="ff-selected-mutation-patches">
+          <h4 id="ff-selected-mutation-patches">Patches</h4>
+          {mutation.patches.length === 0 ? (
+            <p>None</p>
+          ) : (
+            <ul className="ff-key-list">
+              {mutation.patches.map(patch => (
+                <li key={patch.key}>
+                  <strong>{patch.key}</strong>
+                  <span>
+                    {patch.operations.length === 0
+                      ? "operation metadata unavailable"
+                      : patch.operations.map(operation => (
+                          `${operation.name} ×${operation.count}`
+                        )).join(", ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section aria-labelledby="ff-selected-mutation-invalidations">
+          <h4 id="ff-selected-mutation-invalidations">
+            Invalidations ({mutation.invalidationCount})
+          </h4>
+          {mutation.invalidated.length === 0 ? (
+            <p>None</p>
+          ) : (
+            <ul className="ff-key-list">
+              {mutation.invalidated.map((key, index) => (
+                <li key={`${key}-${index}`}><strong>{key}</strong></li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+      <p className="ff-scope-note">
+        Request bodies and resource values are never collected by this panel.
+      </p>
+    </section>
+  );
+}
+
+function MutationsPanel({ snapshot }: { snapshot: DevtoolsSnapshot }) {
+  const mutations = useMemo(
+    () => deriveMutationHistory(snapshot.events),
+    [snapshot.events]
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = mutations.find(mutation => mutation.id === selectedId) ??
+    mutations[0];
+
+  if (mutations.length === 0) {
+    return (
+      <p className="ff-empty">
+        No mutations have been observed in this DevTools session.
+      </p>
+    );
+  }
+
+  return (
+    <div className="ff-mutations-layout">
+      <section aria-labelledby="ff-mutation-history">
+        <header className="ff-section-heading">
+          <div>
+            <p className="ff-eyebrow">Bounded history</p>
+            <h3 id="ff-mutation-history">Recent mutations</h3>
+          </div>
+          <span>{mutations.length} recorded</span>
+        </header>
+        <ol className="ff-mutation-list">
+          {mutations.map(mutation => (
+            <li key={mutation.id}>
+              <button
+                type="button"
+                aria-pressed={mutation.id === selected?.id}
+                onClick={() => setSelectedId(mutation.id)}
+              >
+                <span className="ff-mutation-request">
+                  <strong>{mutation.method}</strong>
+                  <span title={mutation.path}>{mutation.path}</span>
+                </span>
+                <span
+                  className={`ff-mutation-result ff-status-${mutation.result}`}
+                >
+                  {mutationResultLabel(mutation)}
+                </span>
+                <span>{formatDuration(mutation.durationMs)}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </section>
+      {selected && <MutationDetails mutation={selected} />}
+    </div>
+  );
+}
+
 function FluxDevtoolsInner({
   position = "bottom",
   theme = "system",
@@ -407,7 +700,7 @@ function FluxDevtoolsInner({
               role="tablist"
               aria-label="Diagnostic panels"
             >
-              {(["overview", "resources", "timeline"] as const).map(panel => (
+              {PANELS.map(panel => (
                 <button
                   key={panel}
                   type="button"
@@ -418,11 +711,7 @@ function FluxDevtoolsInner({
                   className="ff-tab"
                   onClick={() => setActivePanel(panel)}
                 >
-                  {panel === "overview"
-                    ? "Overview"
-                    : panel === "resources"
-                      ? "Resources"
-                      : "Timeline"}
+                  {panel[0].toLocaleUpperCase() + panel.slice(1)}
                 </button>
               ))}
             </div>
@@ -605,6 +894,28 @@ function FluxDevtoolsInner({
             >
               {activePanel === "timeline" && (
                 <TimelinePanel snapshot={snapshot} store={store} />
+              )}
+            </div>
+
+            <div
+              id="fluxfast-panel-cache"
+              role="tabpanel"
+              aria-labelledby="fluxfast-tab-cache"
+              className="ff-tab-panel"
+              hidden={activePanel !== "cache"}
+            >
+              {activePanel === "cache" && <CachePanel snapshot={snapshot} />}
+            </div>
+
+            <div
+              id="fluxfast-panel-mutations"
+              role="tabpanel"
+              aria-labelledby="fluxfast-tab-mutations"
+              className="ff-tab-panel"
+              hidden={activePanel !== "mutations"}
+            >
+              {activePanel === "mutations" && (
+                <MutationsPanel snapshot={snapshot} />
               )}
             </div>
           </section>
