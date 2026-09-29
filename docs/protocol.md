@@ -519,3 +519,35 @@ omitted and the application response proceeds unchanged.
 
 `fluxfast-devtools/1` is versioned independently. Package releases and future
 `fluxfast/1` revisions do not imply a diagnostic-protocol version change.
+
+Successful mutation traces use the same envelope identity with a counts-only
+summary:
+
+```json
+{
+  "protocol": "fluxfast-devtools/1",
+  "requestId": "ffdev_0123456789abcdef",
+  "type": "mutation",
+  "durationMs": 42.1,
+  "handlerMs": 35.2,
+  "invalidationMs": 4.8,
+  "serializeMs": 0.3,
+  "patches": [
+    {
+      "key": "rooms",
+      "operations": { "merge-object": 2 }
+    }
+  ],
+  "invalidated": ["roomStats", "availability"],
+  "invalidationCount": 2,
+  "liveSignals": 2,
+  "redirect": "none",
+  "truncated": false
+}
+```
+
+Patch values, patch identities, invalidation scopes, origin client IDs, and
+mutation input are deliberately absent. `liveSignals` counts scoped publication
+attempts; it does not expose broker topics and does not claim subscriber
+delivery. Oversized patch-resource and invalidation lists follow the same
+drop-and-mark-truncated behavior as page resource traces.

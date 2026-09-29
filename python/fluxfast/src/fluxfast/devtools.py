@@ -19,6 +19,7 @@ HEADER_DEVTOOLS_TRACE = "X-FluxFast-DevTools-Trace"
 # Leave room below common 8 KiB per-header/proxy limits for surrounding syntax.
 MAX_DEVTOOLS_TRACE_HEADER_BYTES = 7 * 1024
 MAX_DIAGNOSTIC_RESOURCES = 256
+MAX_DIAGNOSTIC_MUTATION_KEYS = 100
 MAX_DIAGNOSTIC_KEY_LENGTH = 128
 
 ResourceDiagnosticResult = Literal[
@@ -31,6 +32,7 @@ ResourceDiagnosticResult = Literal[
 ]
 CacheDiagnosticResult = Literal["hit", "miss", "bypass"]
 CacheBackendType = Literal["memory", "redis", "custom"]
+MutationRedirectType = Literal["none", "internal", "external"]
 
 
 def _duration_ms(started_at: float) -> float:
@@ -45,7 +47,11 @@ def _finite_duration(value: float) -> float:
 
 def _safe_key(value: str) -> str:
     bounded = value[:MAX_DIAGNOSTIC_KEY_LENGTH]
-    return "".join(character for character in bounded if ord(character) >= 0x20)
+    return "".join(
+        character
+        for character in bounded
+        if ord(character) >= 0x20 and not 0x7F <= ord(character) <= 0x9F
+    )
 
 
 def classify_cache_backend(cache: ResourceCacheBackend) -> CacheBackendType:
@@ -86,6 +92,28 @@ class ResourceDiagnostic:
 
 
 @dataclass(slots=True)
+class MutationPatchDiagnostic:
+    """Counts-only patch metadata for one logical resource."""
+
+    key: str
+    operations: dict[str, int]
+
+
+@dataclass(slots=True)
+class MutationDiagnostic:
+    """Value-free execution metadata for one completed mutation."""
+
+    handler_ms: float
+    invalidation_ms: float
+    serialize_ms: float
+    patches: list[MutationPatchDiagnostic]
+    invalidated: list[str]
+    invalidation_count: int
+    live_signals: int
+    redirect: MutationRedirectType
+
+
+@dataclass(slots=True)
 class RequestDiagnostic:
     """Complete bounded trace for one development-only request."""
 
@@ -96,6 +124,7 @@ class RequestDiagnostic:
     resources_ms: float
     serialize_ms: float
     resources: list[ResourceDiagnostic]
+    mutation: MutationDiagnostic | None = None
     truncated: bool = False
 
 
@@ -103,6 +132,7 @@ class RequestDiagnosticCollector:
     """Collect safe metadata only when an opted-in debug request is active."""
 
     __slots__ = (
+        "_mutation",
         "_started_at",
         "request_id",
         "request_type",
@@ -116,6 +146,7 @@ class RequestDiagnosticCollector:
         self.resources: list[ResourceDiagnostic] = []
         self.truncated = False
         self._started_at = time.perf_counter()
+        self._mutation: MutationDiagnostic | None = None
 
     def start_resource(
         self,
@@ -202,7 +233,59 @@ class RequestDiagnosticCollector:
             resources_ms=_finite_duration(resources_ms),
             serialize_ms=_finite_duration(serialize_ms),
             resources=list(self.resources),
+            mutation=self._mutation,
             truncated=self.truncated,
+        )
+
+    def record_mutation(
+        self,
+        *,
+        handler_ms: float,
+        invalidation_ms: float,
+        serialize_ms: float,
+        patches: dict[str, list[dict[str, object]]] | None,
+        invalidated: list[str] | None,
+        live_signals: int,
+        redirect: MutationRedirectType,
+    ) -> None:
+        """Record a counts-only mutation summary without retaining patch values."""
+
+        self.request_type = "mutation"
+        patch_items = list((patches or {}).items())
+        invalidated_keys = list(invalidated or ())
+        if (
+            len(patch_items) > MAX_DIAGNOSTIC_MUTATION_KEYS
+            or len(invalidated_keys) > MAX_DIAGNOSTIC_MUTATION_KEYS
+        ):
+            self.truncated = True
+
+        patch_diagnostics: list[MutationPatchDiagnostic] = []
+        for key, operations in patch_items[:MAX_DIAGNOSTIC_MUTATION_KEYS]:
+            counts: dict[str, int] = {}
+            for operation in operations:
+                operation_name = operation.get("op")
+                if isinstance(operation_name, str):
+                    safe_operation = _safe_key(operation_name)
+                    counts[safe_operation] = counts.get(safe_operation, 0) + 1
+            patch_diagnostics.append(
+                MutationPatchDiagnostic(
+                    key=_safe_key(key),
+                    operations=dict(sorted(counts.items())),
+                )
+            )
+
+        self._mutation = MutationDiagnostic(
+            handler_ms=_finite_duration(handler_ms),
+            invalidation_ms=_finite_duration(invalidation_ms),
+            serialize_ms=_finite_duration(serialize_ms),
+            patches=patch_diagnostics,
+            invalidated=[
+                _safe_key(key)
+                for key in invalidated_keys[:MAX_DIAGNOSTIC_MUTATION_KEYS]
+            ],
+            invalidation_count=len(invalidated_keys),
+            live_signals=max(0, live_signals),
+            redirect=redirect,
         )
 
 
@@ -236,17 +319,45 @@ def _resource_payload(resource: ResourceDiagnostic) -> dict[str, object]:
 
 
 def _request_payload(trace: RequestDiagnostic) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "protocol": DEVTOOLS_PROTOCOL,
         "requestId": trace.request_id,
         "type": trace.request_type,
         "durationMs": _finite_duration(trace.total_ms),
-        "pageMs": _finite_duration(trace.page_ms),
-        "resourcesMs": _finite_duration(trace.resources_ms),
-        "serializeMs": _finite_duration(trace.serialize_ms),
-        "resources": [_resource_payload(resource) for resource in trace.resources],
         "truncated": trace.truncated,
     }
+    if trace.request_type == "mutation" and trace.mutation is not None:
+        mutation = trace.mutation
+        payload.update(
+            {
+                "handlerMs": _finite_duration(mutation.handler_ms),
+                "invalidationMs": _finite_duration(mutation.invalidation_ms),
+                "serializeMs": _finite_duration(mutation.serialize_ms),
+                "patches": [
+                    {
+                        "key": patch.key,
+                        "operations": patch.operations,
+                    }
+                    for patch in mutation.patches
+                ],
+                "invalidated": mutation.invalidated,
+                "invalidationCount": mutation.invalidation_count,
+                "liveSignals": mutation.live_signals,
+                "redirect": mutation.redirect,
+            }
+        )
+    else:
+        payload.update(
+            {
+                "pageMs": _finite_duration(trace.page_ms),
+                "resourcesMs": _finite_duration(trace.resources_ms),
+                "serializeMs": _finite_duration(trace.serialize_ms),
+                "resources": [
+                    _resource_payload(resource) for resource in trace.resources
+                ],
+            }
+        )
+    return payload
 
 
 def encode_diagnostic_trace(
@@ -259,8 +370,6 @@ def encode_diagnostic_trace(
     if maximum_bytes <= 0:
         return None
     payload = _request_payload(trace)
-    resources = payload["resources"]
-    assert isinstance(resources, list)
 
     while True:
         try:
@@ -275,7 +384,15 @@ def encode_diagnostic_trace(
         encoded = base64.urlsafe_b64encode(encoded_json).rstrip(b"=")
         if len(encoded) <= maximum_bytes:
             return encoded.decode("ascii")
-        if not resources:
+        resources = payload.get("resources")
+        patches = payload.get("patches")
+        invalidated = payload.get("invalidated")
+        if isinstance(resources, list) and resources:
+            resources.pop()
+        elif isinstance(patches, list) and patches:
+            patches.pop()
+        elif isinstance(invalidated, list) and invalidated:
+            invalidated.pop()
+        else:
             return None
-        resources.pop()
         payload["truncated"] = True

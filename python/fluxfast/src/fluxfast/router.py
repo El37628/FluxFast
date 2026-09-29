@@ -98,6 +98,8 @@ async def _render_mutation_result(
     result: MutationResult,
     *,
     origin_client_id: str | None,
+    diagnostics: RequestDiagnosticCollector | None = None,
+    handler_ms: float = 0.0,
 ) -> JSONResponse:
     cache: ResourceCacheBackend = getattr(
         request.app.state,
@@ -105,6 +107,10 @@ async def _render_mutation_result(
         _DEFAULT_CACHE,
     )
     live = _get_live_coordinator(request, cache)
+    invalidation_started_at = (
+        time.perf_counter() if diagnostics is not None else None
+    )
+    live_signals = 0
     for invalidation in result.invalidate or ():
         if not isinstance(invalidation, InvalidateResource):
             continue
@@ -112,6 +118,7 @@ async def _render_mutation_result(
         if resource_scope is None:
             continue
         if resource_scope.is_cacheable:
+            live_signals += 1
             await live.invalidate(
                 invalidation.key,
                 scope=resource_scope,
@@ -121,6 +128,11 @@ async def _render_mutation_result(
             await cache.delete(
                 f"{resource_scope.fingerprint()}::{invalidation.key}"
             )
+    invalidation_ms = (
+        (time.perf_counter() - invalidation_started_at) * 1000.0
+        if invalidation_started_at is not None
+        else 0.0
+    )
 
     envelope = result.to_envelope()
     headers = {
@@ -130,8 +142,41 @@ async def _render_mutation_result(
     if result.external_redirect:
         headers["X-FluxFast-External-Redirect"] = result.external_redirect
 
+    serialize_started_at = time.perf_counter() if diagnostics is not None else None
+    payload = envelope.model_dump(mode="json", exclude_none=True)
+    serialize_ms = (
+        (time.perf_counter() - serialize_started_at) * 1000.0
+        if serialize_started_at is not None
+        else 0.0
+    )
+    if diagnostics is not None:
+        diagnostics.record_mutation(
+            handler_ms=handler_ms,
+            invalidation_ms=invalidation_ms,
+            serialize_ms=serialize_ms,
+            patches=envelope.mutation.patches,
+            invalidated=envelope.mutation.invalidate,
+            live_signals=live_signals,
+            redirect=(
+                "external"
+                if envelope.mutation.externalRedirect
+                else "internal"
+                if envelope.mutation.redirect
+                else "none"
+            ),
+        )
+        trace = encode_diagnostic_trace(
+            diagnostics.build(
+                page_ms=0.0,
+                resources_ms=0.0,
+                serialize_ms=serialize_ms,
+            )
+        )
+        if trace is not None:
+            headers[HEADER_DEVTOOLS_TRACE] = trace
+
     return JSONResponse(
-        content=envelope.model_dump(mode="json", exclude_none=True),
+        content=payload,
         media_type=PROTOCOL_MEDIA_TYPE,
         headers=headers,
     )
@@ -350,6 +395,8 @@ class FluxRouter(APIRouter):
                         request,
                         result,
                         origin_client_id=origin_client_id,
+                        diagnostics=diagnostics,
+                        handler_ms=metrics.page_dur_ms,
                     )
 
                 return result
@@ -418,6 +465,20 @@ class FluxRouter(APIRouter):
                     del call_kwargs[injected_request_name]
 
                 assert request is not None, "Request must be present for FluxFast mutation rendering"
+                debug_enabled = bool(
+                    getattr(request.app.state, "fluxfast_debug", False)
+                )
+                diagnostics = (
+                    RequestDiagnosticCollector("mutation")
+                    if diagnostics_requested(
+                        debug=debug_enabled,
+                        header_value=request.headers.get(HEADER_DEVTOOLS),
+                    )
+                    else None
+                )
+                mutation_started_at = (
+                    time.perf_counter() if diagnostics is not None else None
+                )
                 validate_protocol_header(request)
                 origin_client_id = validate_live_client_id(
                     request.headers.get(HEADER_CLIENT_ID)
@@ -435,6 +496,12 @@ class FluxRouter(APIRouter):
                         request,
                         result,
                         origin_client_id=origin_client_id,
+                        diagnostics=diagnostics,
+                        handler_ms=(
+                            (time.perf_counter() - mutation_started_at) * 1000.0
+                            if mutation_started_at is not None
+                            else 0.0
+                        ),
                     )
                 return result
 
