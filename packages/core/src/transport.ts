@@ -23,6 +23,10 @@ import {
   FluxDiagnosticsHub,
   type FluxDiagnosticEventType,
 } from "./diagnostics.js";
+import {
+  diagnosticErrorType,
+  diagnosticText,
+} from "./diagnostic-safety.js";
 import { assertClientId, HEADER_CLIENT_ID } from "./live/client-id.js";
 
 const MAX_KNOWN_RESOURCES = 100;
@@ -604,23 +608,29 @@ function removeReservedDevToolsHeader(headers: Record<string, string>): void {
 
 function diagnosticPath(url: string): string {
   try {
-    return new URL(url, "http://fluxfast.local").pathname.slice(0, 2_048) || "/";
+    return diagnosticText(
+      new URL(url, "http://fluxfast.local").pathname || "/",
+      2_048
+    );
   } catch {
-    return url.split(/[?#]/, 1)[0].slice(0, 2_048) || "/";
+    return diagnosticText(url.split(/[?#]/, 1)[0] || "/", 2_048);
   }
+}
+
+function diagnosticCorrelationId(value: string | undefined): string | undefined {
+  if (
+    value === undefined ||
+    value.length === 0 ||
+    value.length > 128 ||
+    !/^[A-Za-z0-9_.:-]+$/.test(value)
+  ) {
+    return undefined;
+  }
+  return value;
 }
 
 function diagnosticClock(): number {
   return typeof performance === "undefined" ? Date.now() : performance.now();
-}
-
-function diagnosticErrorType(error: unknown): string {
-  const value = error instanceof Error && error.name
-    ? error.name
-    : "UnknownError";
-  return CONTROL_CHARACTERS.test(value)
-    ? "UnknownError"
-    : value.slice(0, 128);
 }
 
 export class FetchTransport implements FluxTransport {
@@ -761,10 +771,10 @@ export class FetchTransport implements FluxTransport {
     if (!hub?.active) return undefined;
     const context: TransportDiagnosticContext = {
       hub,
-      correlationId: correlationId ??
+      correlationId: diagnosticCorrelationId(correlationId) ??
         `transport_${++this.diagnosticRequestCounter}_${Date.now().toString(36)}`,
       requestType,
-      method: method.slice(0, 32),
+      method: diagnosticText(method, 32),
       path: diagnosticPath(url),
       startedAt: diagnosticClock(),
     };

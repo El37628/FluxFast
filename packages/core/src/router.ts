@@ -6,6 +6,10 @@ import {
   type FluxDiagnosticEventType,
 } from "./diagnostics.js";
 import {
+  diagnosticErrorType,
+  diagnosticText,
+} from "./diagnostic-safety.js";
+import {
   EventEmitter,
   FluxEventListener,
   FluxEventName,
@@ -559,7 +563,7 @@ export class FluxRouter {
             this.emitDiagnostic("resource-update", {
               key: this.diagnosticText(key),
               state: "error",
-              errorType: this.diagnosticText(resourceError.type, 128),
+              errorType: this.diagnosticErrorType(resourceError.type),
               source: options.reason,
             }, loadId);
           }
@@ -648,7 +652,7 @@ export class FluxRouter {
             this.emitDiagnostic("resource-update", {
               key: this.diagnosticText(key),
               state: "error",
-              errorType: this.diagnosticText(resourceError.type, 128),
+              errorType: this.diagnosticErrorType(resourceError.type),
               source: options.reason,
             }, loadId);
           }
@@ -1474,15 +1478,11 @@ export class FluxRouter {
   }
 
   private diagnosticErrorType(error: unknown): string {
-    return this.diagnosticText(error instanceof Error && error.name
-      ? error.name
-      : "UnknownError", 128);
+    return diagnosticErrorType(error);
   }
 
   private diagnosticText(value: string, maximumLength = 256): string {
-    return value.length <= maximumLength
-      ? value
-      : `${value.slice(0, maximumLength - 1)}…`;
+    return diagnosticText(value, maximumLength);
   }
 }
 
