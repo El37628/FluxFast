@@ -97,6 +97,14 @@ They omit query strings, headers, request bodies, resource values, and raw
 error messages. DevTools consumers should still treat the channel as
 development-only and keep their own bounded history.
 
+The built-in `FetchTransport` is attached automatically. While at least one
+listener is active, it adds the development opt-in header, records bounded
+browser timing, validates the response trace, and emits correlated `transport`
+and `server-trace` observations. Removing the final listener restores the
+ordinary request path and suppresses the opt-in header. Custom transports remain
+compatible; they may implement the optional `attachDiagnostics(hub)` method to
+participate.
+
 For the current store state, use the value-free inspection snapshot:
 
 ```ts

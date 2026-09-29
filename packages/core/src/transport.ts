@@ -15,6 +15,10 @@ import {
   VersionMismatchError,
 } from "./errors.js";
 import { HEADER_CAPABILITIES, serializeCapabilities } from "./capabilities.js";
+import {
+  FluxDiagnosticsHub,
+  type FluxDiagnosticEventType,
+} from "./diagnostics.js";
 import { assertClientId, HEADER_CLIENT_ID } from "./live/client-id.js";
 
 const MAX_KNOWN_RESOURCES = 100;
@@ -22,6 +26,12 @@ const MAX_KNOWN_BYTES = 16 * 1024;
 const MAX_KEY_LENGTH = 128;
 const MAX_VERSION_LENGTH = 128;
 const MAX_ONLY_HEADER_BYTES = 16 * 1024;
+const HEADER_DEVTOOLS = "X-FluxFast-DevTools";
+const HEADER_DEVTOOLS_TRACE = "X-FluxFast-DevTools-Trace";
+const MAX_DEVTOOLS_TRACE_HEADER_CHARS = 7 * 1024;
+const MAX_DEVTOOLS_TRACE_RESOURCES = 256;
+const MAX_DEVTOOLS_TRACE_MUTATION_KEYS = 100;
+const MAX_DEVTOOLS_DURATION_MS = 86_400_000;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
 
 export interface VisitTransportRequest {
@@ -40,15 +50,275 @@ export interface MutationTransportRequest {
   clientId?: string;
   signal?: AbortSignal;
   headers?: Record<string, string>;
+  diagnosticCorrelationId?: string;
 }
 
 export interface FluxTransport {
   visit(request: VisitTransportRequest): Promise<PageEnvelope>;
   mutate(request: MutationTransportRequest): Promise<MutationEnvelope>;
+  attachDiagnostics?(diagnostics: FluxDiagnosticsHub): void;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[]
+): boolean {
+  const allowedKeys = new Set(allowed);
+  return Object.keys(value).every(key => allowedKeys.has(key));
+}
+
+function isSafeDiagnosticText(
+  value: unknown,
+  maximumLength: number
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maximumLength &&
+    !CONTROL_CHARACTERS.test(value)
+  );
+}
+
+function isSafeDiagnosticNumber(
+  value: unknown,
+  maximum: number = MAX_DEVTOOLS_DURATION_MS
+): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= maximum
+  );
+}
+
+function decodeBase64Url(value: string): string | undefined {
+  if (
+    value.length === 0 ||
+    value.length > MAX_DEVTOOLS_TRACE_HEADER_CHARS ||
+    value.length % 4 === 1 ||
+    !/^[A-Za-z0-9_-]+$/.test(value)
+  ) {
+    return undefined;
+  }
+  try {
+    const standard = value.replace(/-/g, "+").replace(/_/g, "/");
+    const binary = atob(standard + "=".repeat((4 - standard.length % 4) % 4));
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeResourceTrace(value: unknown): Record<string, unknown> | undefined {
+  if (
+    !isObject(value) ||
+    !hasOnlyKeys(value, [
+      "key",
+      "result",
+      "durationMs",
+      "scope",
+      "ttl",
+      "deferred",
+      "live",
+      "cacheBackend",
+      "cacheResult",
+      "sent",
+      "knownVersion",
+      "cacheMs",
+      "loaderMs",
+      "errorType",
+    ]) ||
+    !isSafeResourceKey(value.key) ||
+    typeof value.result !== "string" ||
+    !["cache-hit", "cache-miss", "loader", "deferred", "omitted-known", "error"]
+      .includes(value.result) ||
+    !isSafeDiagnosticNumber(value.durationMs) ||
+    typeof value.scope !== "string" ||
+    !["public", "user", "tenant", "request", "custom"]
+      .includes(value.scope) ||
+    !isSafeDiagnosticNumber(value.ttl, 1_000_000_000_000) ||
+    typeof value.deferred !== "boolean" ||
+    typeof value.live !== "boolean" ||
+    typeof value.cacheBackend !== "string" ||
+    !["memory", "redis", "custom"].includes(value.cacheBackend) ||
+    typeof value.cacheResult !== "string" ||
+    !["hit", "miss", "bypass"].includes(value.cacheResult) ||
+    typeof value.sent !== "boolean" ||
+    typeof value.knownVersion !== "boolean" ||
+    (value.cacheMs !== undefined && !isSafeDiagnosticNumber(value.cacheMs)) ||
+    (value.loaderMs !== undefined && !isSafeDiagnosticNumber(value.loaderMs)) ||
+    (value.errorType !== undefined && (
+      typeof value.errorType !== "string" ||
+      ![
+        "ResourceError",
+        "ResourceContractError",
+        "ResourceCacheError",
+      ].includes(value.errorType)
+    ))
+  ) {
+    return undefined;
+  }
+  return {
+    key: value.key,
+    result: value.result,
+    durationMs: value.durationMs,
+    scope: value.scope,
+    ttl: value.ttl,
+    deferred: value.deferred,
+    live: value.live,
+    cacheBackend: value.cacheBackend,
+    cacheResult: value.cacheResult,
+    sent: value.sent,
+    knownVersion: value.knownVersion,
+    ...(value.cacheMs === undefined ? {} : { cacheMs: value.cacheMs }),
+    ...(value.loaderMs === undefined ? {} : { loaderMs: value.loaderMs }),
+    ...(value.errorType === undefined ? {} : { errorType: value.errorType }),
+  };
+}
+
+function sanitizePatchTrace(value: unknown): Record<string, unknown> | undefined {
+  if (
+    !isObject(value) ||
+    !hasOnlyKeys(value, ["key", "operations"]) ||
+    !isSafeResourceKey(value.key) ||
+    !isObject(value.operations) ||
+    !hasOnlyKeys(value.operations, [
+      "replace-resource",
+      "merge-object",
+      "replace-item",
+      "remove-item",
+      "append-item",
+    ])
+  ) {
+    return undefined;
+  }
+  const operations: Record<string, number> = {};
+  for (const [operation, count] of Object.entries(value.operations)) {
+    if (!Number.isSafeInteger(count) || (count as number) <= 0 || (count as number) > 1_000_000) {
+      return undefined;
+    }
+    operations[operation] = count as number;
+  }
+  return { key: value.key, operations };
+}
+
+function sanitizeServerTrace(value: unknown): Record<string, unknown> | undefined {
+  if (
+    !isObject(value) ||
+    value.protocol !== "fluxfast-devtools/1" ||
+    !isSafeDiagnosticText(value.requestId, 96) ||
+    !/^ffdev_[A-Za-z0-9_-]+$/.test(value.requestId) ||
+    typeof value.type !== "string" ||
+    !["page", "mutation"].includes(value.type) ||
+    !isSafeDiagnosticNumber(value.durationMs) ||
+    typeof value.truncated !== "boolean"
+  ) {
+    return undefined;
+  }
+
+  const common = {
+    protocol: "fluxfast-devtools/1",
+    requestId: value.requestId,
+    type: value.type,
+    durationMs: value.durationMs,
+    truncated: value.truncated,
+  };
+  if (value.type === "page") {
+    if (
+      !hasOnlyKeys(value, [
+        "protocol",
+        "requestId",
+        "type",
+        "durationMs",
+        "pageMs",
+        "resourcesMs",
+        "serializeMs",
+        "resources",
+        "truncated",
+      ]) ||
+      !isSafeDiagnosticNumber(value.pageMs) ||
+      !isSafeDiagnosticNumber(value.resourcesMs) ||
+      !isSafeDiagnosticNumber(value.serializeMs) ||
+      !Array.isArray(value.resources) ||
+      value.resources.length > MAX_DEVTOOLS_TRACE_RESOURCES
+    ) {
+      return undefined;
+    }
+    const resources = value.resources.map(sanitizeResourceTrace);
+    if (resources.some(resource => resource === undefined)) return undefined;
+    return {
+      ...common,
+      pageMs: value.pageMs,
+      resourcesMs: value.resourcesMs,
+      serializeMs: value.serializeMs,
+      resources,
+    };
+  }
+
+  if (
+    !hasOnlyKeys(value, [
+      "protocol",
+      "requestId",
+      "type",
+      "durationMs",
+      "handlerMs",
+      "invalidationMs",
+      "serializeMs",
+      "patches",
+      "invalidated",
+      "invalidationCount",
+      "liveSignals",
+      "redirect",
+      "truncated",
+    ]) ||
+    !isSafeDiagnosticNumber(value.handlerMs) ||
+    !isSafeDiagnosticNumber(value.invalidationMs) ||
+    !isSafeDiagnosticNumber(value.serializeMs) ||
+    !Array.isArray(value.patches) ||
+    value.patches.length > MAX_DEVTOOLS_TRACE_MUTATION_KEYS ||
+    !Array.isArray(value.invalidated) ||
+    value.invalidated.length > MAX_DEVTOOLS_TRACE_MUTATION_KEYS ||
+    value.invalidated.some(key => !isSafeResourceKey(key)) ||
+    !Number.isSafeInteger(value.invalidationCount) ||
+    (value.invalidationCount as number) < value.invalidated.length ||
+    (value.invalidationCount as number) > 1_000_000 ||
+    !Number.isSafeInteger(value.liveSignals) ||
+    (value.liveSignals as number) < 0 ||
+    (value.liveSignals as number) > 1_000_000 ||
+    typeof value.redirect !== "string" ||
+    !["none", "internal", "external"].includes(value.redirect)
+  ) {
+    return undefined;
+  }
+  const patches = value.patches.map(sanitizePatchTrace);
+  if (patches.some(patch => patch === undefined)) return undefined;
+  return {
+    ...common,
+    handlerMs: value.handlerMs,
+    invalidationMs: value.invalidationMs,
+    serializeMs: value.serializeMs,
+    patches,
+    invalidated: [...value.invalidated],
+    invalidationCount: value.invalidationCount,
+    liveSignals: value.liveSignals,
+    redirect: value.redirect,
+  };
+}
+
+function decodeServerTrace(value: string | null): Record<string, unknown> | undefined {
+  if (value === null) return undefined;
+  const decoded = decodeBase64Url(value);
+  if (decoded === undefined) return undefined;
+  try {
+    return sanitizeServerTrace(JSON.parse(decoded));
+  } catch {
+    return undefined;
+  }
 }
 
 function isSafeResourceKey(value: unknown): value is string {
@@ -251,11 +521,54 @@ function validationDetails(data: unknown): Record<string, string[]> | undefined 
   return errors;
 }
 
+interface TransportDiagnosticContext {
+  readonly hub: FluxDiagnosticsHub;
+  readonly correlationId: string;
+  readonly requestType: "page" | "mutation";
+  readonly method: string;
+  readonly path: string;
+  readonly startedAt: number;
+}
+
+function removeReservedDevToolsHeader(headers: Record<string, string>): void {
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === HEADER_DEVTOOLS.toLowerCase()) delete headers[key];
+  }
+}
+
+function diagnosticPath(url: string): string {
+  try {
+    return new URL(url, "http://fluxfast.local").pathname.slice(0, 2_048) || "/";
+  } catch {
+    return url.split(/[?#]/, 1)[0].slice(0, 2_048) || "/";
+  }
+}
+
+function diagnosticClock(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
+}
+
+function diagnosticErrorType(error: unknown): string {
+  const value = error instanceof Error && error.name
+    ? error.name
+    : "UnknownError";
+  return CONTROL_CHARACTERS.test(value)
+    ? "UnknownError"
+    : value.slice(0, 128);
+}
+
 export class FetchTransport implements FluxTransport {
   private readonly baseUrl: string;
+  private diagnostics?: FluxDiagnosticsHub;
+  private diagnosticEventCounter = 0;
+  private diagnosticRequestCounter = 0;
 
   constructor(baseUrl: string = "") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+  }
+
+  attachDiagnostics(diagnostics: FluxDiagnosticsHub): void {
+    this.diagnostics = diagnostics;
   }
 
   private resolveUrl(path: string): string {
@@ -264,6 +577,12 @@ export class FetchTransport implements FluxTransport {
   }
 
   async visit(request: VisitTransportRequest): Promise<PageEnvelope> {
+    const diagnostic = this.beginDiagnostic(
+      "page",
+      "GET",
+      request.url,
+      request.visitId
+    );
     const headers: Record<string, string> = {
       ...(request.headers ?? {}),
       Accept: PROTOCOL_MEDIA_TYPE,
@@ -272,6 +591,8 @@ export class FetchTransport implements FluxTransport {
       "X-FluxFast-Visit": request.visitId,
       [HEADER_CAPABILITIES]: serializeCapabilities(),
     };
+    removeReservedDevToolsHeader(headers);
+    if (diagnostic) headers[HEADER_DEVTOOLS] = "1";
     const encodedKnown = encodeKnownVersions(request.knownVersions);
     if (encodedKnown) headers["X-FluxFast-Known"] = encodedKnown;
     if (request.only?.length) {
@@ -287,17 +608,40 @@ export class FetchTransport implements FluxTransport {
       }
     }
 
-    const response = await fetch(this.resolveUrl(request.url), {
-      method: "GET",
-      headers,
-      signal: request.signal,
-      credentials: "include",
-    });
-    return this.handlePageResponse(response);
+    let response: Response | undefined;
+    let traceStatus: "missing" | "valid" | "invalid" = "missing";
+    try {
+      response = await fetch(this.resolveUrl(request.url), {
+        method: "GET",
+        headers,
+        signal: request.signal,
+        credentials: "include",
+      });
+      traceStatus = this.emitServerTrace(diagnostic, response);
+      const envelope = await this.handlePageResponse(response);
+      this.finishDiagnostic(diagnostic, "success", response.status, traceStatus);
+      return envelope;
+    } catch (error) {
+      this.finishDiagnostic(
+        diagnostic,
+        "error",
+        response?.status,
+        traceStatus,
+        error
+      );
+      throw error;
+    }
   }
 
   async mutate(request: MutationTransportRequest): Promise<MutationEnvelope> {
     assertClientId(request.clientId);
+    const method = request.method ?? "POST";
+    const diagnostic = this.beginDiagnostic(
+      "mutation",
+      method,
+      request.url,
+      request.diagnosticCorrelationId
+    );
     const headers: Record<string, string> = {
       ...(request.headers ?? {}),
       Accept: PROTOCOL_MEDIA_TYPE,
@@ -306,15 +650,110 @@ export class FetchTransport implements FluxTransport {
       "X-FluxFast-Protocol": "1",
       [HEADER_CAPABILITIES]: serializeCapabilities(),
     };
+    removeReservedDevToolsHeader(headers);
+    if (diagnostic) headers[HEADER_DEVTOOLS] = "1";
     if (request.clientId) headers[HEADER_CLIENT_ID] = request.clientId;
-    const response = await fetch(this.resolveUrl(request.url), {
-      method: request.method ?? "POST",
-      headers,
-      body: request.data === undefined ? undefined : JSON.stringify(request.data),
-      signal: request.signal,
-      credentials: "include",
+    let response: Response | undefined;
+    let traceStatus: "missing" | "valid" | "invalid" = "missing";
+    try {
+      response = await fetch(this.resolveUrl(request.url), {
+        method,
+        headers,
+        body: request.data === undefined ? undefined : JSON.stringify(request.data),
+        signal: request.signal,
+        credentials: "include",
+      });
+      traceStatus = this.emitServerTrace(diagnostic, response);
+      const envelope = await this.handleMutationResponse(response);
+      this.finishDiagnostic(diagnostic, "success", response.status, traceStatus);
+      return envelope;
+    } catch (error) {
+      this.finishDiagnostic(
+        diagnostic,
+        "error",
+        response?.status,
+        traceStatus,
+        error
+      );
+      throw error;
+    }
+  }
+
+  private beginDiagnostic(
+    requestType: "page" | "mutation",
+    method: string,
+    url: string,
+    correlationId?: string
+  ): TransportDiagnosticContext | undefined {
+    const hub = this.diagnostics;
+    if (!hub?.active) return undefined;
+    const context: TransportDiagnosticContext = {
+      hub,
+      correlationId: correlationId ??
+        `transport_${++this.diagnosticRequestCounter}_${Date.now().toString(36)}`,
+      requestType,
+      method: method.slice(0, 32),
+      path: diagnosticPath(url),
+      startedAt: diagnosticClock(),
+    };
+    this.emitDiagnostic(context, "transport", {
+      phase: "start",
+      requestType,
+      method: context.method,
+      path: context.path,
     });
-    return this.handleMutationResponse(response);
+    return context;
+  }
+
+  private emitServerTrace(
+    context: TransportDiagnosticContext | undefined,
+    response: Response
+  ): "missing" | "valid" | "invalid" {
+    if (!context || !context.hub.active) return "missing";
+    const encoded = response.headers.get(HEADER_DEVTOOLS_TRACE);
+    if (encoded === null) return "missing";
+    const trace = decodeServerTrace(encoded);
+    if (!trace) return "invalid";
+    this.emitDiagnostic(context, "server-trace", trace);
+    return "valid";
+  }
+
+  private finishDiagnostic(
+    context: TransportDiagnosticContext | undefined,
+    phase: "success" | "error",
+    status: number | undefined,
+    serverTrace: "missing" | "valid" | "invalid",
+    error?: unknown
+  ): void {
+    if (!context?.hub.active) return;
+    this.emitDiagnostic(context, "transport", {
+      phase,
+      requestType: context.requestType,
+      method: context.method,
+      path: context.path,
+      durationMs: Math.max(0, diagnosticClock() - context.startedAt),
+      ...(status === undefined ? {} : { status }),
+      serverTrace,
+      ...(phase === "error"
+        ? { errorType: diagnosticErrorType(error) }
+        : {}),
+    });
+  }
+
+  private emitDiagnostic(
+    context: TransportDiagnosticContext,
+    type: FluxDiagnosticEventType,
+    data: unknown
+  ): void {
+    if (!context.hub.active) return;
+    const timestamp = Date.now();
+    context.hub.emit({
+      id: `transport_diagnostic_${++this.diagnosticEventCounter}_${timestamp.toString(36)}`,
+      timestamp,
+      type,
+      correlationId: context.correlationId,
+      data,
+    });
   }
 
   private async readResponse(response: Response): Promise<unknown> {

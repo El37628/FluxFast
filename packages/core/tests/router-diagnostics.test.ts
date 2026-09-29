@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { FluxDiagnosticEvent } from "../src/diagnostics";
+import type {
+  FluxDiagnosticEvent,
+  FluxDiagnosticsHub,
+} from "../src/diagnostics";
 import type { MutationEnvelope, PageEnvelope } from "../src/protocol";
 import { FluxRouter } from "../src/router";
 import type {
@@ -9,12 +12,17 @@ import type {
 } from "../src/transport";
 
 class MockTransport implements FluxTransport {
+  public diagnostics?: FluxDiagnosticsHub;
   public readonly visitMock = vi.fn<
     (request: VisitTransportRequest) => Promise<PageEnvelope>
   >();
   public readonly mutateMock = vi.fn<
     (request: MutationTransportRequest) => Promise<MutationEnvelope>
   >();
+
+  attachDiagnostics(diagnostics: FluxDiagnosticsHub): void {
+    this.diagnostics = diagnostics;
+  }
 
   visit(request: VisitTransportRequest): Promise<PageEnvelope> {
     return this.visitMock(request);
@@ -41,6 +49,7 @@ describe("FluxRouter diagnostics", () => {
     const emit = vi.spyOn(router.diagnostics, "emit");
 
     expect(router.diagnostics.active).toBe(false);
+    expect(transport.diagnostics).toBe(router.diagnostics);
     await router.visit("/rooms");
 
     expect(emit).not.toHaveBeenCalled();
@@ -174,6 +183,12 @@ describe("FluxRouter diagnostics", () => {
     router.diagnostics.subscribe(event => events.push(event));
 
     await router.mutate("/summary?token=secret", { password: "request-secret" });
+    const mutationCorrelationId = events.find(event => (
+      event.type === "mutation" && payload(event).phase === "start"
+    ))?.correlationId;
+    expect(transport.mutateMock).toHaveBeenCalledWith(expect.objectContaining({
+      diagnosticCorrelationId: mutationCorrelationId,
+    }));
     await router.prefetch("/reports?token=prefetch-secret");
     await router.startInitialDeferred();
     router.clear();

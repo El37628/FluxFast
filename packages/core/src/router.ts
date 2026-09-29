@@ -119,6 +119,7 @@ export class FluxRouter {
     this.transport = options.transport ?? createFetchTransport();
     this.events = new EventEmitter();
     this.diagnostics = new FluxDiagnosticsHub();
+    this.transport.attachDiagnostics?.(this.diagnostics);
     this.history = options.history ?? new HistoryManager();
     this.prefetchManager = options.prefetchManager ?? new PrefetchManager();
     this.pageCache = options.pageCache ?? new PageCache(options.maxPages);
@@ -778,6 +779,9 @@ export class FluxRouter {
         method,
         headers: options.headers,
         clientId: this.clientId,
+        ...(mutationId === undefined
+          ? {}
+          : { diagnosticCorrelationId: mutationId }),
       });
       if (lifecycleGeneration !== this.lifecycleGeneration) return envelope;
 
