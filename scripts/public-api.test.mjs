@@ -31,6 +31,14 @@ const v11CoreAdditions = Object.freeze({
     "FluxDiagnosticEventType",
     "FluxDiagnosticListener",
     "ResourceMetadataSnapshot",
+    "FluxServerDiagnosticTrace",
+  ],
+  valueOnly: [
+    "DEVTOOLS_PROTOCOL_VERSION",
+    "HEADER_DEVTOOLS",
+    "HEADER_DEVTOOLS_TRACE",
+    "MAX_DEVTOOLS_TRACE_HEADER_CHARS",
+    "decodeServerDiagnosticTrace",
   ],
   typeAndValue: ["FluxDiagnosticsHub"],
 });
@@ -38,7 +46,28 @@ const v11CoreAdditions = Object.freeze({
 const v11CoreDeclarationChanges = Object.freeze({
   "router.d.ts": "a48826c75584952c90b78bcdb22ac767a508712c2c040aa9afb8002525d45866",
   "store.d.ts": "17990d96eaf8f238d2edb3a1b395dc5e181ee1755422b5fca420750b4c9c13e0",
-  "transport.d.ts": "b7320ac740792c77abd79234d95e9ad720822b39983c7723ee25d018d21a67f5",
+  "transport.d.ts": "279a82ed912bd349041f556926de99012cefcf0b2693973d0788cff58d5582e7",
+});
+
+const v11NextAdditions = Object.freeze({
+  ".": Object.freeze({ typeOnly: ["FluxDevelopmentMetadata"] }),
+  "./client": Object.freeze({ typeOnly: ["FluxDevelopmentMetadata"] }),
+});
+
+const v11NextDeclarationChanges = Object.freeze({
+  ".": Object.freeze({
+    "config.d.ts": "412db26e36ba5c810328b30aa574e43cb9972dff564b5af0aebbb92866b357cc",
+    "provider.d.ts": "8b849865648a1f2ddc008d5e63447e659c8ae5134604c698fecf6b1f189e25b5",
+    "root.d.ts": "9643e74f6f9bc7a4654a97eced01414d26226543348d5a460d938969755cba92",
+  }),
+  "./client": Object.freeze({
+    "config.d.ts": "412db26e36ba5c810328b30aa574e43cb9972dff564b5af0aebbb92866b357cc",
+    "provider.d.ts": "8b849865648a1f2ddc008d5e63447e659c8ae5134604c698fecf6b1f189e25b5",
+    "root.d.ts": "9643e74f6f9bc7a4654a97eced01414d26226543348d5a460d938969755cba92",
+  }),
+  "./server": Object.freeze({
+    "config.d.ts": "412db26e36ba5c810328b30aa574e43cb9972dff564b5af0aebbb92866b357cc",
+  }),
 });
 
 test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () => {
@@ -60,11 +89,6 @@ test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () =>
     current.packages["@fluxfast/core"].exportMap,
     expected.packages["@fluxfast/core"].exportMap
   );
-  assert.deepEqual(
-    current.packages["@fluxfast/next"],
-    expected.packages["@fluxfast/next"]
-  );
-
   const expectedCoreFiles =
     expected.packages["@fluxfast/core"].declarations["."].files;
   const currentCoreFiles =
@@ -81,6 +105,46 @@ test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () =>
     Object.keys(currentCoreFiles).filter(file => !(file in expectedCoreFiles)),
     ["diagnostics.d.ts"]
   );
+  assert.equal(
+    currentCoreFiles["diagnostics.d.ts"],
+    "b8e0637ca5a7197b3de19662c323bed71b1dbbe5fdce3c9f1bb8db83e17986dd"
+  );
+
+  const expectedNextEntries = structuredClone(
+    expected.packages["@fluxfast/next"].entries
+  );
+  for (const [entry, groups] of Object.entries(v11NextAdditions)) {
+    for (const [group, names] of Object.entries(groups)) {
+      expectedNextEntries[entry][group].push(...names);
+      expectedNextEntries[entry][group].sort();
+    }
+  }
+  assert.deepEqual(
+    current.packages["@fluxfast/next"].entries,
+    expectedNextEntries
+  );
+  assert.deepEqual(
+    current.packages["@fluxfast/next"].bin,
+    expected.packages["@fluxfast/next"].bin
+  );
+  assert.deepEqual(
+    current.packages["@fluxfast/next"].exportMap,
+    expected.packages["@fluxfast/next"].exportMap
+  );
+  for (const [entry, declaration] of Object.entries(
+    expected.packages["@fluxfast/next"].declarations
+  )) {
+    const currentFiles = current.packages["@fluxfast/next"]
+      .declarations[entry].files;
+    for (const [file, fingerprint] of Object.entries(declaration.files)) {
+      assert.equal(
+        currentFiles[file],
+        v11NextDeclarationChanges[entry]?.[file] ?? fingerprint,
+        `${entry} ${file} changed`
+      );
+    }
+    assert.deepEqual(Object.keys(currentFiles), Object.keys(declaration.files));
+  }
 });
 
 test("retains the historical v0.8.1 baseline and its reviewed v0.9 delta", () => {

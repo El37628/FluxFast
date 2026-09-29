@@ -219,6 +219,13 @@ origin, credential-bearing URLs, and malformed targets fail without forwarding
 another request. This server-side HTTP boundary does not change the browser's
 explicit FluxFast mutation redirect and external-navigation envelopes.
 
+In development, the same initial request opts into the bounded
+`fluxfast-devtools/1` trace. The adapter validates the response metadata, strips
+the query string from its route label, and hands it to `FluxRoot` separately
+from `PageEnvelope`. The provider emits the SSR trace and a hydration marker to
+the diagnostic hub exactly once, including under React StrictMode. In
+production the request header and bootstrap metadata are both absent.
+
 `backendUrl` is server-visible and normally comes from the development
 supervisor. `clientUrl` is the browser transport base; omit it for the default
 same-origin setup. Set either value explicitly only for a deliberate deployment

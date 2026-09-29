@@ -26,9 +26,14 @@ const MAX_KNOWN_BYTES = 16 * 1024;
 const MAX_KEY_LENGTH = 128;
 const MAX_VERSION_LENGTH = 128;
 const MAX_ONLY_HEADER_BYTES = 16 * 1024;
-const HEADER_DEVTOOLS = "X-FluxFast-DevTools";
-const HEADER_DEVTOOLS_TRACE = "X-FluxFast-DevTools-Trace";
-const MAX_DEVTOOLS_TRACE_HEADER_CHARS = 7 * 1024;
+/** Independent development trace protocol understood by this client. */
+export const DEVTOOLS_PROTOCOL_VERSION = "fluxfast-devtools/1";
+/** Exact opt-in request header for development traces. */
+export const HEADER_DEVTOOLS = "X-FluxFast-DevTools";
+/** Bounded response header carrying development trace metadata. */
+export const HEADER_DEVTOOLS_TRACE = "X-FluxFast-DevTools-Trace";
+/** Maximum encoded trace size accepted by browser and SSR transports. */
+export const MAX_DEVTOOLS_TRACE_HEADER_CHARS = 7 * 1024;
 const MAX_DEVTOOLS_TRACE_RESOURCES = 256;
 const MAX_DEVTOOLS_TRACE_MUTATION_KEYS = 100;
 const MAX_DEVTOOLS_DURATION_MS = 86_400_000;
@@ -207,10 +212,13 @@ function sanitizePatchTrace(value: unknown): Record<string, unknown> | undefined
   return { key: value.key, operations };
 }
 
-function sanitizeServerTrace(value: unknown): Record<string, unknown> | undefined {
+/** A strictly validated, value-free backend diagnostic trace. */
+export type FluxServerDiagnosticTrace = Readonly<Record<string, unknown>>;
+
+function sanitizeServerTrace(value: unknown): FluxServerDiagnosticTrace | undefined {
   if (
     !isObject(value) ||
-    value.protocol !== "fluxfast-devtools/1" ||
+    value.protocol !== DEVTOOLS_PROTOCOL_VERSION ||
     !isSafeDiagnosticText(value.requestId, 96) ||
     !/^ffdev_[A-Za-z0-9_-]+$/.test(value.requestId) ||
     typeof value.type !== "string" ||
@@ -222,7 +230,7 @@ function sanitizeServerTrace(value: unknown): Record<string, unknown> | undefine
   }
 
   const common = {
-    protocol: "fluxfast-devtools/1",
+    protocol: DEVTOOLS_PROTOCOL_VERSION,
     requestId: value.requestId,
     type: value.type,
     durationMs: value.durationMs,
@@ -310,7 +318,10 @@ function sanitizeServerTrace(value: unknown): Record<string, unknown> | undefine
   };
 }
 
-function decodeServerTrace(value: string | null): Record<string, unknown> | undefined {
+/** Decode and strictly validate one bounded development trace header. */
+export function decodeServerDiagnosticTrace(
+  value: string | null
+): FluxServerDiagnosticTrace | undefined {
   if (value === null) return undefined;
   const decoded = decodeBase64Url(value);
   if (decoded === undefined) return undefined;
@@ -712,7 +723,7 @@ export class FetchTransport implements FluxTransport {
     if (!context || !context.hub.active) return "missing";
     const encoded = response.headers.get(HEADER_DEVTOOLS_TRACE);
     if (encoded === null) return "missing";
-    const trace = decodeServerTrace(encoded);
+    const trace = decodeServerDiagnosticTrace(encoded);
     if (!trace) return "invalid";
     this.emitDiagnostic(context, "server-trace", trace);
     return "valid";

@@ -79,7 +79,11 @@ the same `FluxRouter` public runtime.
 
 Every `FluxRouter` owns a `diagnostics` hub. It is inactive until a development
 tool subscribes, so normal application execution does not allocate diagnostic
-events. The hub distributes observations only; it does not retain a timeline.
+events. The hub distributes observations only; it does not retain a runtime
+timeline. Adapters may use `bootstrap()` for one bounded, one-shot batch
+captured before a browser listener could exist, such as the initial SSR trace.
+The first subscriber consumes that batch; long-term history remains the
+DevTools consumer's responsibility.
 
 ```ts
 const stop = router.diagnostics.subscribe(event => {
@@ -289,6 +293,7 @@ CAPABILITY_DEFERRED_RESOURCES
 CAPABILITY_LIVE_RESOURCES
 CachedPage
 CompiledValidationPlan
+DEVTOOLS_PROTOCOL_VERSION
 DEFAULT_LIVE_RECONNECT_INITIAL_DELAY_MS
 DEFAULT_LIVE_RECONNECT_JITTER
 DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS
@@ -306,10 +311,13 @@ FluxDiagnosticEvent
 FluxDiagnosticEventType
 FluxDiagnosticListener
 FluxDiagnosticsHub
+FluxServerDiagnosticTrace
 FluxSseParser
 FluxTransport
 HEADER_CAPABILITIES
 HEADER_CLIENT_ID
+HEADER_DEVTOOLS
+HEADER_DEVTOOLS_TRACE
 HEADER_LIVE
 HEADER_LIVE_KEYS
 HistoryManager
@@ -334,6 +342,7 @@ LiveResyncEvent
 LiveResyncReason
 LiveStatusSnapshot
 LiveTransport
+MAX_DEVTOOLS_TRACE_HEADER_CHARS
 MAX_LIVE_CLIENT_ID_LENGTH
 MAX_LIVE_EVENT_BYTES
 MAX_LIVE_EVENT_KEYS
@@ -387,6 +396,7 @@ createClientId
 createFetchSseLiveTransport
 createFetchTransport
 createLiveManager
+decodeServerDiagnosticTrace
 encodeKnownVersions
 evaluateValidationPlan
 isSupportedValidationFormat

@@ -200,6 +200,7 @@ DeferredResourceResult
 FetchInitialEnvelopeOptions
 FluxApplicationProps
 FluxCacheConfig
+FluxDevelopmentMetadata
 FluxFastGenerationCheckResult
 FluxFastGenerationOptions
 FluxFastGenerationResult
@@ -286,6 +287,7 @@ DEFAULT_FLUXFAST_BACKEND_URL
 DeferredResourceResult
 FluxApplicationProps
 FluxCacheConfig
+FluxDevelopmentMetadata
 FluxContext
 FluxContextValue
 FluxNextConfig
@@ -330,6 +332,7 @@ DEFAULT_FLUXFAST_BACKEND_URL
 DeferredResourceResult
 FluxApplicationProps
 FluxCacheConfig
+FluxDevelopmentMetadata
 FluxContext
 FluxContextValue
 FluxNextConfig

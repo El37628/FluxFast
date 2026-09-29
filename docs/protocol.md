@@ -520,6 +520,15 @@ omitted and the application response proceeds unchanged.
 `fluxfast-devtools/1` is versioned independently. Package releases and future
 `fluxfast/1` revisions do not imply a diagnostic-protocol version change.
 
+For the initial document request, the Next server adapter opts in only outside
+production, validates the bounded response header with the same decoder as the
+browser transport, and passes a query-free path plus the safe trace through
+separate development bootstrap metadata. It never adds the trace to
+`PageEnvelope`. The browser diagnostic hub publishes that trace followed by a
+`hydrated` lifecycle marker. Invalid traces are ignored without affecting the
+page, and production requests neither send the opt-in header nor serialize the
+bootstrap metadata.
+
 Successful mutation traces use the same envelope identity with a counts-only
 summary:
 

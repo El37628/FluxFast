@@ -19,11 +19,17 @@ const baselinePath = path.join(
   "tests/fixtures/public-api-v0.9.0.json"
 );
 const v11Additions = [
+  "DEVTOOLS_PROTOCOL_VERSION",
   "FluxDiagnosticEvent",
   "FluxDiagnosticEventType",
   "FluxDiagnosticListener",
   "FluxDiagnosticsHub",
+  "FluxServerDiagnosticTrace",
+  "HEADER_DEVTOOLS",
+  "HEADER_DEVTOOLS_TRACE",
+  "MAX_DEVTOOLS_TRACE_HEADER_CHARS",
   "ResourceMetadataSnapshot",
+  "decodeServerDiagnosticTrace",
 ];
 
 function namesBetween(start: string, end: string): string[] {
@@ -62,7 +68,7 @@ describe("1.x public API classification", () => {
     const classified = [...stable, ...advanced];
 
     expect(stable).toHaveLength(49);
-    expect(advanced).toHaveLength(112);
+    expect(advanced).toHaveLength(118);
     expect(new Set(classified).size).toBe(classified.length);
     expect(classified.toSorted()).toEqual(
       [...baselineNames(), ...v11Additions].toSorted()

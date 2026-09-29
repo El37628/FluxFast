@@ -41,7 +41,12 @@ function expectedEntries(): Record<string, ExportGroups> {
   const baseline = JSON.parse(
     fs.readFileSync(baselinePath, "utf8")
   ) as NextBaseline;
-  return baseline.packages["@fluxfast/next"].entries;
+  const entries = structuredClone(baseline.packages["@fluxfast/next"].entries);
+  for (const entry of [".", "./client"]) {
+    entries[entry].typeOnly.push("FluxDevelopmentMetadata");
+    entries[entry].typeOnly.sort();
+  }
+  return entries;
 }
 
 function entryNames(groups: ExportGroups): string[] {
@@ -63,7 +68,7 @@ describe("v0.9 Next adapter promotion baseline", () => {
       Object.values(expectedEntries()).flatMap(entry => entryNames(entry))
     );
 
-    expect(stable).toHaveLength(48);
+    expect(stable).toHaveLength(49);
     expect(advanced).toHaveLength(11);
     expect(new Set(classified).size).toBe(classified.length);
     expect(classified.toSorted()).toEqual([...expected].toSorted());
@@ -135,7 +140,7 @@ describe("v0.9 Next adapter promotion baseline", () => {
     expect(publicNames).not.toContain("useLiveResource");
   });
 
-  it("retains the reviewed delta from the historical v0.8.1 baseline", () => {
+  it("retains the reviewed additions from the historical v0.8.1 baseline", () => {
     const historical = JSON.parse(
       fs.readFileSync(historicalBaselinePath, "utf8")
     ) as NextBaseline;
@@ -146,6 +151,7 @@ describe("v0.9 Next adapter promotion baseline", () => {
     const currentClient = entryNames(current["./client"]);
 
     expect(currentClient.filter(name => !historicalClient.includes(name))).toEqual([
+      "FluxDevelopmentMetadata",
       "LiveConnectionStatus",
       "LiveStatusSnapshot",
       "useLiveStatus",

@@ -1,7 +1,13 @@
 import React from "react";
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HEADER_CAPABILITIES, serializeCapabilities, TransportError } from "@fluxfast/core";
+import {
+  HEADER_CAPABILITIES,
+  HEADER_DEVTOOLS,
+  HEADER_DEVTOOLS_TRACE,
+  serializeCapabilities,
+  TransportError,
+} from "@fluxfast/core";
 import {
   buildFluxPath,
   createFluxNextPage,
@@ -22,6 +28,7 @@ vi.mock("next/navigation", () => ({ notFound: notFoundMock }));
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 async function listen(server: Server): Promise<string> {
@@ -48,6 +55,25 @@ const initialEnvelope = {
   page: { component: "home/index", url: "/" },
   resources: {},
 };
+
+function encodeTrace(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function pageTrace(overrides: Record<string, unknown> = {}) {
+  return {
+    protocol: "fluxfast-devtools/1",
+    requestId: "ffdev_0123456789abcdef",
+    type: "page",
+    durationMs: 4.5,
+    pageMs: 1,
+    resourcesMs: 2,
+    serializeMs: 0.5,
+    resources: [],
+    truncated: false,
+    ...overrides,
+  };
+}
 
 describe("initial SSR redirect boundary", () => {
   it.each([301, 302, 303, 307, 308])(
@@ -176,6 +202,7 @@ describe("Next adapter paths", () => {
       "x-hop": "must-not-forward",
       "x-private-ignored": "must-not-forward",
       "x-fluxfast-known": "must-not-forward",
+      "x-fluxfast-devtools": "must-not-forward",
       host: "attacker.example",
       connection: "keep-alive, X-Hop",
       "proxy-authorization": "must-not-forward",
@@ -185,7 +212,7 @@ describe("Next adapter paths", () => {
     const page = createFluxNextPage({
       backendUrl: "http://127.0.0.1:8000",
       application: () => null,
-      forwardHeaders: ["X-Tenant", "X-Hop", "HOST", "CONNECTION", "Proxy-Authorization", "Invalid Header"],
+      forwardHeaders: ["X-Tenant", "X-Hop", "HOST", "CONNECTION", "Proxy-Authorization", "X-FluxFast-DevTools", "Invalid Header"],
     });
     await page({ params: {} });
     const headers = fetchMock.mock.calls[0][1].headers;
@@ -201,6 +228,7 @@ describe("Next adapter paths", () => {
     for (const name of ["host", "connection", "x-hop", "proxy-authorization", "invalid header", "x-private-ignored", "x-fluxfast-known"]) {
       expect(headers).not.toHaveProperty(name);
     }
+    expect(new Headers(headers).get(HEADER_DEVTOOLS)).toBe("1");
   });
 
   it("advertises capabilities during the initial SSR request", async () => {
@@ -215,7 +243,87 @@ describe("Next adapter paths", () => {
 
     expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
       [HEADER_CAPABILITIES]: serializeCapabilities(),
+      [HEADER_DEVTOOLS]: "1",
     });
+  });
+
+  it("passes only a validated initial trace and query-free path as development metadata", async () => {
+    const trace = pageTrace();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify(initialEnvelope),
+      {
+        headers: {
+          "content-type": "application/json",
+          [HEADER_DEVTOOLS_TRACE]: encodeTrace(trace),
+        },
+      }
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    const page = createFluxNextPage({
+      backendUrl: "http://127.0.0.1:8000",
+      application: () => null,
+    });
+
+    const result = await page({
+      params: { flux: ["rooms"] },
+      searchParams: { token: "must-not-reach-html" },
+    });
+    const props = (result as React.ReactElement).props as Record<string, unknown>;
+
+    expect(props.initialEnvelope).toEqual(initialEnvelope);
+    expect(props.development).toMatchObject({
+      initialPath: "/rooms",
+      initialServerTrace: trace,
+    });
+    expect(JSON.stringify(props.development)).not.toContain("must-not-reach-html");
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get(HEADER_DEVTOOLS))
+      .toBe("1");
+  });
+
+  it("ignores invalid SSR traces without affecting the page", async () => {
+    const unsafe = pageTrace({ authorization: "Bearer must-not-reach-html" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify(initialEnvelope),
+      { headers: { [HEADER_DEVTOOLS_TRACE]: encodeTrace(unsafe) } }
+    )));
+    const page = createFluxNextPage({
+      backendUrl: "http://127.0.0.1:8000",
+      application: () => null,
+    });
+
+    const result = await page({ params: {} });
+    const props = (result as React.ReactElement).props as Record<string, unknown>;
+
+    expect(props.initialEnvelope).toEqual(initialEnvelope);
+    expect(props).not.toHaveProperty("development");
+  });
+
+  it("does not request or serialize SSR diagnostics in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(
+      JSON.stringify(initialEnvelope),
+      { headers: { [HEADER_DEVTOOLS_TRACE]: encodeTrace(pageTrace()) } }
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+    const page = createFluxNextPage({
+      backendUrl: "http://127.0.0.1:8000",
+      application: () => null,
+    });
+
+    const result = await page({ params: {} });
+    const props = (result as React.ReactElement).props as Record<string, unknown>;
+
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get(HEADER_DEVTOOLS))
+      .toBeNull();
+    expect(props).not.toHaveProperty("development");
+
+    await fetchInitialEnvelope({
+      backendUrl: "http://127.0.0.1:8000",
+      path: "/",
+      headers: { "x-fluxfast-devtools": "1" },
+    });
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).get(HEADER_DEVTOOLS))
+      .toBeNull();
   });
 
   it("reconstructs catch-all paths and repeated search parameters", () => {
