@@ -7,6 +7,7 @@ import React, {
   type ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -46,6 +47,23 @@ import {
   deriveLiveInsights,
   deriveProtocolRequest,
 } from "./live-protocol.js";
+import { createSafeTraceExport } from "./trace-export.js";
+import {
+  clampPanelHeight,
+  DEFAULT_SHORTCUT,
+  defaultUiPreferences,
+  DEVTOOLS_PANELS,
+  matchesShortcut,
+  MIN_PANEL_HEIGHT,
+  maximumPanelHeight,
+  parseShortcut,
+  readUiPreferences,
+  writeUiPreferences,
+  type DevtoolsPanelName,
+  type DevtoolsPosition,
+  type DevtoolsTheme,
+  type DevtoolsUiPreferences,
+} from "./ui-preferences.js";
 
 export interface FluxDevtoolsProps {
   position?: "bottom" | "right";
@@ -59,24 +77,8 @@ interface BoundaryState {
   failed: boolean;
 }
 
-type PanelName =
-  | "overview"
-  | "resources"
-  | "timeline"
-  | "cache"
-  | "mutations"
-  | "live"
-  | "protocol";
-
-const PANELS: readonly PanelName[] = Object.freeze([
-  "overview",
-  "resources",
-  "timeline",
-  "cache",
-  "mutations",
-  "live",
-  "protocol",
-]);
+type PanelName = DevtoolsPanelName;
+const PANELS = DEVTOOLS_PANELS;
 
 class DevtoolsErrorBoundary extends Component<
   { children: ReactNode },
@@ -107,6 +109,37 @@ function Metric({ label, value }: { label: string; value: ReactNode }) {
       <dd>{value}</dd>
     </div>
   );
+}
+
+async function copyText(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall through to the development-only DOM copy fallback.
+  }
+  const active = document.activeElement instanceof HTMLElement
+    ? document.activeElement
+    : null;
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  let copied = false;
+  try {
+    copied = typeof document.execCommand === "function" &&
+      document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  textarea.remove();
+  active?.focus();
+  return copied;
 }
 
 function ResourceFlags({ resource }: { resource: DevtoolsResourceInsight }) {
@@ -883,10 +916,11 @@ function ProtocolPanel({ snapshot }: { snapshot: DevtoolsSnapshot }) {
 }
 
 function FluxDevtoolsInner({
-  position = "bottom",
-  theme = "system",
+  position: defaultPosition = "bottom",
+  theme: defaultTheme = "system",
   defaultOpen = false,
   maxEvents = DEFAULT_MAX_EVENTS,
+  shortcut = DEFAULT_SHORTCUT,
 }: FluxDevtoolsProps) {
   const { router } = useFluxContext();
   const store = useMemo(
@@ -899,15 +933,58 @@ function FluxDevtoolsInner({
     store.getSnapshot
   );
   const [mountNode, setMountNode] = useState<HTMLDivElement | null>(null);
-  const [open, setOpen] = useState(defaultOpen);
-  const [activePanel, setActivePanel] = useState<PanelName>("overview");
+  const defaults = useMemo(() => defaultUiPreferences({
+    open: defaultOpen,
+    theme: defaultTheme,
+    position: defaultPosition,
+  }), [defaultOpen, defaultPosition, defaultTheme]);
+  const [ui, setUi] = useState<DevtoolsUiPreferences>(
+    () => readUiPreferences(defaults)
+  );
   const [selectedResource, setSelectedResource] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">(
+    "idle"
+  );
+  const barRef = useRef<HTMLButtonElement>(null);
+  const tabRefs = useRef<Partial<Record<PanelName, HTMLButtonElement | null>>>({});
+  const focusPanelOnOpen = useRef(false);
+  const resizeCleanup = useRef<(() => void) | null>(null);
+  const alive = useRef(true);
+  const shortcutDefinition = useMemo(() => parseShortcut(shortcut), [shortcut]);
+  const open = ui.open;
+  const activePanel = ui.panel;
   const insights = useMemo(() => deriveDevtoolsInsights(snapshot), [snapshot]);
   const selected = insights.resources.find(
     resource => resource.key === selectedResource
   );
 
   useEffect(() => store.start(), [store]);
+
+  useEffect(() => {
+    writeUiPreferences(ui);
+  }, [ui]);
+
+  useEffect(() => {
+    const clampToViewport = () => {
+      setUi(current => {
+        const panelHeight = clampPanelHeight(current.panelHeight);
+        return panelHeight === current.panelHeight
+          ? current
+          : { ...current, panelHeight };
+      });
+    };
+    window.addEventListener("resize", clampToViewport);
+    return () => window.removeEventListener("resize", clampToViewport);
+  }, []);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      resizeCleanup.current?.();
+      resizeCleanup.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     let host: HTMLDivElement | undefined;
@@ -931,14 +1008,118 @@ function FluxDevtoolsInner({
     };
   }, []);
 
+  useEffect(() => {
+    if (!open || !focusPanelOnOpen.current || mountNode === null) return;
+    focusPanelOnOpen.current = false;
+    queueMicrotask(() => tabRefs.current[activePanel]?.focus());
+  }, [activePanel, mountNode, open]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && open) {
+        event.preventDefault();
+        setUi(current => ({ ...current, open: false }));
+        queueMicrotask(() => barRef.current?.focus());
+        return;
+      }
+      if (
+        event.repeat ||
+        shortcutDefinition === null ||
+        !matchesShortcut(event, shortcutDefinition)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (!open) focusPanelOnOpen.current = true;
+      setUi(current => ({ ...current, open: !current.open }));
+      if (open) queueMicrotask(() => barRef.current?.focus());
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, shortcutDefinition]);
+
+  const selectPanel = (panel: PanelName) => {
+    setUi(current => ({ ...current, panel }));
+  };
+
+  const handleTabKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    panel: PanelName
+  ) => {
+    const index = PANELS.indexOf(panel);
+    let nextIndex: number | undefined;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % PANELS.length;
+    if (event.key === "ArrowLeft") {
+      nextIndex = (index - 1 + PANELS.length) % PANELS.length;
+    }
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = PANELS.length - 1;
+    if (nextIndex === undefined) return;
+    event.preventDefault();
+    const next = PANELS[nextIndex];
+    selectPanel(next);
+    tabRefs.current[next]?.focus();
+  };
+
+  const setPanelHeight = (height: number) => {
+    setUi(current => ({
+      ...current,
+      panelHeight: clampPanelHeight(height),
+    }));
+  };
+
+  const handleResizePointerDown = (
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    resizeCleanup.current?.();
+    const startY = event.clientY;
+    const startHeight = ui.panelHeight;
+    const onMove = (moveEvent: PointerEvent) => {
+      setPanelHeight(startHeight + startY - moveEvent.clientY);
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      if (resizeCleanup.current === stop) resizeCleanup.current = null;
+    };
+    resizeCleanup.current = stop;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+
+  const handleResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    let next: number | undefined;
+    if (event.key === "ArrowUp") next = ui.panelHeight + 20;
+    if (event.key === "ArrowDown") next = ui.panelHeight - 20;
+    if (event.key === "Home") next = MIN_PANEL_HEIGHT;
+    if (event.key === "End") next = maximumPanelHeight();
+    if (next === undefined) return;
+    event.preventDefault();
+    setPanelHeight(next);
+  };
+
+  const handleCopyTrace = async () => {
+    const copied = await copyText(createSafeTraceExport(snapshot));
+    if (alive.current) setCopyStatus(copied ? "copied" : "failed");
+  };
+
+  const toggleOpen = () => {
+    if (!open) focusPanelOnOpen.current = true;
+    setUi(current => ({ ...current, open: !current.open }));
+  };
+
   if (mountNode === null) return null;
 
   return createPortal(
     <>
       <style>{DEVTOOLS_STYLES}</style>
       <aside
-        className={`ff-devtools ff-${position}`}
-        data-theme={theme}
+        className={`ff-devtools ff-${ui.position}`}
+        data-theme={ui.theme}
         aria-label="FluxFast DevTools"
       >
         {open && (
@@ -946,31 +1127,109 @@ function FluxDevtoolsInner({
             id="fluxfast-devtools-panel"
             className="ff-panel"
             aria-label="FluxFast diagnostic panels"
+            style={{
+              "--ff-panel-height": `${ui.panelHeight}px`,
+            } as CSSProperties}
           >
+            <div
+              className="ff-resize-handle"
+              role="separator"
+              tabIndex={0}
+              aria-label="Resize FluxFast DevTools panel"
+              aria-orientation="horizontal"
+              aria-valuemin={MIN_PANEL_HEIGHT}
+              aria-valuemax={maximumPanelHeight()}
+              aria-valuenow={ui.panelHeight}
+              aria-valuetext={`${ui.panelHeight} pixels`}
+              onPointerDown={handleResizePointerDown}
+              onKeyDown={handleResizeKeyDown}
+            >
+              <span aria-hidden="true" />
+            </div>
             <header className="ff-panel-heading">
               <div>
                 <p className="ff-eyebrow">Development diagnostics</p>
                 <h2 className="ff-panel-title">FluxFast DevTools</h2>
               </div>
-              <span className="ff-recording">
-                {snapshot.events.length} recorded events
-              </span>
+              <div className="ff-panel-actions">
+                <span className="ff-recording">
+                  {snapshot.events.length} recorded events
+                </span>
+                <label className="ff-control">
+                  <span>Theme</span>
+                  <select
+                    aria-label="DevTools theme"
+                    value={ui.theme}
+                    onChange={event => {
+                      const theme = event.currentTarget.value as DevtoolsTheme;
+                      setUi(current => ({ ...current, theme }));
+                    }}
+                  >
+                    <option value="system">System</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </label>
+                <label className="ff-control">
+                  <span>Dock</span>
+                  <select
+                    aria-label="DevTools position"
+                    value={ui.position}
+                    onChange={event => {
+                      const position = event.currentTarget.value as DevtoolsPosition;
+                      setUi(current => ({ ...current, position }));
+                    }}
+                  >
+                    <option value="bottom">Bottom</option>
+                    <option value="right">Right</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="ff-secondary-button"
+                  aria-label="Copy safe FluxFast diagnostic trace"
+                  onClick={() => void handleCopyTrace()}
+                >
+                  {copyStatus === "copied"
+                    ? "Copied"
+                    : copyStatus === "failed"
+                      ? "Copy failed"
+                      : "Copy trace"}
+                </button>
+                <button
+                  type="button"
+                  className="ff-icon-button"
+                  aria-label="Collapse FluxFast DevTools"
+                  onClick={() => {
+                    setUi(current => ({ ...current, open: false }));
+                    queueMicrotask(() => barRef.current?.focus());
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             </header>
             <div
               className="ff-tabs"
               role="tablist"
               aria-label="Diagnostic panels"
+              aria-orientation="horizontal"
             >
               {PANELS.map(panel => (
                 <button
                   key={panel}
+                  ref={node => {
+                    tabRefs.current[panel] = node;
+                  }}
                   type="button"
                   role="tab"
                   id={`fluxfast-tab-${panel}`}
                   aria-controls={`fluxfast-panel-${panel}`}
                   aria-selected={activePanel === panel}
+                  tabIndex={activePanel === panel ? 0 : -1}
                   className="ff-tab"
-                  onClick={() => setActivePanel(panel)}
+                  onClick={() => selectPanel(panel)}
+                  onKeyDown={event => handleTabKeyDown(event, panel)}
                 >
                   {panel[0].toLocaleUpperCase() + panel.slice(1)}
                 </button>
@@ -982,6 +1241,7 @@ function FluxDevtoolsInner({
               role="tabpanel"
               aria-labelledby="fluxfast-tab-overview"
               className="ff-tab-panel"
+              tabIndex={0}
               hidden={activePanel !== "overview"}
             >
               <section className="ff-context-grid" aria-label="Current page">
@@ -1070,6 +1330,7 @@ function FluxDevtoolsInner({
               role="tabpanel"
               aria-labelledby="fluxfast-tab-resources"
               className="ff-tab-panel"
+              tabIndex={0}
               hidden={activePanel !== "resources"}
             >
               {insights.resources.length === 0 ? (
@@ -1151,6 +1412,7 @@ function FluxDevtoolsInner({
               role="tabpanel"
               aria-labelledby="fluxfast-tab-timeline"
               className="ff-tab-panel"
+              tabIndex={0}
               hidden={activePanel !== "timeline"}
             >
               {activePanel === "timeline" && (
@@ -1163,6 +1425,7 @@ function FluxDevtoolsInner({
               role="tabpanel"
               aria-labelledby="fluxfast-tab-cache"
               className="ff-tab-panel"
+              tabIndex={0}
               hidden={activePanel !== "cache"}
             >
               {activePanel === "cache" && <CachePanel snapshot={snapshot} />}
@@ -1173,6 +1436,7 @@ function FluxDevtoolsInner({
               role="tabpanel"
               aria-labelledby="fluxfast-tab-mutations"
               className="ff-tab-panel"
+              tabIndex={0}
               hidden={activePanel !== "mutations"}
             >
               {activePanel === "mutations" && (
@@ -1185,6 +1449,7 @@ function FluxDevtoolsInner({
               role="tabpanel"
               aria-labelledby="fluxfast-tab-live"
               className="ff-tab-panel"
+              tabIndex={0}
               hidden={activePanel !== "live"}
             >
               {activePanel === "live" && <LivePanel snapshot={snapshot} />}
@@ -1195,6 +1460,7 @@ function FluxDevtoolsInner({
               role="tabpanel"
               aria-labelledby="fluxfast-tab-protocol"
               className="ff-tab-panel"
+              tabIndex={0}
               hidden={activePanel !== "protocol"}
             >
               {activePanel === "protocol" && (
@@ -1204,12 +1470,14 @@ function FluxDevtoolsInner({
           </section>
         )}
         <button
+          ref={barRef}
           type="button"
           className="ff-bar"
           aria-expanded={open}
           aria-controls="fluxfast-devtools-panel"
           aria-label={`${open ? "Close" : "Open"} FluxFast DevTools`}
-          onClick={() => setOpen(value => !value)}
+          title={shortcut === false ? undefined : `Toggle with ${shortcut}`}
+          onClick={toggleOpen}
         >
           <span className="ff-brand">FluxFast</span>
           <span className="ff-route">{snapshot.page.url}</span>

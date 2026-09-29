@@ -30,7 +30,9 @@ afterEach(async () => {
   }
   mounted.clear();
   document.body.replaceChildren();
+  window.localStorage.clear();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -168,6 +170,23 @@ describe("FluxDevtools", () => {
     )].find(candidate => candidate.textContent === "Clear")!;
     await act(async () => clear.click());
     expect(shadow.textContent).toContain("No diagnostic events recorded yet.");
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "d",
+        altKey: true,
+        shiftKey: true,
+      }));
+    });
+    expect(shadow.querySelector(".ff-panel")).toBeNull();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "d",
+        altKey: true,
+        shiftKey: true,
+      }));
+    });
+    expect(shadow.querySelector(".ff-panel")).not.toBeNull();
 
     const entry = [...mounted][0];
     await act(async () => entry.root.unmount());
@@ -433,6 +452,164 @@ describe("FluxDevtools", () => {
     });
     expect(shadow.textContent).toContain("Unsupported DevTools trace version");
     expect(shadow.textContent).toContain("fluxfast-devtools/2");
+  });
+
+  it("supports keyboard navigation, resize, persistence, and safe trace copy", async () => {
+    const writeText = vi.spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined);
+    const router = new FluxRouter({ deferHistory: true });
+    await mountDevtools(
+      <FluxProvider router={router}>
+        <FluxDevtools defaultOpen />
+      </FluxProvider>,
+      router
+    );
+    await act(async () => {
+      router.diagnostics.emit({
+        id: "unsafe-custom-event",
+        type: "mutation",
+        timestamp: Date.now(),
+        correlationId: "mutation-safe",
+        data: {
+          phase: "success",
+          method: "POST",
+          url: "/rooms?token=query-secret",
+          body: "body-secret",
+        },
+      });
+    });
+
+    const host = document.querySelector<HTMLElement>(
+      "[data-fluxfast-devtools-host]"
+    )!;
+    const shadow = host.shadowRoot!;
+    const overview = shadow.querySelector<HTMLButtonElement>(
+      "#fluxfast-tab-overview"
+    )!;
+    overview.focus();
+    await act(async () => {
+      overview.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowRight",
+        bubbles: true,
+      }));
+    });
+    const resources = shadow.querySelector<HTMLButtonElement>(
+      "#fluxfast-tab-resources"
+    )!;
+    expect(resources.getAttribute("aria-selected")).toBe("true");
+    expect(shadow.activeElement).toBe(resources);
+
+    const resize = shadow.querySelector<HTMLElement>(".ff-resize-handle")!;
+    expect(resize.getAttribute("aria-valuenow")).toBe("420");
+    await act(async () => {
+      resize.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowUp",
+        bubbles: true,
+      }));
+    });
+    expect(resize.getAttribute("aria-valuenow")).toBe("440");
+    await act(async () => {
+      resize.dispatchEvent(new PointerEvent("pointerdown", {
+        button: 0,
+        clientY: 400,
+        bubbles: true,
+      }));
+      window.dispatchEvent(new PointerEvent("pointermove", {
+        clientY: 380,
+      }));
+      window.dispatchEvent(new PointerEvent("pointerup"));
+    });
+    expect(resize.getAttribute("aria-valuenow")).toBe("460");
+
+    const theme = shadow.querySelector<HTMLSelectElement>(
+      'select[aria-label="DevTools theme"]'
+    )!;
+    const position = shadow.querySelector<HTMLSelectElement>(
+      'select[aria-label="DevTools position"]'
+    )!;
+    await act(async () => {
+      theme.value = "dark";
+      theme.dispatchEvent(new Event("change", { bubbles: true }));
+      position.value = "right";
+      position.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const devtools = shadow.querySelector<HTMLElement>(".ff-devtools")!;
+    expect(devtools.dataset.theme).toBe("dark");
+    expect(devtools.classList.contains("ff-right")).toBe(true);
+
+    const copy = shadow.querySelector<HTMLButtonElement>(
+      '[aria-label="Copy safe FluxFast diagnostic trace"]'
+    )!;
+    await act(async () => copy.click());
+    expect(writeText).toHaveBeenCalledOnce();
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(JSON.parse(copied).format).toBe("fluxfast-devtools-export/1");
+    expect(copied).not.toMatch(/query-secret|body-secret/);
+    expect(copy.textContent).toBe("Copied");
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }));
+    });
+    expect(shadow.querySelector(".ff-panel")).toBeNull();
+    expect(shadow.activeElement).toBe(shadow.querySelector(".ff-bar"));
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "d",
+        altKey: true,
+        shiftKey: true,
+        bubbles: true,
+      }));
+    });
+    expect(shadow.querySelector(".ff-panel")).not.toBeNull();
+    expect(shadow.activeElement?.id).toBe("fluxfast-tab-resources");
+    expect(JSON.parse(window.localStorage.getItem(
+      "fluxfast:devtools:ui:v1"
+    )!)).toEqual({
+      open: true,
+      panel: "resources",
+      panelHeight: 460,
+      theme: "dark",
+      position: "right",
+    });
+  });
+
+  it("restores persisted UI preferences without restoring diagnostics", async () => {
+    window.localStorage.setItem("fluxfast:devtools:ui:v1", JSON.stringify({
+      open: true,
+      panel: "protocol",
+      panelHeight: 300,
+      theme: "dark",
+      position: "right",
+      events: [{ value: "must-not-be-restored" }],
+    }));
+    const router = new FluxRouter({ deferHistory: true });
+    await mountDevtools(
+      <FluxProvider router={router}>
+        <FluxDevtools />
+      </FluxProvider>,
+      router
+    );
+
+    const shadow = document.querySelector(
+      "[data-fluxfast-devtools-host]"
+    )!.shadowRoot!;
+    expect(shadow.querySelector(".ff-panel")).not.toBeNull();
+    expect(shadow.querySelector(".ff-devtools")?.getAttribute("data-theme"))
+      .toBe("dark");
+    expect(shadow.querySelector(".ff-devtools")?.classList.contains("ff-right"))
+      .toBe(true);
+    expect(shadow.querySelector("#fluxfast-tab-protocol")?.getAttribute(
+      "aria-selected"
+    )).toBe("true");
+    expect(shadow.querySelector(".ff-resize-handle")?.getAttribute(
+      "aria-valuenow"
+    )).toBe("300");
+    expect(shadow.textContent).toContain("No FluxFast transport request");
+    expect(shadow.textContent).not.toContain("must-not-be-restored");
   });
 
   it("has no host, store, or diagnostic subscription in production", async () => {

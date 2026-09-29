@@ -125,11 +125,14 @@ export const DEVTOOLS_STYLES: string = `
 }
 
 .ff-panel {
+  position: relative;
+  height: var(--ff-panel-height, 420px);
+  min-height: min(240px, 80vh);
+  max-height: 80vh;
   border: 1px solid var(--ff-border);
   border-bottom: 0;
   background: var(--ff-panel);
   color: var(--ff-text);
-  max-height: min(72vh, 680px);
   overflow: auto;
 }
 
@@ -144,6 +147,70 @@ export const DEVTOOLS_STYLES: string = `
   justify-content: space-between;
   gap: 16px;
   padding: 14px 16px 12px;
+}
+
+.ff-resize-handle {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  height: 9px;
+  place-items: center;
+  border-bottom: 1px solid var(--ff-border);
+  background: var(--ff-bg);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.ff-resize-handle span {
+  display: block;
+  width: 42px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--ff-border);
+}
+
+.ff-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.ff-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ff-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ff-control select {
+  min-height: 28px;
+  border: 1px solid var(--ff-border);
+  border-radius: 5px;
+  background: var(--ff-bg);
+  color: var(--ff-text);
+  padding: 3px 22px 3px 6px;
+  font: inherit;
+  text-transform: none;
+}
+
+.ff-icon-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--ff-border);
+  border-radius: 5px;
+  background: var(--ff-bg);
+  color: var(--ff-text);
+  padding: 0;
+  font: 700 17px/1 sans-serif;
+  cursor: pointer;
 }
 
 .ff-panel-title {
@@ -1094,9 +1161,17 @@ export const DEVTOOLS_STYLES: string = `
 .ff-filter:focus-visible,
 .ff-timeline-row:focus-visible,
 .ff-search-label input:focus-visible,
-.ff-mutation-list button:focus-visible {
+.ff-mutation-list button:focus-visible,
+.ff-tab-panel:focus-visible {
   outline: 2px solid var(--ff-primary);
   outline-offset: 2px;
+}
+
+.ff-resize-handle:focus-visible,
+.ff-control select:focus-visible,
+.ff-icon-button:focus-visible {
+  outline: 2px solid var(--ff-primary);
+  outline-offset: -3px;
 }
 
 .ff-bar:focus-visible {
@@ -1150,11 +1225,17 @@ export const DEVTOOLS_STYLES: string = `
 
   .ff-panel-heading {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ff-panel-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .ff-recording {
     white-space: normal;
-    text-align: right;
+    text-align: left;
   }
 
   .ff-timeline-row {
