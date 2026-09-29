@@ -69,6 +69,9 @@ describe("FluxDevtools", () => {
         data: {
           type: "page",
           durationMs: 12.4,
+          pageMs: 2,
+          resourcesMs: 8,
+          serializeMs: 2.4,
           resources: [{
             key: "rooms",
             result: "cache-hit",
@@ -122,6 +125,49 @@ describe("FluxDevtools", () => {
     expect(details.textContent).toContain("cache-hit");
     expect(details.textContent).toContain("tenant");
     expect(details.textContent).not.toContain("resource-value-secret-42");
+
+    const timelineTab = shadow.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-controls="fluxfast-panel-timeline"]'
+    )!;
+    await act(async () => timelineTab.click());
+    expect(timelineTab.getAttribute("aria-selected")).toBe("true");
+    expect(shadow.querySelectorAll(".ff-timeline-row").length).toBeGreaterThanOrEqual(2);
+    expect(shadow.textContent).toContain("SERVER");
+    expect(shadow.textContent).toContain("RESOURCE rooms");
+
+    const resourceFilter = [...shadow.querySelectorAll<HTMLButtonElement>(
+      ".ff-filter"
+    )].find(candidate => candidate.textContent === "resource")!;
+    await act(async () => resourceFilter.click());
+    expect(resourceFilter.getAttribute("aria-pressed")).toBe("true");
+    expect(shadow.querySelectorAll(".ff-timeline-row")).toHaveLength(1);
+
+    const timelineRow = shadow.querySelector<HTMLButtonElement>(
+      ".ff-timeline-row"
+    )!;
+    await act(async () => timelineRow.click());
+    expect(shadow.textContent).toContain("Correlation: visit-1");
+    expect(shadow.querySelector(".ff-waterfall")?.textContent).toContain(
+      "Page handler"
+    );
+
+    const search = shadow.querySelector<HTMLInputElement>(
+      '.ff-search-label input[type="search"]'
+    )!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )!.set!.call(search, "does-not-exist");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(shadow.textContent).toContain("No events match the current filters.");
+
+    const clear = [...shadow.querySelectorAll<HTMLButtonElement>(
+      ".ff-secondary-button"
+    )].find(candidate => candidate.textContent === "Clear")!;
+    await act(async () => clear.click());
+    expect(shadow.textContent).toContain("No diagnostic events recorded yet.");
 
     const entry = [...mounted][0];
     await act(async () => entry.root.unmount());

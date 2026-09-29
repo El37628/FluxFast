@@ -2,6 +2,7 @@
 
 import React, {
   Component,
+  type CSSProperties,
   type ErrorInfo,
   type ReactNode,
   useEffect,
@@ -18,8 +19,21 @@ import {
   formatTtl,
   type DevtoolsResourceInsight,
 } from "./insights.js";
-import { DevtoolsStore, DEFAULT_MAX_EVENTS } from "./store.js";
+import {
+  DevtoolsStore,
+  DEFAULT_MAX_EVENTS,
+  type DevtoolsSnapshot,
+} from "./store.js";
 import { DEVTOOLS_STYLES } from "./styles.js";
+import {
+  deriveTimeline,
+  filterTimeline,
+  formatTimelineTime,
+  TIMELINE_FILTERS,
+  type TimelineCategory,
+  type TimelineItem,
+  type TimelineWaterfallPhase,
+} from "./timeline.js";
 
 export interface FluxDevtoolsProps {
   position?: "bottom" | "right";
@@ -33,7 +47,7 @@ interface BoundaryState {
   failed: boolean;
 }
 
-type PanelName = "overview" | "resources";
+type PanelName = "overview" | "resources" | "timeline";
 
 class DevtoolsErrorBoundary extends Component<
   { children: ReactNode },
@@ -139,6 +153,181 @@ function ResourceDetails({
   );
 }
 
+function Waterfall({ phases }: { phases: readonly TimelineWaterfallPhase[] }) {
+  const total = Math.max(
+    1,
+    ...phases.map(item => item.offsetMs + item.durationMs)
+  );
+  return (
+    <section className="ff-waterfall" aria-labelledby="ff-waterfall-title">
+      <h3 id="ff-waterfall-title">Request waterfall</h3>
+      <ol>
+        {phases.map((item, index) => {
+          const style = {
+            "--ff-waterfall-offset": `${item.offsetMs / total * 100}%`,
+            "--ff-waterfall-duration": `${Math.max(1, item.durationMs / total * 100)}%`,
+          } as CSSProperties;
+          return (
+            <li key={`${item.label}-${index}`}>
+              <span title={item.label}>{item.label}</span>
+              <span className="ff-waterfall-track" aria-hidden="true">
+                <span className="ff-waterfall-bar" style={style} />
+              </span>
+              <strong>{formatDuration(item.durationMs)}</strong>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+function TimelineRow({
+  item,
+  selected,
+  correlated,
+  onSelect,
+}: {
+  item: TimelineItem;
+  selected: boolean;
+  correlated: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        className="ff-timeline-row"
+        data-selected={selected || undefined}
+        data-correlated={correlated || undefined}
+        data-error={item.categories.includes("error") || undefined}
+        aria-pressed={selected}
+        onClick={onSelect}
+      >
+        <time dateTime={new Date(item.timestamp).toISOString()}>
+          {formatTimelineTime(item.timestamp)}
+        </time>
+        <span className={`ff-timeline-category ff-category-${item.primaryCategory}`}>
+          {item.label}
+        </span>
+        <span className="ff-timeline-summary">
+          <strong>{item.summary || "observation"}</strong>
+          {item.detail && <small>{item.detail}</small>}
+        </span>
+        <span className="ff-timeline-duration">
+          {formatDuration(item.durationMs)}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function TimelinePanel({
+  snapshot,
+  store,
+}: {
+  snapshot: DevtoolsSnapshot;
+  store: DevtoolsStore;
+}) {
+  const [filters, setFilters] = useState<readonly TimelineCategory[]>([]);
+  const [query, setQuery] = useState("");
+  const items = useMemo(() => deriveTimeline(snapshot.events), [snapshot.events]);
+  const visible = useMemo(
+    () => filterTimeline(items, filters, query),
+    [items, filters, query]
+  );
+  const selectedItem = items.find(
+    item => item.sourceEventId === snapshot.selectedEventId
+  );
+  const selectedCorrelation = selectedItem?.correlationId ?? null;
+  const waterfall = selectedCorrelation === null
+    ? selectedItem?.waterfall
+    : items.find(item => (
+        item.correlationId === selectedCorrelation && item.waterfall.length > 0
+      ))?.waterfall;
+
+  const toggleFilter = (category: TimelineCategory) => {
+    setFilters(current => current.includes(category)
+      ? current.filter(item => item !== category)
+      : [...current, category]);
+  };
+
+  return (
+    <>
+      <div className="ff-timeline-controls">
+        <label className="ff-search-label">
+          <span>Search timeline</span>
+          <input
+            type="search"
+            value={query}
+            maxLength={256}
+            placeholder="Resource, route, or operation"
+            onChange={event => setQuery(event.currentTarget.value)}
+          />
+        </label>
+        <button
+          type="button"
+          className="ff-secondary-button"
+          disabled={snapshot.events.length === 0}
+          onClick={() => store.clearTimeline()}
+        >
+          Clear
+        </button>
+      </div>
+      <div className="ff-filter-list" aria-label="Timeline filters">
+        {TIMELINE_FILTERS.map(category => (
+          <button
+            key={category}
+            type="button"
+            className="ff-filter"
+            aria-pressed={filters.includes(category)}
+            onClick={() => toggleFilter(category)}
+          >
+            {category}
+          </button>
+        ))}
+      </div>
+      <div className="ff-timeline-meta" aria-live="polite">
+        <span>Showing {visible.length} of {items.length}</span>
+        {selectedCorrelation && (
+          <span title={selectedCorrelation}>
+            Correlation: {selectedCorrelation}
+          </span>
+        )}
+      </div>
+      {waterfall && waterfall.length > 0 && <Waterfall phases={waterfall} />}
+      {visible.length === 0 ? (
+        <p className="ff-empty">
+          {items.length === 0
+            ? "No diagnostic events recorded yet."
+            : "No events match the current filters."}
+        </p>
+      ) : (
+        <ol className="ff-timeline" aria-label="Diagnostic event timeline">
+          {visible.map(item => {
+            const selected = item.id === snapshot.selectedEventId;
+            const sourceSelected =
+              item.sourceEventId === snapshot.selectedEventId;
+            const correlated = selectedCorrelation !== null &&
+              item.correlationId === selectedCorrelation;
+            return (
+              <TimelineRow
+                key={item.id}
+                item={item}
+                selected={selected}
+                correlated={correlated}
+                onSelect={() => store.selectEvent(sourceSelected
+                  ? null
+                  : item.sourceEventId)}
+              />
+            );
+          })}
+        </ol>
+      )}
+    </>
+  );
+}
+
 function FluxDevtoolsInner({
   position = "bottom",
   theme = "system",
@@ -218,7 +407,7 @@ function FluxDevtoolsInner({
               role="tablist"
               aria-label="Diagnostic panels"
             >
-              {(["overview", "resources"] as const).map(panel => (
+              {(["overview", "resources", "timeline"] as const).map(panel => (
                 <button
                   key={panel}
                   type="button"
@@ -229,7 +418,11 @@ function FluxDevtoolsInner({
                   className="ff-tab"
                   onClick={() => setActivePanel(panel)}
                 >
-                  {panel === "overview" ? "Overview" : "Resources"}
+                  {panel === "overview"
+                    ? "Overview"
+                    : panel === "resources"
+                      ? "Resources"
+                      : "Timeline"}
                 </button>
               ))}
             </div>
@@ -400,6 +593,18 @@ function FluxDevtoolsInner({
                   resource={selected}
                   onClose={() => setSelectedResource(null)}
                 />
+              )}
+            </div>
+
+            <div
+              id="fluxfast-panel-timeline"
+              role="tabpanel"
+              aria-labelledby="fluxfast-tab-timeline"
+              className="ff-tab-panel"
+              hidden={activePanel !== "timeline"}
+            >
+              {activePanel === "timeline" && (
+                <TimelinePanel snapshot={snapshot} store={store} />
               )}
             </div>
           </section>

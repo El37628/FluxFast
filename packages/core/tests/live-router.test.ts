@@ -200,6 +200,64 @@ describe("FluxRouter live invalidation synchronization", () => {
     router.destroy();
   });
 
+  it("correlates one live signal with its canonical resource refresh", async () => {
+    vi.useFakeTimers();
+    const transport = new MockTransport();
+    transport.visitMock.mockResolvedValueOnce({
+      protocol: "fluxfast/1",
+      page: { component: "rooms/index", url: "/rooms" },
+      resources: {
+        rooms: { version: "rooms-v2", value: [{ id: 1, open: false }] },
+      },
+      resourceKeys: ["rooms"],
+    });
+    const liveTransport = new ControlledLiveTransport();
+    const router = new FluxRouter({
+      transport,
+      liveTransport,
+      liveBatchDelayMs: 10,
+      deferHistory: true,
+      initialEnvelope: {
+        protocol: "fluxfast/1",
+        page: { component: "rooms/index", url: "/rooms" },
+        resources: {
+          rooms: { version: "rooms-v1", value: [{ id: 1, open: true }] },
+        },
+        live: ["rooms"],
+      },
+    });
+    const diagnostics: FluxDiagnosticEvent[] = [];
+    router.diagnostics.subscribe(event => diagnostics.push(event));
+    router.startLive();
+
+    liveTransport.connections[0].emit({
+      protocol: "fluxfast/1",
+      type: "invalidate",
+      keys: ["rooms"],
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(10);
+    await flushMicrotasks();
+
+    const liveEvents = diagnostics.filter(event => (
+      event.type === "live" &&
+      (event.data as Record<string, unknown>).eventType === "invalidate"
+    ));
+    const liveEvent = liveEvents[0];
+    const refreshEvents = diagnostics.filter(event => (
+      event.type === "resource-load" &&
+      (event.data as Record<string, unknown>).reason === "live"
+    ));
+    expect(liveEvents).toHaveLength(1);
+    expect(liveEvent?.correlationId).toBeDefined();
+    expect(refreshEvents).toHaveLength(2);
+    expect(refreshEvents.every(
+      event => event.correlationId === liveEvent?.correlationId
+    )).toBe(true);
+
+    router.destroy();
+  });
+
   it("emits a fixed live transport error category without leaking details", () => {
     const router = new FluxRouter({
       liveTransport: {
