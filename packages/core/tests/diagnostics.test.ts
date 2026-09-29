@@ -62,6 +62,33 @@ describe("FluxDiagnosticsHub", () => {
     error.mockRestore();
   });
 
+  it("hands a bounded SSR bootstrap batch to the first subscriber once", () => {
+    const hub = new FluxDiagnosticsHub();
+    const events = Array.from({ length: 40 }, (_, index) =>
+      diagnosticEvent(`bootstrap-${index}`)
+    );
+
+    hub.bootstrap(events);
+    const first: FluxDiagnosticEvent[] = [];
+    const second: FluxDiagnosticEvent[] = [];
+    hub.subscribe(event => first.push(event));
+    hub.subscribe(event => second.push(event));
+
+    expect(first).toHaveLength(32);
+    expect(first.at(-1)?.id).toBe("bootstrap-31");
+    expect(second).toEqual([]);
+  });
+
+  it("publishes bootstrap diagnostics immediately when already observed", () => {
+    const hub = new FluxDiagnosticsHub();
+    const received: FluxDiagnosticEvent[] = [];
+    hub.subscribe(event => received.push(event));
+
+    hub.bootstrap([diagnosticEvent("ssr"), diagnosticEvent("hydrated")]);
+
+    expect(received.map(event => event.id)).toEqual(["ssr", "hydrated"]);
+  });
+
   it("uses a stable subscriber snapshot during reentrant cleanup", () => {
     const hub = new FluxDiagnosticsHub();
     const calls: string[] = [];

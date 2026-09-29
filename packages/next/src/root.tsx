@@ -6,6 +6,7 @@ import { FluxProvider, useFluxContext } from "./provider.js";
 import { usePage } from "./hooks.js";
 import { ComponentRegistry, resolveComponent } from "./resolver.js";
 import { FluxCacheConfig } from "./config.js";
+import type { FluxDevelopmentMetadata } from "./config.js";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -65,6 +66,7 @@ function PageRenderer({ fallback }: { fallback?: (error: Error) => ReactNode }) 
 
 export interface FluxRootProps {
   initialEnvelope?: PageEnvelope;
+  development?: FluxDevelopmentMetadata;
   registry: ComponentRegistry;
   clientUrl?: string;
   cache?: FluxCacheConfig;
@@ -73,6 +75,7 @@ export interface FluxRootProps {
 
 export function FluxRoot({
   initialEnvelope,
+  development,
   registry,
   clientUrl,
   cache,
@@ -81,6 +84,7 @@ export function FluxRoot({
   return (
     <FluxProvider
       initialEnvelope={initialEnvelope}
+      development={development}
       registry={registry}
       clientUrl={clientUrl}
       cache={cache}

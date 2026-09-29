@@ -159,6 +159,7 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `CAPABILITY_LIVE_RESOURCES` | `const capability = CAPABILITY_LIVE_RESOURCES;` | Names live-resource negotiation without duplicating its wire token. |
 | `CachedPage` | `const cached: CachedPage = pageCache.getValid("/rooms", resourceStore)!;` | Represents a cached page shell and the resource versions/manifest that keep it valid. |
 | `CompiledValidationPlan` | `const compiled: CompiledValidationPlan = compileValidationPlan(plan);` | Holds a checked plan, definitions, regexes, and normalized runtime limits. |
+| `DEVTOOLS_PROTOCOL_VERSION` | `const protocol = DEVTOOLS_PROTOCOL_VERSION;` | Names the independent bounded development-trace protocol understood by Core. |
 | `DEFAULT_LIVE_RECONNECT_INITIAL_DELAY_MS` | `const firstDelay = DEFAULT_LIVE_RECONNECT_INITIAL_DELAY_MS;` | Reads the first live reconnect backoff delay. |
 | `DEFAULT_LIVE_RECONNECT_JITTER` | `const jitter = DEFAULT_LIVE_RECONNECT_JITTER;` | Reads the default randomized reconnect-delay fraction. |
 | `DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS` | `const maxDelay = DEFAULT_LIVE_RECONNECT_MAX_DELAY_MS;` | Reads the upper bound for live reconnect backoff. |
@@ -175,11 +176,14 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `FluxDiagnosticEvent` | `const event: FluxDiagnosticEvent = { id: "visit-1", timestamp: Date.now(), type: "navigation", data: {} };` | Describes one structured, correlation-ready development observation without storing application state. |
 | `FluxDiagnosticEventType` | `const type: FluxDiagnosticEventType = "resource-load";` | Restricts diagnostic events to the supported high-level runtime areas. |
 | `FluxDiagnosticListener` | `const listener: FluxDiagnosticListener = event => record(event.id);` | Types an isolated observer that cannot participate in runtime correctness. |
-| `FluxDiagnosticsHub` | `const stop = router.diagnostics.subscribe(listener);` | Distributes the router's optional, bounded development diagnostics and exposes an inactive fast-path signal without retaining a timeline. |
+| `FluxDiagnosticsHub` | `const stop = router.diagnostics.subscribe(listener);` | Distributes optional development diagnostics and supports one bounded SSR bootstrap batch without retaining the runtime timeline. |
+| `FluxServerDiagnosticTrace` | `const trace: FluxServerDiagnosticTrace = decodeServerDiagnosticTrace(header)!;` | Types value-free backend timing metadata after strict bounded validation. |
 | `FluxSseParser` | `const events = new FluxSseParser().push(chunk);` | Incrementally parses arbitrarily chunked SSE bytes into validated live events. |
 | `FluxTransport` | `const transport: FluxTransport = { visit, mutate };` | Defines the framework-neutral visit and mutation boundary plus an optional diagnostics attachment consumed by `FluxRouter`. |
 | `HEADER_CAPABILITIES` | `headers[HEADER_CAPABILITIES] = serializeCapabilities();` | Writes the documented capability-negotiation request header. |
 | `HEADER_CLIENT_ID` | `headers[HEADER_CLIENT_ID] = clientId;` | Writes the router identity used to suppress an originating tab's echoed event. |
+| `HEADER_DEVTOOLS` | `headers[HEADER_DEVTOOLS] = "1";` | Requests development traces from an explicitly debug-enabled backend. |
+| `HEADER_DEVTOOLS_TRACE` | `const encoded = response.headers.get(HEADER_DEVTOOLS_TRACE);` | Names the response header containing one bounded base64url trace. |
 | `HEADER_LIVE` | `headers[HEADER_LIVE] = "1";` | Marks a request as a live SSE stream request. |
 | `HEADER_LIVE_KEYS` | `headers[HEADER_LIVE_KEYS] = serializeLiveKeys(["rooms"]);` | Writes the bounded authorized logical-key selection for a live stream. |
 | `HistoryManager` | `const history = new HistoryManager();` | Wraps browser push, replace, and popstate lifecycle behind a framework-neutral object. |
@@ -204,6 +208,7 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `LiveResyncReason` | `const reason: LiveResyncReason = "reconnect";` | Restricts resync diagnostics to supported reason strings. |
 | `LiveStatusSnapshot` | `const snapshot: LiveStatusSnapshot = manager.getSnapshot();` | Reads stable live status, connectivity, attempts, and last-event time. |
 | `LiveTransport` | `const transport: LiveTransport = createFetchSseLiveTransport();` | Defines the connection factory consumed by `LiveManager`. |
+| `MAX_DEVTOOLS_TRACE_HEADER_CHARS` | `if (encoded.length > MAX_DEVTOOLS_TRACE_HEADER_CHARS) reject();` | Exposes the common browser/SSR encoded-trace acceptance bound. |
 | `MAX_LIVE_CLIENT_ID_LENGTH` | `if (clientId.length > MAX_LIVE_CLIENT_ID_LENGTH) rejectClient();` | Applies the frozen printable client-identity bound. |
 | `MAX_LIVE_EVENT_BYTES` | `if (frame.byteLength > MAX_LIVE_EVENT_BYTES) rejectFrame();` | Applies the maximum SSE event-frame size. |
 | `MAX_LIVE_EVENT_KEYS` | `const selected = keys.slice(0, MAX_LIVE_EVENT_KEYS);` | Applies the maximum keys carried by one live event. |
@@ -257,6 +262,7 @@ import type { FluxTransport, PageEnvelope } from "@fluxfast/core";
 | `createFetchSseLiveTransport` | `const liveTransport = createFetchSseLiveTransport("https://app.example.com");` | Creates the standard Fetch/SSE live transport. |
 | `createFetchTransport` | `const transport = createFetchTransport("https://app.example.com");` | Creates the standard Fetch visit/mutation transport. |
 | `createLiveManager` | `const manager = createLiveManager({ transport: liveTransport });` | Creates a live lifecycle manager through the factory API. |
+| `decodeServerDiagnosticTrace` | `const trace = decodeServerDiagnosticTrace(encoded);` | Decodes, bounds, and strictly sanitizes an optional backend trace without throwing. |
 | `encodeKnownVersions` | `const header = encodeKnownVersions({ rooms: "rooms-v1" });` | Produces bounded base64url known-version metadata or omits an unsafe optimization. |
 | `evaluateValidationPlan` | `const result = evaluateValidationPlan<RoomInput>(compiled, input);` | Evaluates a previously compiled plan without recompiling it. |
 | `isSupportedValidationFormat` | `if (isSupportedValidationFormat(format)) validateValidationFormat(value, format);` | Narrows an arbitrary string to a supported format name. |

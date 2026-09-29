@@ -5,13 +5,17 @@ import { headers as nextHeaders } from "next/headers";
 import { notFound } from "next/navigation";
 import {
   assertPageEnvelope,
+  decodeServerDiagnosticTrace,
   HEADER_CAPABILITIES,
+  HEADER_DEVTOOLS,
+  HEADER_DEVTOOLS_TRACE,
   PageEnvelope,
   PROTOCOL_MEDIA_TYPE,
   serializeCapabilities,
   TransportError,
 } from "@fluxfast/core";
 import { FluxNextConfig, resolveFluxBackendUrl } from "./config.js";
+import type { FluxDevelopmentMetadata } from "./config.js";
 
 export { createFluxHealthHandler } from "./health.js";
 export type { FluxHealthHandlerOptions } from "./health.js";
@@ -59,7 +63,12 @@ const NEVER_FORWARD = new Set([
 
 const INITIAL_NOT_FOUND = Symbol("fluxfast.initial-not-found");
 
-type InitialEnvelopeResult = PageEnvelope | typeof INITIAL_NOT_FOUND;
+interface InitialEnvelopePayload {
+  envelope: PageEnvelope;
+  development?: FluxDevelopmentMetadata;
+}
+
+type InitialEnvelopeResult = InitialEnvelopePayload | typeof INITIAL_NOT_FOUND;
 
 export function buildFluxPath(
   segments: string[] | undefined,
@@ -89,16 +98,25 @@ async function requestInitialEnvelope({
     throw new TypeError("FluxFast initial paths must be origin-relative");
   }
   const fullUrl = `${backendUrl.replace(/\/$/, "")}${path}`;
+  const requestHeaders: Record<string, string> = {
+    ...headers,
+    Accept: PROTOCOL_MEDIA_TYPE,
+    "X-FluxFast": "1",
+    "X-FluxFast-Protocol": "1",
+    "X-FluxFast-Visit": `ssr_${Date.now().toString(36)}`,
+    [HEADER_CAPABILITIES]: serializeCapabilities(),
+  };
+  for (const name of Object.keys(requestHeaders)) {
+    if (name.toLowerCase() === HEADER_DEVTOOLS.toLowerCase()) {
+      delete requestHeaders[name];
+    }
+  }
+  if (process.env.NODE_ENV !== "production") {
+    requestHeaders[HEADER_DEVTOOLS] = "1";
+  }
   const requestInit: RequestInit = {
     method: "GET",
-    headers: {
-      ...headers,
-      Accept: PROTOCOL_MEDIA_TYPE,
-      "X-FluxFast": "1",
-      "X-FluxFast-Protocol": "1",
-      "X-FluxFast-Visit": `ssr_${Date.now().toString(36)}`,
-      [HEADER_CAPABILITIES]: serializeCapabilities(),
-    },
+    headers: requestHeaders,
     cache: "no-store",
     redirect: "manual",
   };
@@ -153,7 +171,20 @@ async function requestInitialEnvelope({
     );
   }
   assertPageEnvelope(data);
-  return data;
+  const trace = process.env.NODE_ENV === "production"
+    ? undefined
+    : decodeServerDiagnosticTrace(response.headers.get(HEADER_DEVTOOLS_TRACE));
+  return {
+    envelope: data,
+    ...(trace === undefined
+      ? {}
+      : {
+          development: {
+            initialPath: new URL(path, "http://fluxfast.local").pathname.slice(0, 2_048) || "/",
+            initialServerTrace: trace,
+          },
+        }),
+  };
 }
 
 export async function fetchInitialEnvelope(
@@ -163,7 +194,7 @@ export async function fetchInitialEnvelope(
   if (result === INITIAL_NOT_FOUND) {
     notFound();
   }
-  return result;
+  return result.envelope;
 }
 
 function FluxNotFoundTimingAnchor() {
@@ -206,12 +237,12 @@ export function createFluxNextPage(config: FluxNextConfig) {
       if (value !== null) forwarded[name] = value;
     }
 
-    const initialEnvelope = await requestInitialEnvelope({
+    const initial = await requestInitialEnvelope({
       backendUrl: resolveFluxBackendUrl(config.backendUrl),
       path,
       headers: forwarded,
     });
-    if (initialEnvelope === INITIAL_NOT_FOUND) {
+    if (initial === INITIAL_NOT_FOUND) {
       // Unlike Suspense or rendering a fallback directly, this preserves
       // Next's real 404 response status.
       return React.createElement(
@@ -222,7 +253,10 @@ export function createFluxNextPage(config: FluxNextConfig) {
       );
     }
     return React.createElement(config.application, {
-      initialEnvelope,
+      initialEnvelope: initial.envelope,
+      ...(initial.development === undefined
+        ? {}
+        : { development: initial.development }),
       clientUrl: config.clientUrl,
       cache: config.cache,
     });

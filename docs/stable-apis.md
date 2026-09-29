@@ -210,8 +210,9 @@ import { Link, useForm, useResource } from "@fluxfast/next";
 | `DEFAULT_FLUXFAST_BACKEND_URL` | `const localBackend = DEFAULT_FLUXFAST_BACKEND_URL;` | Exposes the documented local server default used when no backend URL is configured. |
 | `DeferredResourceResult` | `const analytics: DeferredResourceResult<Analytics> = useDeferredResource<Analytics>("analytics");` | Types deferred data plus pending/loading/ready/error flags and `retry()`. |
 | `FetchInitialEnvelopeOptions` | `const options: FetchInitialEnvelopeOptions = { backendUrl, path: "/rooms" };` | Configures the server-side initial page-envelope request. |
-| `FluxApplicationProps` | `const envelope = (props: FluxApplicationProps) => props.initialEnvelope;` | Types the generated application component's initial envelope, client URL, and cache bounds. |
+| `FluxApplicationProps` | `const envelope = (props: FluxApplicationProps) => props.initialEnvelope;` | Types the generated application component's initial envelope, optional safe development bootstrap, client URL, and cache bounds. |
 | `FluxCacheConfig` | `const cache: FluxCacheConfig = { maxResources: 128, maxPages: 32 };` | Bounds browser resource and page caches. |
+| `FluxDevelopmentMetadata` | `const metadata: FluxDevelopmentMetadata = { initialPath: "/rooms", initialServerTrace: trace };` | Carries a validated, value-free initial SSR trace outside the page envelope for development hydration. |
 | `FluxFastGenerationCheckResult` | `const check: FluxFastGenerationCheckResult = checkFluxFastProject();` | Describes current/stale generated files and validator diagnostics without writing. |
 | `FluxFastGenerationOptions` | `const options: FluxFastGenerationOptions = { generatedDir: "src/.fluxfast" };` | Configures full registry, schema, types, routes, mutations, and validator generation. |
 | `FluxFastGenerationResult` | `const result: FluxFastGenerationResult = generateFluxFastProject();` | Reports the files and validators written by full project generation. |
