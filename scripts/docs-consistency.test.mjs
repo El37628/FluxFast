@@ -101,6 +101,7 @@ test("keeps documented runtime support aligned with metadata and CI", () => {
   const rootPackage = JSON.parse(read("package.json"));
   const corePackage = JSON.parse(read("packages/core/package.json"));
   const nextPackage = JSON.parse(read("packages/next/package.json"));
+  const devtoolsPackage = JSON.parse(read("packages/devtools/package.json"));
   const pythonVersions = inlineMatrix(
     read(".github/workflows/python.yml"),
     "python-version"
@@ -123,7 +124,7 @@ test("keeps documented runtime support aligned with metadata and CI", () => {
   const nodeEngine = facts.runtime.node
     .map(version => `^${version}.0.0`)
     .join(" || ");
-  for (const manifest of [rootPackage, corePackage, nextPackage]) {
+  for (const manifest of [rootPackage, corePackage, nextPackage, devtoolsPackage]) {
     assert.equal(manifest.engines.node, nodeEngine);
   }
   assert.equal(nextPackage.peerDependencies.next, facts.runtime.nextPeer);
@@ -228,6 +229,7 @@ test("keeps public package entry points aligned with manifests and API docs", ()
 
   const corePackage = JSON.parse(read("packages/core/package.json"));
   const nextPackage = JSON.parse(read("packages/next/package.json"));
+  const devtoolsPackage = JSON.parse(read("packages/devtools/package.json"));
   assert.deepEqual(
     facts.packageEntryPoints["@fluxfast/core"].toSorted(),
     Object.keys(corePackage.exports).toSorted()
@@ -236,10 +238,15 @@ test("keeps public package entry points aligned with manifests and API docs", ()
     facts.packageEntryPoints["@fluxfast/next"].toSorted(),
     Object.keys(nextPackage.exports).toSorted()
   );
+  assert.deepEqual(
+    facts.packageEntryPoints["@fluxfast/devtools"].toSorted(),
+    Object.keys(devtoolsPackage.exports).toSorted()
+  );
 
   const coreApi = read("docs/core-api.md");
   assert.match(coreApi, /one public import\s+path/);
   assert.match(coreApi, /from "@fluxfast\/core"/);
+  assert.match(read("docs/devtools.md"), /import \{\s*FluxDevtools,[\s\S]*from "@fluxfast\/devtools"/);
   assert.deepEqual(
     facts.packageEntryPoints["@fluxfast/next"].toSorted(),
     nextEntryPointsFromDocumentation()
@@ -325,7 +332,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   assert.match(artifactGate, /trusted OIDC and provenance/);
   assert.match(security, /Pre-1\.0 releases are\s+unsupported/);
   assert.doesNotMatch(security, /Before 1\.0/);
-  assert.equal(releasing.match(/version=1\.0\.0/g)?.length, 2);
+  assert.equal(releasing.match(/version=1\.1\.0/g)?.length, 2);
   assert.doesNotMatch(releasing, /version=0\.9\.0/);
 
   assert.match(
@@ -347,9 +354,11 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
     "docs/type-safety.md",
     "docs/validation.md",
     "docs/nextjs-adapter.md",
+    "docs/devtools.md",
     "docs/production.md",
     "docs/distributed-cache.md",
     "docs/stability.md",
+    "docs/releases/v1.1.0.md",
     "docs/releases/v1.0.0.md",
     "docs/releases/v1.0-final-candidate-gate.md",
     "docs/releases/v1.0-artifact-verification.md",

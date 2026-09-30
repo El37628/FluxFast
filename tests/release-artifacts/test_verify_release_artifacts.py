@@ -199,7 +199,13 @@ redis = ["redis>=5.0.0,<9.0.0"]
         )
 
 
-def _package_manifest(name: str, version: str, *, next_package: bool) -> dict:
+def _package_manifest(
+    name: str,
+    version: str,
+    *,
+    next_package: bool,
+    devtools_package: bool = False,
+) -> dict:
     manifest = {
         "name": name,
         "version": version,
@@ -235,6 +241,29 @@ def _package_manifest(name: str, version: str, *, next_package: bool) -> dict:
             "react": ">=19.0.0",
             "react-dom": ">=19.0.0",
         }
+    if devtools_package:
+        manifest["exports"] = {
+            ".": {
+                "types": "./dist/index.d.ts",
+                "development": {
+                    "import": "./dist/esm/index.js",
+                    "require": "./dist/index.js",
+                },
+                "production": {
+                    "import": "./dist/esm/disabled.js",
+                    "require": "./dist/disabled.js",
+                },
+                "import": "./dist/esm/index.js",
+                "require": "./dist/index.js",
+                "default": "./dist/index.js",
+            }
+        }
+        manifest["peerDependencies"] = {
+            "@fluxfast/core": ">=1.1.0 <2.0.0",
+            "@fluxfast/next": ">=1.1.0 <2.0.0",
+            "react": ">=19.0.0",
+            "react-dom": ">=19.0.0",
+        }
     return manifest
 
 
@@ -245,18 +274,33 @@ def _build_npm_archive(
     *,
     package: str,
     next_package: bool,
+    devtools_package: bool = False,
     packed_name: str | None = None,
     add_link: bool = False,
 ) -> None:
     package_root = repository / "packages" / package
-    name = "@fluxfast/next" if next_package else "@fluxfast/core"
-    manifest = _package_manifest(name, version, next_package=next_package)
+    name = (
+        "@fluxfast/devtools"
+        if devtools_package
+        else "@fluxfast/next"
+        if next_package
+        else "@fluxfast/core"
+    )
+    manifest = _package_manifest(
+        name,
+        version,
+        next_package=next_package,
+        devtools_package=devtools_package,
+    )
     _write(package_root / "package.json", json.dumps(manifest))
     _write(package_root / "README.md", f"# {name}\n")
     _write(package_root / "LICENSE", "MIT test license\n")
     _write(package_root / "dist/index.js", "module.exports = {};\n")
     _write(package_root / "dist/index.d.ts", "export {};\n")
     _write(package_root / "dist/esm/index.js", "export {};\n")
+    if devtools_package:
+        _write(package_root / "dist/disabled.js", "exports.FluxDevtools = () => null;\n")
+        _write(package_root / "dist/esm/disabled.js", "export const FluxDevtools = () => null;\n")
     if next_package:
         _write(package_root / "bin/fluxfast.js", "#!/usr/bin/env node\n")
 
@@ -270,12 +314,12 @@ def _build_npm_archive(
             "package/package.json": json.dumps(packed_manifest).encode(),
             "package/README.md": (package_root / "README.md").read_bytes(),
             "package/LICENSE": (package_root / "LICENSE").read_bytes(),
-            "package/dist/index.js": (package_root / "dist/index.js").read_bytes(),
-            "package/dist/index.d.ts": (package_root / "dist/index.d.ts").read_bytes(),
-            "package/dist/esm/index.js": (
-                package_root / "dist/esm/index.js"
-            ).read_bytes(),
         }
+        files.update({
+            f"package/dist/{path.relative_to(package_root / 'dist').as_posix()}": path.read_bytes()
+            for path in (package_root / "dist").rglob("*")
+            if path.is_file()
+        })
         if next_package:
             files["package/bin/fluxfast.js"] = (
                 package_root / "bin/fluxfast.js"
@@ -293,12 +337,12 @@ def _build_npm_archive(
 def _build_release(
     root: Path,
     *,
+    version: str = "0.9.0",
     packed_core_name: str | None = None,
     core_link: bool = False,
 ) -> tuple[Path, Path, str]:
     repository = root / "repository"
     release = root / "release"
-    version = "0.9.0"
     _build_python_archives(repository, release, version)
     _build_npm_archive(
         repository,
@@ -316,6 +360,15 @@ def _build_release(
         package="next",
         next_package=True,
     )
+    if verifier._includes_devtools_artifact(version):
+        _build_npm_archive(
+            repository,
+            release,
+            version,
+            package="devtools",
+            next_package=False,
+            devtools_package=True,
+        )
     return repository, release, version
 
 
@@ -343,6 +396,36 @@ def test_verifies_all_distributions_and_writes_checksums(tmp_path: Path) -> None
         version=version,
         verify_checksums=True,
     ) == artifacts
+
+
+def test_v1_1_verifies_the_new_devtools_distribution(tmp_path: Path) -> None:
+    repository, release, version = _build_release(tmp_path, version="1.1.0")
+
+    artifacts = verifier.verify_release_artifacts(
+        release_dir=release,
+        repository_root=repository,
+        version=version,
+        write_checksums=True,
+    )
+
+    assert len(artifacts) == 5
+    assert artifacts[-1].name == "fluxfast-devtools-1.1.0.tgz"
+    assert len((release / "SHA256SUMS").read_text().splitlines()) == 5
+
+
+def test_v1_1_rejects_a_missing_devtools_distribution(tmp_path: Path) -> None:
+    repository, release, version = _build_release(tmp_path, version="1.1.0")
+    (release / "npm" / f"fluxfast-devtools-{version}.tgz").unlink()
+
+    with pytest.raises(
+        verifier.ArtifactVerificationError,
+        match="Core tarball, Next tarball, and DevTools tarball",
+    ):
+        verifier.verify_release_artifacts(
+            release_dir=release,
+            repository_root=repository,
+            version=version,
+        )
 
 
 def test_rejects_checksum_drift_or_extra_entries(tmp_path: Path) -> None:

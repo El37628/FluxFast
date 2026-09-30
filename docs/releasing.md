@@ -82,28 +82,38 @@ commit already reachable from `main`; an unsigned annotated tag is therefore
 not itself a release failure. This avoids making a local signing-key setup a
 release blocker while retaining an auditable build and publication chain.
 
-Before publication, the release workflow builds exactly four distributions:
+Before publication, the release workflow builds the exact distribution set for
+the target version. FluxFast 1.0.x retains its immutable four-distribution
+contract. FluxFast 1.1 and later add the optional DevTools package, for five
+distributions:
 
 ```text
 fluxfast-VERSION-py3-none-any.whl
 fluxfast-VERSION.tar.gz
 fluxfast-core-VERSION.tgz
 fluxfast-next-VERSION.tgz
+fluxfast-devtools-VERSION.tgz
 ```
 
 The release artifact verifier rejects missing or extra distributions, unsafe
 archive entries, metadata drift, missing export or command targets, dependency
 and peer-dependency drift, incorrect Python metadata, mismatched license or
 README content, and packaged source/build output that differs from the checked
-out package trees byte for byte. It then writes `SHA256SUMS` for the four
-verified files. Before either registry job starts, a separate job downloads all
-three immutable workflow artifacts, rebuilds the JavaScript package output from
-the tagged source, and repeats the full content and checksum verification. The
+out package trees byte for byte. It then writes `SHA256SUMS` for every verified
+file. The verifier remains version-aware so rerunning the 1.0.x evidence still
+expects four distributions while 1.1.0 requires DevTools. Before either
+registry job starts, a separate job downloads all three immutable workflow
+artifacts, rebuilds the JavaScript package output from the tagged source, and
+repeats the full content and checksum verification. The
 final GitHub-release job rebuilds, downloads, and verifies the payload again
-before attaching the four distributions and checksum file. The complete proof
-is recorded in the
+before attaching the five distributions and checksum file. The historical 1.0
+proof is recorded in the
 [v1.0 artifact-verification gate](releases/v1.0-artifact-verification.md).
-After downloading the five release assets into one directory, verify them with:
+The protected check context retains the historical name
+`Four-distribution contract` for branch-rule continuity, but its v1.1 run uses
+the version-aware five-distribution verifier described above.
+After downloading the six v1.1 release assets into one directory, verify them
+with:
 
 ```bash
 sha256sum --check SHA256SUMS
@@ -111,7 +121,8 @@ sha256sum --check SHA256SUMS
 
 Registry publication uses short-lived GitHub OIDC identities rather than
 stored publication tokens. npm publication requests registry provenance for
-both packages. PyPI trusted publishing emits PEP 740 attestations explicitly.
+Core, Next, and DevTools. PyPI trusted publishing emits PEP 740 attestations
+explicitly.
 All external release actions stay pinned to full commit SHAs, and write
 permissions remain scoped to the individual publish or GitHub-release job that
 needs them. Post-publication registry-consumer and mixed-version checks must pass
@@ -212,7 +223,8 @@ Create GitHub environments named `pypi` and `npm`. Add required reviewers to
 both environments so a tag cannot publish without approval. Protect release
 tags matching `v*` in the repository rules as well.
 
-Before the first public release, also configure these repository settings:
+Before the first public release of any package, also configure these repository
+settings:
 
 - Protect `main`, require pull requests, and require the Python, JavaScript,
   integration, release-artifact, dependency-security, and CodeQL checks.
@@ -234,8 +246,8 @@ Follow the [PyPI trusted publisher guide](https://docs.pypi.org/trusted-publishe
 No PyPI API token is required.
 
 npm requires a package to exist before trusted publishing can be configured.
-Confirm that your npm account owns the `@fluxfast` scope, then bootstrap both
-package names once from a clean `main` checkout using an interactive account
+Confirm that your npm account owns the `@fluxfast` scope, then bootstrap each
+package name once from a clean `main` checkout using an interactive account
 protected by two-factor authentication. Use a temporary prerelease so the
 first stable version remains available for automation:
 
@@ -247,13 +259,19 @@ npm login
 bootstrap_dir="$(mktemp -d)"
 cp -R packages/core "$bootstrap_dir/core"
 cp -R packages/next "$bootstrap_dir/next"
+cp -R packages/devtools "$bootstrap_dir/devtools"
 npm pkg set version=0.0.0-oidc-bootstrap.0 --prefix "$bootstrap_dir/core"
 npm pkg set version=0.0.0-oidc-bootstrap.0 --prefix "$bootstrap_dir/next"
+npm pkg set version=0.0.0-oidc-bootstrap.0 --prefix "$bootstrap_dir/devtools"
 npm pkg set 'dependencies.@fluxfast/core=0.0.0-oidc-bootstrap.0' \
   --prefix "$bootstrap_dir/next"
 npm publish "$bootstrap_dir/core" --access public --tag bootstrap
 npm publish "$bootstrap_dir/next" --access public --tag bootstrap
+npm publish "$bootstrap_dir/devtools" --access public --tag bootstrap
 ```
+
+When Core and Next are already configured, bootstrap only the new DevTools
+package; never republish or reuse an existing package version.
 
 Configure a trusted publisher on each npm package with these exact values:
 
@@ -264,7 +282,7 @@ Configure a trusted publisher on each npm package with these exact values:
 - Allowed action: `npm publish`
 
 The [npm trusted publishing guide](https://docs.npmjs.com/trusted-publishers/)
-contains the corresponding package-settings form. After configuring both
+contains the corresponding package-settings form. After configuring all three
 connections, require two-factor authentication and disallow traditional
 automation tokens.
 
@@ -275,7 +293,7 @@ the package manifests, Python runtime version, lockfile, and dated release
 section together:
 
 ```bash
-version=1.0.0
+version=1.1.0
 pnpm release:prepare "$version"
 pnpm release:check "v$version"
 ```
@@ -289,7 +307,7 @@ an up-to-date checkout:
 ```bash
 git switch main
 git pull --ff-only
-version=1.0.0
+version=1.1.0
 pnpm release:check "v$version"
 git tag -a "v$version" -m "FluxFast $version"
 git push origin "v$version"
@@ -297,11 +315,13 @@ git push origin "v$version"
 
 Approve the `pypi` and `npm` deployment jobs in GitHub when prompted. Never
 move a published tag or reuse a package version; publish a new patch instead.
-If npm publishing is interrupted between its two packages, rerunning the failed
-job verifies the already-published tarball's exact integrity before continuing.
+If npm publishing is interrupted between its three packages, rerunning the
+failed job verifies the already-published tarball's exact integrity before
+continuing.
 After the first stable release succeeds, remove the bootstrap dist-tags:
 
 ```bash
 npm dist-tag rm @fluxfast/core bootstrap
 npm dist-tag rm @fluxfast/next bootstrap
+npm dist-tag rm @fluxfast/devtools bootstrap
 ```

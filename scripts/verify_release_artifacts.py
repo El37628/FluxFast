@@ -466,13 +466,25 @@ def _verify_npm_package(
         )
 
 
+def _includes_devtools_artifact(version: str) -> bool:
+    """Keep the immutable v1.0 payload while adding DevTools from v1.1."""
+
+    major, minor, patch = (int(part) for part in version.split("."))
+    return (major, minor, patch) >= (1, 1, 0)
+
+
 def _artifact_paths(release_dir: Path, version: str) -> tuple[Path, ...]:
-    expected = (
+    expected_list = [
         release_dir / "python" / f"fluxfast-{version}-py3-none-any.whl",
         release_dir / "python" / f"fluxfast-{version}.tar.gz",
         release_dir / "npm" / f"fluxfast-core-{version}.tgz",
         release_dir / "npm" / f"fluxfast-next-{version}.tgz",
-    )
+    ]
+    if _includes_devtools_artifact(version):
+        expected_list.append(
+            release_dir / "npm" / f"fluxfast-devtools-{version}.tgz"
+        )
+    expected = tuple(expected_list)
     observed = {
         path
         for directory in (release_dir / "python", release_dir / "npm")
@@ -480,9 +492,14 @@ def _artifact_paths(release_dir: Path, version: str) -> tuple[Path, ...]:
         for path in directory.rglob("*")
         if path.is_file()
     }
+    expected_description = (
+        "the wheel, sdist, Core tarball, Next tarball, and DevTools tarball"
+        if _includes_devtools_artifact(version)
+        else "the wheel, sdist, Core tarball, and Next tarball"
+    )
     _expect(
         observed == set(expected),
-        "release directory must contain exactly the wheel, sdist, Core tarball, and Next tarball",
+        f"release directory must contain exactly {expected_description}",
     )
     for path in expected:
         _expect(path.is_file(), f"{path.name}: distribution is not a regular file")
@@ -512,10 +529,12 @@ def _write_checksums(paths: Iterable[Path], output: Path) -> None:
 def _verify_checksums(paths: Iterable[Path], checksum_file: Path) -> None:
     _expect(checksum_file.is_file(), "SHA256SUMS is missing")
     _expect(not checksum_file.is_symlink(), "SHA256SUMS cannot be a symlink")
+    paths = tuple(paths)
     expected = "".join(f"{_sha256(path)}  {path.name}\n" for path in paths)
+    count = {4: "four", 5: "five"}.get(len(paths), str(len(paths)))
     _expect(
         checksum_file.read_text() == expected,
-        "SHA256SUMS must contain exactly the four verified distribution digests",
+        f"SHA256SUMS must contain exactly the {count} verified distribution digests",
     )
 
 
@@ -527,12 +546,13 @@ def verify_release_artifacts(
     write_checksums: bool = False,
     verify_checksums: bool = False,
 ) -> tuple[Path, ...]:
-    """Verify all four distributions and optionally write ``SHA256SUMS``."""
+    """Verify the versioned distribution set and optionally write checksums."""
 
     _expect(bool(_STABLE_VERSION.fullmatch(version)), "version must be MAJOR.MINOR.PATCH")
     release_dir = release_dir.resolve()
     repository_root = repository_root.resolve()
-    wheel, sdist, core, next_package = _artifact_paths(release_dir, version)
+    artifacts = _artifact_paths(release_dir, version)
+    wheel, sdist, core, next_package = artifacts[:4]
     pyproject = tomllib.loads(
         (repository_root / "python/fluxfast/pyproject.toml").read_text()
     )["project"]
@@ -565,7 +585,14 @@ def verify_release_artifacts(
         package_name="@fluxfast/next",
         version=version,
     )
-    artifacts = (wheel, sdist, core, next_package)
+    if _includes_devtools_artifact(version):
+        _verify_npm_package(
+            artifacts[4],
+            repository_root=repository_root,
+            package_directory="packages/devtools",
+            package_name="@fluxfast/devtools",
+            version=version,
+        )
     if write_checksums:
         _write_checksums(artifacts, release_dir / "SHA256SUMS")
     if verify_checksums:

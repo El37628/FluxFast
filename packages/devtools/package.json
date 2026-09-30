@@ -1,6 +1,6 @@
 {
   "name": "@fluxfast/devtools",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "license": "MIT",
   "description": "Development-only runtime diagnostics UI for FluxFast",
   "repository": {

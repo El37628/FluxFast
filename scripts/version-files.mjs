@@ -4,13 +4,14 @@ export const VERSION_FILES = [
   "package.json",
   "packages/core/package.json",
   "packages/next/package.json",
+  "packages/devtools/package.json",
   "pnpm-lock.yaml",
   "python/fluxfast/pyproject.toml",
   "python/fluxfast/src/fluxfast/__init__.py",
   "python/fluxfast/uv.lock",
 ];
 
-const JSON_MANIFESTS = VERSION_FILES.slice(0, 3);
+const JSON_MANIFESTS = VERSION_FILES.slice(0, 4);
 
 export function validateStableVersion(version) {
   if (!STABLE_VERSION.test(version ?? "")) {

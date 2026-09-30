@@ -31,6 +31,7 @@ test("release gates reuse the branch workflows without duplicate tag runs", () =
     "integration.yml",
     "container.yml",
     "release-smoke.yml",
+    "devtools-performance.yml",
   ];
 
   for (const name of reusableWorkflows) {
@@ -55,6 +56,10 @@ test("release publication waits for full production and container CI", () => {
     jobBlock(source, "release-artifacts-ci"),
     /uses: \.\/\.github\/workflows\/release-smoke\.yml/
   );
+  assert.match(
+    jobBlock(source, "devtools-performance-ci"),
+    /uses: \.\/\.github\/workflows\/devtools-performance\.yml/
+  );
 
   const integration = jobBlock(source, "integration-ci");
   assert.match(integration, /needs: \[javascript-ci, python-ci\]/);
@@ -66,7 +71,7 @@ test("release publication waits for full production and container CI", () => {
 
   assert.match(
     jobBlock(source, "build"),
-    /needs: \[container-ci, release-artifacts-ci\]/
+    /needs: \[container-ci, release-artifacts-ci, devtools-performance-ci\]/
   );
   const payload = jobBlock(source, "verify-release-payload");
   assert.match(payload, /needs: build/);
@@ -90,7 +95,8 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   const artifactContract = jobBlock(smoke, "artifact-contract");
   assert.match(artifactContract, /name: Four-distribution contract/);
   assert.match(artifactContract, /python -m build/);
-  assert.equal(artifactContract.match(/npm pack \.\/packages\//g)?.length, 2);
+  assert.equal(artifactContract.match(/npm pack \.\/packages\//g)?.length, 3);
+  assert.match(artifactContract, /npm pack \.\/packages\/devtools/);
   assert.match(artifactContract, /scripts\/verify_release_artifacts\.py/);
   assert.match(artifactContract, /--write-checksums/);
   assert.match(artifactContract, /actions\/upload-artifact@[0-9a-f]{40}/);
@@ -111,6 +117,7 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   const npm = jobBlock(release, "publish-npm");
   assert.match(npm, /id-token: write/);
   assert.match(npm, /npm publish "\$tarball"[\s\S]*--provenance/);
+  assert.match(npm, /publish_package "@fluxfast\/devtools"/);
 
   const githubRelease = jobBlock(release, "github-release");
   assert.match(githubRelease, /name: release-checksums/);
@@ -146,7 +153,7 @@ test("runs full production and distributed consumers from one packed v1 candidat
   assert.match(production, /scripts\/test_sdist_consumer\.py/);
   assert.doesNotMatch(production, /python -m build/);
   assert.doesNotMatch(production, /npm pack \.\/packages\//);
-  assert.match(production, /Verify the full packed v1\.0 release-candidate lifecycle/);
+  assert.match(production, /Verify the full packed v1\.1 release-candidate lifecycle/);
   assert.match(production, /FLUXFAST_ARTIFACT_DIR:/);
   assert.match(production, /FLUXFAST_RUN_PRODUCTION: "1"/);
   assert.match(production, /pnpm test:consumer:init/);
@@ -189,23 +196,23 @@ test("runs full production and distributed consumers from one packed v1 candidat
   assert.match(distributedRuntime, /packed distributed process remained on port/);
 });
 
-test("v1.0 compatibility gates exercise both v0.9.0 upgrade orders and rollback", () => {
+test("v1.1 compatibility gates exercise both v1.0.1 upgrade orders and rollback", () => {
   const branchSmoke = jobBlock(readWorkflow("release-smoke.yml"), "mixed-version-consumers");
-  assert.match(branchSmoke, /name: v0\.9\.0 adjacent upgrade and rollback compatibility/);
+  assert.match(branchSmoke, /name: v1\.0\.1 adjacent upgrade and rollback compatibility/);
   assert.equal(
-    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.9\.0/g)?.length,
+    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 1\.0\.1/g)?.length,
     2
   );
-  assert.match(branchSmoke, /Verify historical Python candidate with JavaScript 0\.8\.1/);
+  assert.match(branchSmoke, /Verify historical Python candidate with JavaScript 0\.9\.0/);
   assert.equal(
-    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.8\.1/g)?.length,
+    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.9\.0/g)?.length,
     1
   );
   assert.equal(branchSmoke.match(/FLUXFAST_UPGRADE_SEQUENCE: "1"/g)?.length, 2);
   assert.equal(branchSmoke.match(/FLUXFAST_CURRENT_PYTHON_SPEC=/g)?.length, 2);
   assert.equal(branchSmoke.match(/FLUXFAST_CURRENT_CORE_SPEC=/g)?.length, 2);
   assert.equal(branchSmoke.match(/FLUXFAST_CURRENT_NEXT_SPEC=/g)?.length, 2);
-  assert.doesNotMatch(branchSmoke, /0\.8\.0/);
+  assert.doesNotMatch(branchSmoke, /0\.8\.1/);
 
   const publishedSmoke = jobBlock(
     readWorkflow("release.yml"),
@@ -213,10 +220,10 @@ test("v1.0 compatibility gates exercise both v0.9.0 upgrade orders and rollback"
   );
   assert.match(
     publishedSmoke,
-    /Verify published v1\.0\/v0\.9\.0 upgrade and rollback/
+    /Verify published v1\.1\/v1\.0\.1 upgrade and rollback/
   );
   assert.equal(
-    publishedSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.9\.0/g)?.length,
+    publishedSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 1\.0\.1/g)?.length,
     2
   );
   assert.match(publishedSmoke, /playwright@1\.63\.0/);
@@ -225,7 +232,7 @@ test("v1.0 compatibility gates exercise both v0.9.0 upgrade orders and rollback"
     publishedSmoke.match(/FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"/g)?.length,
     2
   );
-  assert.doesNotMatch(publishedSmoke, /0\.8\.1/);
+  assert.doesNotMatch(publishedSmoke, /0\.9\.0/);
 
   const publishedProduction = jobBlock(
     readWorkflow("release.yml"),
@@ -234,6 +241,22 @@ test("v1.0 compatibility gates exercise both v0.9.0 upgrade orders and rollback"
   assert.match(publishedProduction, /playwright@1\.63\.0/);
   assert.doesNotMatch(publishedProduction, /playwright@1\.62\.1/);
   assert.match(publishedProduction, /FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"/);
+  assert.match(publishedProduction, /Verify published DevTools package/);
+  assert.match(publishedProduction, /"@fluxfast\/devtools@\$\{version\}"/);
+  assert.match(publishedProduction, /node --conditions=production/);
+
+  const mixedConsumer = readRepositoryFile(
+    "scripts/test-published-mixed-consumer.mjs"
+  );
+  assert.match(
+    mixedConsumer,
+    /path\.join\("src", "app", "fluxfast", "\[probe\]", "route\.ts"\)/
+  );
+  assert.match(
+    mixedConsumer,
+    /path\.join\("src", "app", "fluxfast", "transport", "\[\[\.\.\.path\]\]", "route\.ts"\)/
+  );
+  assert.doesNotMatch(mixedConsumer, /scaffoldPaths = \[[\s\S]*?%5Ffluxfast/);
 });
 
 test("freezes the v0.9 runtime support matrix in metadata and CI", () => {

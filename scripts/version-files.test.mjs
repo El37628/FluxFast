@@ -15,6 +15,7 @@ function versionFixture() {
     "packages/core/package.json": '{"version":"0.1.0"}\n',
     "packages/next/package.json":
       '{"version":"0.1.0","dependencies":{"@fluxfast/core":"^0.1.0"}}\n',
+    "packages/devtools/package.json": '{"version":"0.1.0"}\n',
     "pnpm-lock.yaml":
       "lockfileVersion: '9.0'\n\nimporters:\n\n  packages/next:\n    dependencies:\n      '@fluxfast/core':\n        specifier: ^0.1.0\n        version: link:../core\n",
     "python/fluxfast/pyproject.toml":
@@ -30,6 +31,7 @@ test("rewrites every synchronized release version", () => {
     "package.json": "1.2.3",
     "packages/core/package.json": "1.2.3",
     "packages/next/package.json": "1.2.3",
+    "packages/devtools/package.json": "1.2.3",
     "pnpm-lock.yaml @fluxfast/core": "^1.2.3",
     "python/fluxfast/pyproject.toml": "1.2.3",
     "python/fluxfast/src/fluxfast/__init__.py": "1.2.3",
