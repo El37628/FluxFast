@@ -244,6 +244,19 @@ test("v1.1 compatibility gates exercise both v1.0.1 upgrade orders and rollback"
   assert.match(publishedProduction, /Verify published DevTools package/);
   assert.match(publishedProduction, /"@fluxfast\/devtools@\$\{version\}"/);
   assert.match(publishedProduction, /node --conditions=production/);
+
+  const mixedConsumer = readRepositoryFile(
+    "scripts/test-published-mixed-consumer.mjs"
+  );
+  assert.match(
+    mixedConsumer,
+    /path\.join\("src", "app", "fluxfast", "\[probe\]", "route\.ts"\)/
+  );
+  assert.match(
+    mixedConsumer,
+    /path\.join\("src", "app", "fluxfast", "transport", "\[\[\.\.\.path\]\]", "route\.ts"\)/
+  );
+  assert.doesNotMatch(mixedConsumer, /scaffoldPaths = \[[\s\S]*?%5Ffluxfast/);
 });
 
 test("freezes the v0.9 runtime support matrix in metadata and CI", () => {

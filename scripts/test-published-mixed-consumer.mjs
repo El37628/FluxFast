@@ -342,8 +342,8 @@ const scaffoldPaths = [
   "next.config.ts",
   path.join("src", "fluxfast.config.ts"),
   path.join("src", "app", "(flux)", "[[...flux]]", "page.tsx"),
-  path.join("src", "app", "%5Ffluxfast", "[probe]", "route.ts"),
-  path.join("src", "app", "%5Ffluxfast", "transport", "[[...path]]", "route.ts")
+  path.join("src", "app", "fluxfast", "[probe]", "route.ts"),
+  path.join("src", "app", "fluxfast", "transport", "[[...path]]", "route.ts")
 ];
 
 function captureScaffold() {
