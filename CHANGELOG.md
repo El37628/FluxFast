@@ -5,6 +5,37 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-30
+
+### Added
+
+- Add the optional `@fluxfast/devtools` development Debugbar with Overview,
+  Resources, Timeline, Cache, Mutations, Live, and Protocol panels; persistent
+  accessible controls; safe trace copying; and bounded local history.
+- Add an inactive framework-neutral diagnostic hub, correlation-ready Core
+  runtime events, safe FastAPI resource and mutation timings, browser transport
+  trace decoding, and one-shot initial SSR diagnostic bootstrap without changing
+  `fluxfast/1`.
+- Add development and production browser coverage plus repeatable inactive
+  runtime, bundle-exclusion, long-running memory, listener, and live-connection
+  release gates for DevTools.
+
+### Changed
+
+- Publish `@fluxfast/devtools` as the fifth synchronized v1.1 distribution and
+  make artifact verification version-aware so the historical v1.0 four-file
+  payload remains immutable.
+- Teach generated agent knowledge to inspect the DevTools Timeline before
+  changing synchronization code, and document every panel, safety boundary,
+  performance limit, and troubleshooting path.
+
+### Security
+
+- Keep diagnostic traces development-gated, bounded, query-free, and
+  value-free; sanitize untrusted metadata and exclude credentials, request
+  bodies, scope identities, connection details, exception text, and patch
+  values from the backend, browser UI, and copied trace.
+
 ## [1.0.1] - 2026-09-28
 
 ### Added
@@ -540,7 +571,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v1.1.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
@@ -556,3 +587,4 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 [0.9.0]: https://github.com/El37628/FluxFast/releases/tag/v0.9.0
 [1.0.0]: https://github.com/El37628/FluxFast/releases/tag/v1.0.0
 [1.0.1]: https://github.com/El37628/FluxFast/releases/tag/v1.0.1
+[1.1.0]: https://github.com/El37628/FluxFast/releases/tag/v1.1.0

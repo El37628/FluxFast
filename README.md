@@ -289,6 +289,28 @@ use the ordinary `useResource("notifications")` hook. See [Live
 Resources](docs/live-resources.md) for mutations, patches, reconnect, Redis,
 security, and deployment requirements.
 
+## DevTools
+
+Install the optional FluxFast DevTools to inspect resource loading, cache hits,
+deferred resources, mutations, live synchronization, protocol metadata, and a
+correlated runtime timeline during development:
+
+```bash
+npm install --save-dev @fluxfast/devtools
+```
+
+```tsx
+import { FluxDevtools } from "@fluxfast/devtools";
+
+{process.env.NODE_ENV === "development" && <FluxDevtools />}
+```
+
+Mount it inside the FluxFast provider and enable `FluxFast(app, debug=True)`
+only in the development backend to receive safe server timings. Production
+builds resolve an inert package entry and emit no diagnostic request or trace.
+See the [DevTools guide](docs/devtools.md) for every panel, security exclusions,
+SSR behavior, performance bounds, and troubleshooting.
+
 ## Multiple workers
 
 The default resource cache is process-local. To share positive-TTL resources
@@ -332,6 +354,9 @@ guidance.
   validation engine.
 - `packages/next`: Next.js 16 App Router adapter, onboarding CLI, form hooks,
   and contract/registry generator.
+- `packages/devtools`: optional development-only Debugbar and bounded runtime
+  inspector for resources, timelines, caches, mutations, live state, and
+  protocol metadata.
 
 ## Documentation
 
@@ -345,9 +370,11 @@ guidance.
 - [Generated Contracts](docs/type-safety.md)
 - [Validation](docs/validation.md)
 - [Next.js Adapter](docs/nextjs-adapter.md)
+- [DevTools](docs/devtools.md)
 - [Production](docs/production.md)
 - [Distributed Redis](docs/distributed-cache.md)
 - [Stability / Versioning](docs/stability.md)
+- [FluxFast 1.1 Release Notes](docs/releases/v1.1.0.md)
 - [FluxFast 1.0 Release Notes](docs/releases/v1.0.0.md)
 - [FluxFast 1.0 Final Candidate Gate](docs/releases/v1.0-final-candidate-gate.md)
 - [FluxFast 1.0 Artifact Verification](docs/releases/v1.0-artifact-verification.md)
@@ -385,7 +412,8 @@ contract](docs/python-api.md) classifies every
 official top-level export, and the [`@fluxfast/core` API
 contract](docs/core-api.md) classifies the framework-neutral runtime. The
 [`@fluxfast/next` API contract](docs/next-api.md) defines the supported adapter
-exports and package paths. Maintainers
+exports and package paths, while the [DevTools guide](docs/devtools.md) defines
+the optional `@fluxfast/devtools` root API and diagnostics boundary. Maintainers
 can find the registry and tag procedure in the [release guide](docs/releasing.md).
 
 FluxFast is not an Inertia wrapper and does not implement the Inertia protocol.

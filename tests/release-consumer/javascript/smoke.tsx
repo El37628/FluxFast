@@ -20,6 +20,10 @@ import { createFluxNextPage } from "@fluxfast/next/server";
 import { generatePagesRegistry } from "@fluxfast/next/generate";
 import { withFluxFast } from "@fluxfast/next/next-config";
 import {
+  FluxDevtools,
+  type FluxDevtoolsProps,
+} from "@fluxfast/devtools";
+import {
   resourceKeys,
   type GeneratedFluxResourceMap,
   type LegacyRoom,
@@ -64,6 +68,10 @@ const legacyRooms: RoomsResource = [legacyRoom];
 const legacyResources: GeneratedFluxResourceMap = { rooms: legacyRooms };
 const legacyResourceKey: typeof resourceKeys.rooms = "rooms";
 type RegistrationForm = UseFormReturn<{ email: string }>;
+const devtoolsProps: FluxDevtoolsProps = {
+  position: "bottom",
+  maxEvents: 500,
+};
 
 // @ts-expect-error package internals are not public npm entry points
 type InternalNextProvider = typeof import("@fluxfast/next/dist/index.js").FluxProvider;
@@ -85,4 +93,6 @@ void [
   useLiveStatus,
   null as InternalNextProvider | null,
   null as RegistrationForm | null,
+  FluxDevtools,
+  devtoolsProps,
 ];

@@ -16,7 +16,8 @@ official package path, documented command, generated artifact, or documented
 runtime behavior. The FluxFast 1.x public surface includes:
 
 - names exported by the top-level Python `fluxfast` package;
-- names and paths exported by `@fluxfast/core` and `@fluxfast/next`;
+- names and paths exported by `@fluxfast/core`, `@fluxfast/next`, and the
+  optional `@fluxfast/devtools` package added in v1.1;
 - CLI commands, meaningful options, documented environment variables, major
   defaults, and success/failure semantics;
 - generated filenames, exported names, and semantic TypeScript contracts;
@@ -25,8 +26,9 @@ runtime behavior. The FluxFast 1.x public surface includes:
 - documented validation, mutation, resource, cache, scope, deferred, live,
   production, health, readiness, and runtime-support behavior.
 
-The [Python](python-api.md), [`@fluxfast/core`](core-api.md), and
-[`@fluxfast/next`](next-api.md) inventories classify exported names as stable,
+The [Python](python-api.md), [`@fluxfast/core`](core-api.md),
+[`@fluxfast/next`](next-api.md), and [DevTools](devtools.md) inventories
+classify exported names as stable,
 advanced stable, or deprecated. Stable and advanced stable APIs receive the
 same compatibility guarantee. "Advanced" means that an API is primarily for
 adapter, transport, cache, live-resource, protocol, or validation integrations;
@@ -54,6 +56,7 @@ The following contracts are stable throughout the 1.x release line:
 | Python package | The documented `fluxfast.__all__` names, call shapes, and behavior. |
 | Core package | The `@fluxfast/core` root path, its declarations, and framework-neutral runtime behavior. |
 | Next package | The five documented `@fluxfast/next` export-map paths and their per-path declarations. |
+| DevTools package | The `@fluxfast/devtools` root path, `FluxDevtools`, `FluxDevtoolsProps`, and development/production conditional behavior introduced in v1.1. |
 | Browser protocol | `fluxfast/1`, its media type, headers, capabilities, envelopes, events, and patch semantics. |
 | Developer schema | Closed `fluxfast-schema/2` shape and fingerprint rules, plus continued schema/1 reading. |
 | Generated code | Stable filenames, public generated symbols, naming rules, and semantic TypeScript contracts. |
@@ -79,10 +82,11 @@ the request headers, safety limits, capabilities, patch operations, and live
 event facts that must remain independent from Python and npm package versions.
 
 The npm portion also fingerprints the complete declaration dependency graph of
-every public Core and Next entry point. The fingerprint ignores comments and
-whitespace but changes when declaration tokens, referenced public types, or
-entry-point dependencies change. This makes signature drift fail the same gate
-as an added or removed export.
+every public Core and Next entry point. The v1.1 compatibility delta separately
+freezes the DevTools root declarations and export map. The fingerprint ignores
+comments and whitespace but changes when declaration tokens, referenced public
+types, or entry-point dependencies change. This makes signature drift fail the
+same gate as an added or removed export.
 
 The focused documentation-consistency gate compares this small fact set with
 package metadata, CI matrices, Python and TypeScript constants, generator
@@ -131,14 +135,16 @@ Markdown compiler.
       "./generate",
       "./next-config",
       "./server"
-    ]
+    ],
+    "@fluxfast/devtools": ["."]
   }
 }
 ```
 <!-- stability-facts:end -->
 
-The synchronized `fluxfast`, `@fluxfast/core`, and `@fluxfast/next` package
-versions identify a matched release. Supported mixed-version behavior is
+The synchronized `fluxfast`, `@fluxfast/core`, `@fluxfast/next`, and (from
+v1.1) `@fluxfast/devtools` package versions identify a matched release.
+Supported mixed-version behavior is
 defined by the protocol, schema, generated-code, and adjacent-release consumer
 gates; matching package versions remain the recommended production setup,
 especially for supervisor-to-adapter production features.

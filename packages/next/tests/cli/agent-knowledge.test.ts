@@ -66,6 +66,15 @@ describe("FluxFast agent knowledge", () => {
     expect(knowledge).toContain("declared; exact installed version not detected");
   });
 
+  it("routes runtime diagnosis through development DevTools evidence", () => {
+    createTestProject(tmpDir);
+    const knowledge = renderAgentKnowledge(detectFluxProject(tmpDir));
+
+    expect(knowledge).toContain("## Runtime diagnosis");
+    expect(knowledge).toContain("inspect its Timeline before changing synchronization code");
+    expect(knowledge).toContain("resource values, request bodies, credentials, or scope identities");
+  });
+
   it("preserves content outside the managed instruction block", () => {
     const before = "# User rules\n\nKeep this.\n";
     const block = `${FLUXFAST_AGENT_BLOCK_START}\nnew\n${FLUXFAST_AGENT_BLOCK_END}`;

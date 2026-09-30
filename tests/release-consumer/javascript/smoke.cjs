@@ -7,14 +7,17 @@ const nextClient = require("@fluxfast/next/client");
 const nextGenerate = require("@fluxfast/next/generate");
 const nextServer = require("@fluxfast/next/server");
 const nextConfig = require("@fluxfast/next/next-config");
+const devtools = require("@fluxfast/devtools");
 
 async function main() {
   const installedRoot = path.join(process.cwd(), "node_modules");
   const coreEntry = require.resolve("@fluxfast/core");
   const nextEntry = require.resolve("@fluxfast/next");
+  const devtoolsEntry = require.resolve("@fluxfast/devtools");
 
   assert.equal(coreEntry.startsWith(installedRoot), true);
   assert.equal(nextEntry.startsWith(installedRoot), true);
+  assert.equal(devtoolsEntry.startsWith(installedRoot), true);
   assert.equal(typeof core.createFluxRuntime, "function");
   assert.equal(typeof nextAdapter.defineFluxConfig, "function");
   assert.equal(typeof nextClient.useForm, "function");
@@ -22,6 +25,7 @@ async function main() {
   assert.equal(typeof nextGenerate.generateFluxFastProject, "function");
   assert.equal(typeof nextServer.createFluxNextPage, "function");
   assert.equal(typeof nextConfig.withFluxFast, "function");
+  assert.equal(typeof devtools.FluxDevtools, "function");
   const [
     coreEsm,
     nextEsm,
@@ -29,6 +33,7 @@ async function main() {
     nextServerEsm,
     nextGenerateEsm,
     nextConfigEsm,
+    devtoolsEsm,
   ] = await Promise.all([
     import("@fluxfast/core"),
     import("@fluxfast/next"),
@@ -36,6 +41,7 @@ async function main() {
     import("@fluxfast/next/server"),
     import("@fluxfast/next/generate"),
     import("@fluxfast/next/next-config"),
+    import("@fluxfast/devtools"),
   ]);
   assert.equal(typeof coreEsm.createValidator, "function");
   assert.equal(typeof nextEsm.useForm, "function");
@@ -44,7 +50,8 @@ async function main() {
   assert.equal(typeof nextServerEsm.createFluxNextPage, "function");
   assert.equal(typeof nextGenerateEsm.generateFluxFastProject, "function");
   assert.equal(typeof nextConfigEsm.withFluxFast, "function");
-  for (const packageName of ["core", "next"]) {
+  assert.equal(typeof devtoolsEsm.FluxDevtools, "function");
+  for (const packageName of ["core", "next", "devtools"]) {
     const packageJson = JSON.parse(fs.readFileSync(
       path.join(installedRoot, "@fluxfast", packageName, "package.json"),
       "utf8"
@@ -60,7 +67,7 @@ async function main() {
     error => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
   );
   assert.equal(fs.existsSync(path.join(installedRoot, ".bin", "fluxfast")), true);
-  for (const packageName of ["core", "next"]) {
+  for (const packageName of ["core", "next", "devtools"]) {
     const license = fs.readFileSync(
       path.join(installedRoot, "@fluxfast", packageName, "LICENSE"),
       "utf8"

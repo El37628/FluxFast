@@ -1,7 +1,8 @@
 # Versioning and compatibility
 
 FluxFast uses one synchronized [Semantic Version](https://semver.org/) for the
-`fluxfast`, `@fluxfast/core`, and `@fluxfast/next` packages. The wire protocol is
+`fluxfast`, `@fluxfast/core`, `@fluxfast/next`, and `@fluxfast/devtools`
+packages. DevTools joins this synchronized set in v1.1. The wire protocol is
 versioned independently; package version `1.x` does not imply protocol version
 1, and a breaking wire change requires the protocol process in
 [`protocol.md`](protocol.md). The central [stability contract](stability.md)
@@ -63,7 +64,9 @@ are recorded in the [Python public API contract](python-api.md). The complete
 framework-neutral JavaScript inventory is recorded in the
 [`@fluxfast/core` API contract](core-api.md). The Next.js adapter's supported
 symbols and five public package paths are recorded in the
-[`@fluxfast/next` API contract](next-api.md).
+[`@fluxfast/next` API contract](next-api.md). The optional DevTools package has
+one public root entry exposing `FluxDevtools` and `FluxDevtoolsProps`; its
+internal store and projections are not public API.
 
 ## Capability negotiation
 
@@ -133,7 +136,8 @@ Compatibility remains directional and additive:
   not. The complete boundary is defined by the [generated artifact
   contract](generated-artifacts.md).
 
-Stable releases continue synchronizing all three package versions. The 0.9
+Stable releases from v1.1 continue synchronizing all four package versions.
+The 0.9
 release gates start a real consumer with Python and JavaScript packages at
 0.8.1, upgrade Python first and JavaScript first in separate runs, and verify
 each mixed state before reaching the matched 0.9 candidate. Each run regenerates
@@ -153,6 +157,13 @@ builds and runs the Next.js production server, and verifies SSR, navigation,
 resource-delta reuse, server validation, mutations, deferred/live resources,
 and Redis behavior across independent workers. A single-direction v0.8.1 smoke
 remains as inexpensive historical evidence; it is no longer the adjacent gate.
+
+The 1.1 release advances the adjacent baseline to v1.0.1 in both upgrade
+orders, while retaining a one-direction v0.9.0 historical smoke. DevTools is an
+optional new v1.1 artifact and has no v1.0 counterpart; mixed application
+compatibility continues to exercise the Python, Core, and Next packages. The
+independent `fluxfast-devtools/1` diagnostic channel adds no fields to
+`fluxfast/1`, and a production consumer does not require the DevTools package.
 
 ## Production runtime compatibility
 
@@ -181,8 +192,8 @@ production path. See [production deployment](production.md) and
 Add user-facing entries beneath `Unreleased`, then run:
 
 ```bash
-pnpm release:prepare 1.0.0
-pnpm release:check v1.0.0
+pnpm release:prepare 1.1.0
+pnpm release:check v1.1.0
 ```
 
 The preparation command synchronizes every package manifest, the Python runtime
