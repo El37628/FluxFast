@@ -432,6 +432,7 @@ FetchFluxInitialPageOptions
 FluxDevelopmentMetadata
 FluxInitialPageResult
 FluxTransportProxyOptions
+createFluxTransportProxy
 fetchFluxInitialPage
 removeFluxHopByHopHeaders
 selectFluxForwardHeaders
@@ -502,6 +503,80 @@ determines the request header and optional separate `development` metadata.
 Valid traces use the existing bounded decoder and a query-free, capped initial
 pathname. Invalid, unsupported, oversized, or unsafe traces do not affect the
 page result. Diagnostics never become a field in `PageEnvelope`.
+
+### Proxy browser transport requests without a framework
+
+Use this helper inside a server host's existing HTTP handler. The host maps its
+route parameters to an encoded origin-relative pathname; the incoming `Request`
+supplies the query, method, headers, body, and cancellation signal. Core does not
+choose application routes or perform authorization: FastAPI still owns both.
+
+For the same running `/rooms` backend used above:
+
+```ts
+import { createFluxTransportProxy } from "@fluxfast/core/server";
+
+const proxy = createFluxTransportProxy({ backendUrl: "http://127.0.0.1:8000" });
+const incoming = new Request("https://app.example/transport/rooms?status=available", {
+  headers: {
+    Accept: "application/vnd.fluxfast+json",
+    "X-FluxFast": "1",
+    "X-FluxFast-Protocol": "1",
+    cookie: "session=example",
+  },
+});
+const response = await proxy(incoming, "/rooms");
+console.log(response.status);
+console.log((await response.json()).page.component);
+```
+
+For an authorized, successful route, the output is:
+
+```text
+200
+rooms/index
+```
+
+The actual backend target is `/rooms?status=available`; the frontend-only
+`/transport` prefix is not forwarded. The argument is an already encoded
+pathname, not a URL or a query string: pass `/rooms/a%2Fb` for a segment containing
+`/`, and retain the original query on the incoming request. Backend path prefixes
+are retained. Missing leading slashes, network-path URLs, raw whitespace/control
+characters/backslashes, query/fragment markers, malformed escapes, and raw or
+percent-encoded dot segments are rejected with a non-cacheable HTTP 400 without
+fetching. A request without the exact `X-FluxFast: 1` marker gets an empty,
+non-cacheable HTTP 404 before backend configuration is read.
+
+The proxy preserves HTTP methods and buffers non-GET/HEAD request bodies as the
+existing Next adapter does, including binary mutation payloads. Native body-read
+errors remain native errors. It forwards end-to-end request and response headers
+through the shared hop-header sanitizer, including cookies, authorization, CSRF,
+FluxFast capability/live headers, diagnostics, and separate `Set-Cookie` values.
+It does not apply the restrictive SSR allowlist to protocol requests. It drops
+request `accept-encoding` so the upstream fetch negotiates compression.
+
+Requests use `cache: "no-store"`, `redirect: "manual"`, and the original request
+signal. Backend statuses, error body bytes, and redirect locations are forwarded
+unchanged, not parsed into a different envelope; unlike the initial SSR helper,
+the proxy never follows an external or canonical HTTP redirect with credentials.
+The response body stays an unbuffered stream: open SSE arrives incrementally and
+downstream cancellation reaches the upstream stream. A host must return this
+response directly, not call `text()` or `json()` on a live stream as the page
+example does.
+
+An injected `fetch` is optional; the default is captured from `globalThis.fetch`
+when the proxy is created. Core reads no adapter environment variables. Invalid
+HTTP(S) backend configuration (including URL credentials, queries, or fragments)
+and upstream fetch failures return a non-cacheable, generic HTTP 503:
+
+```json
+{"error":{"code":"transport_unavailable","message":"FluxFast backend is unavailable"}}
+```
+
+Private backend addresses, credential values, and native exception text are
+never logged or included in that error. In Next.js, continue using the existing
+`createFluxTransportHandler` API: the adapter delegates to this helper and still
+resolves the supervisor's private backend address for each request.
 
 ### Select headers for initial SSR
 
@@ -589,11 +664,11 @@ envelope with optional safe `FluxDevelopmentMetadata` or a `not-found` result
 for the host to translate into its own response. `FluxTransportProxyOptions`
 names the backend URL and an optional injected fetch implementation.
 
-These types describe the shared server contract. Initial-page fetching is
-available independently; the generic proxy is added in a subsequent foundation
-step. The unreleased Next.js adapter now delegates initial fetching and header
-selection to these primitives while retaining framework rendering and not-found
-control flow. Transport proxy delegation remains a separate foundation step.
+These types describe the shared server contract. Initial-page fetching and
+transport proxying are available independently. The unreleased Next.js adapter
+delegates both HTTP boundaries and header sanitation to these primitives while
+retaining framework rendering, not-found control flow, route parameters, and
+backend environment policy.
 
 Each exported type can also be used independently when describing an adapter
 boundary. The declarations below are examples, not an instruction to replace
@@ -606,6 +681,7 @@ the current Next integration:
 | `FluxDevelopmentMetadata` | `const metadata: FluxDevelopmentMetadata = { initialPath: "/rooms", initialServerTrace: {} };` | Carry bounded, value-free development metadata separately from a page envelope. |
 | `FluxInitialPageResult` | `const result: FluxInitialPageResult = { type: "not-found" };` | Let the host distinguish a missing page from a validated page result. |
 | `FluxTransportProxyOptions` | `const options: FluxTransportProxyOptions = { backendUrl: "http://127.0.0.1:8000", fetch: globalThis.fetch };` | Supply explicit transport configuration rather than letting Core read adapter environment variables. |
+| `createFluxTransportProxy` | `const proxy = createFluxTransportProxy({ backendUrl: "http://127.0.0.1:8000" });` | Create a framework-neutral HTTP proxy that preserves methods, queries, bodies, headers, manual redirects, cancellation, and streaming. |
 | `fetchFluxInitialPage` | `const result = await fetchFluxInitialPage({ backendUrl: "http://127.0.0.1:8000", path: "/rooms" });` | Fetch and validate an initial envelope, follow safe canonical redirects, and classify a missing page for the host. |
 | `removeFluxHopByHopHeaders` | `const responseHeaders = removeFluxHopByHopHeaders(upstream.headers);` | Clone request or response headers and drop all per-hop fields. |
 | `selectFluxForwardHeaders` | `const forwarded = selectFluxForwardHeaders(request.headers, ["X-Tenant"]);` | Limit SSR forwarding to the four defaults and intentional additions after sanitation. |

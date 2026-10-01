@@ -15,12 +15,17 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   configuration, authoritative protocol headers, safe redirect following, 404
   classification, envelope validation, bounded error bodies, and separate safe
   SSR trace metadata for adapter-owned rendering and hydration.
+- Add framework-neutral `createFluxTransportProxy` with protocol gating, safe
+  target construction, exact query/method/body forwarding, shared bidirectional
+  header sanitation, manual redirects, cancellation, and unbuffered live streams.
 
 ### Changed
 
 - Delegate Next.js initial SSR fetching and safe header selection to the shared
   Core server boundary while preserving the public adapter API, application
   bootstrap, authentication, diagnostics policy, and lazy not-found timing guard.
+- Delegate the Next.js production transport handler to Core while retaining
+  catch-all segment encoding and per-request supervisor backend resolution.
 
 ## [1.1.0] - 2026-09-30
 

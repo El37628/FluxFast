@@ -268,7 +268,11 @@ Unreleased v1.2 foundation work moves generic initial-page fetching and safe
 header selection into `@fluxfast/core/server`. The Next.js server entry point
 delegates those operations while keeping `next/headers`, catch-all path encoding,
 backend environment policy, application rendering, and the real Next not-found
-boundary. The validated initial envelope is still handed to the existing
+boundary. Its production transport handler also delegates HTTP proxying to
+`createFluxTransportProxy`, retaining only Next catch-all parameter encoding and
+per-request supervisor address resolution. Both HTTP boundaries use the same header
+sanitizer; response streams and cancellation remain unbuffered. The validated
+initial envelope is still handed to the existing
 application for SSR and hydration; no second fetch or browser runtime is added.
 The new subpath is not available in the published v1.1 packages.
 
