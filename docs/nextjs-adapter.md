@@ -213,6 +213,12 @@ export default createFluxNextPage(fluxConfig);
 The helper reconstructs the path and repeated search parameters, forwards only
 cookie, authorization, accept-language, user-agent, and explicitly configured
 safe headers, and never forwards hop-by-hop headers.
+
+In unreleased v1.2 development, the adapter delegates initial fetching and
+header selection to `@fluxfast/core/server`. Existing consumer imports and
+generated catch-all files stay unchanged; Next.js still owns request context,
+environment policy, rendering, and its not-found timing boundary.
+
 Initial SSR fetches follow at most 20 HTTP redirects within the configured
 backend origin, preserving FastAPI canonical-path redirects. Redirects to another
 origin, credential-bearing URLs, and malformed targets fail without forwarding

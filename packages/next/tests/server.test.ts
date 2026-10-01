@@ -339,15 +339,15 @@ describe("Next adapter paths", () => {
       forwardHeaders: ["X-Tenant", "X-Hop", "HOST", "CONNECTION", "Proxy-Authorization", "X-FluxFast-DevTools", "Invalid Header"],
     });
     await page({ params: {} });
-    const headers = fetchMock.mock.calls[0][1].headers;
+    const headers = Object.fromEntries(new Headers(fetchMock.mock.calls[0][1].headers));
     expect(headers).toMatchObject({
       cookie: "session=test-only",
       authorization: "Bearer test-only",
       "accept-language": "en",
       "user-agent": "test-only",
       "x-tenant": "declared-custom-value",
-      "X-FluxFast": "1",
-      "X-FluxFast-Protocol": "1",
+      "x-fluxfast": "1",
+      "x-fluxfast-protocol": "1",
     });
     for (const name of ["host", "connection", "x-hop", "proxy-authorization", "invalid header", "x-private-ignored", "x-fluxfast-known"]) {
       expect(headers).not.toHaveProperty(name);
@@ -365,10 +365,9 @@ describe("Next adapter paths", () => {
 
     await fetchInitialEnvelope({ backendUrl: "http://127.0.0.1:8000", path: "/" });
 
-    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
-      [HEADER_CAPABILITIES]: serializeCapabilities(),
-      [HEADER_DEVTOOLS]: "1",
-    });
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(headers.get(HEADER_CAPABILITIES)).toBe(serializeCapabilities());
+    expect(headers.get(HEADER_DEVTOOLS)).toBe("1");
   });
 
   it("passes only a validated initial trace and query-free path as development metadata", async () => {
