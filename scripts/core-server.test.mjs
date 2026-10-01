@@ -62,13 +62,17 @@ test("packed Core/server resolves ESM, CommonJS, types, and blocks private deep 
       import * as esm from "@fluxfast/core/server";
       const require = createRequire(import.meta.url);
       const cjs = require("@fluxfast/core/server");
-      const expected = ["removeFluxHopByHopHeaders", "selectFluxForwardHeaders"];
+      const expected = ["fetchFluxInitialPage", "removeFluxHopByHopHeaders", "selectFluxForwardHeaders"];
       assert.deepEqual(Object.keys(esm).sort(), expected);
       assert.deepEqual(Object.keys(cjs).sort(), expected);
       for (const server of [esm, cjs]) {
         const incoming = new Headers({cookie:"session=example", connection:"x-secret", "x-secret":"redact"});
         assert.equal(server.selectFluxForwardHeaders(incoming).get("cookie"), "session=example");
         assert.equal(server.removeFluxHopByHopHeaders(incoming).has("x-secret"), false);
+        assert.deepEqual(await server.fetchFluxInitialPage({
+          backendUrl:"http://127.0.0.1:8000", path:"/missing",
+          fetch:async () => new Response(JSON.stringify({detail:"Not Found"}), {status:404}),
+        }), {type:"not-found"});
       }
       const browser = await import("@fluxfast/core");
       const browserCjs = require("@fluxfast/core");
@@ -85,7 +89,7 @@ test("packed Core/server resolves ESM, CommonJS, types, and blocks private deep 
     run(process.execPath, ["probe.mjs"], consumer);
 
     const types = `
-      import { selectFluxForwardHeaders, removeFluxHopByHopHeaders,
+      import { fetchFluxInitialPage, selectFluxForwardHeaders, removeFluxHopByHopHeaders,
         type FetchFluxInitialPageOptions, type FluxDevelopmentMetadata,
         type FluxInitialPageResult, type FluxTransportProxyOptions } from "@fluxfast/core/server";
       const headers: Headers = selectFluxForwardHeaders(new Headers(), ["X-Tenant"]);
@@ -95,6 +99,7 @@ test("packed Core/server resolves ESM, CommonJS, types, and blocks private deep 
         fetch:globalThis.fetch, diagnostics:false, maxRedirects:20,
       };
       const proxy: FluxTransportProxyOptions = { backendUrl:initial.backendUrl, fetch:globalThis.fetch };
+      const pending: Promise<FluxInitialPageResult> = fetchFluxInitialPage(initial);
       const metadata: FluxDevelopmentMetadata = { initialPath:"/rooms", initialServerTrace:{} };
       function consume(result: FluxInitialPageResult): string {
         if (result.type === "not-found") return "404";

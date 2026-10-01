@@ -36,7 +36,8 @@ runtimes.
 
 Unreleased v1.2 foundation work adds server adapter primitives through
 `@fluxfast/core/server`, separately from this browser-facing root. The initial
-surface provides `selectFluxForwardHeaders` and `removeFluxHopByHopHeaders`;
+surface provides `fetchFluxInitialPage`, `selectFluxForwardHeaders`, and
+`removeFluxHopByHopHeaders`;
 it does not require a change to existing Next.js applications. This subpath is
 not present in the published v1.1 package. See the
 [Core API inventory](https://github.com/El37628/FluxFast/blob/main/docs/core-api.md#server-adapter-primitives-unreleased-v12)

@@ -11,6 +11,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   `@fluxfast/core/server` entry point, framework-neutral header sanitation and
   SSR allowlist helpers, internal same-origin redirect validation, and server
   contract types. Existing Core root exports and Next.js behavior are unchanged.
+- Add independently tested `fetchFluxInitialPage` with explicit fetch/diagnostic
+  configuration, authoritative protocol headers, safe redirect following, 404
+  classification, envelope validation, bounded error bodies, and separate safe
+  SSR trace metadata. Next.js delegation remains a separate foundation step.
 
 ## [1.1.0] - 2026-09-30
 

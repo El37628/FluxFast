@@ -1,5 +1,7 @@
 /** Server adapter primitives. Deliberately not exported from the Core root. */
 
+export { fetchFluxInitialPage } from "./initial-page.js";
+
 export {
   removeFluxHopByHopHeaders,
   selectFluxForwardHeaders,
