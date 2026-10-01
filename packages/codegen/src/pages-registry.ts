@@ -51,6 +51,14 @@ function assertSafePageFile(file: string): void {
   }
 }
 
+// JSON quoting protects JavaScript literals; also escape HTML delimiters and
+// Unicode line separators if generated source is embedded in a script context.
+function sourceStringLiteral(value: string): string {
+  return JSON.stringify(value).replace(/[<>\u2028\u2029]/g, character =>
+    `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`
+  );
+}
+
 /** Scan and render a deterministic registry without modifying the project. */
 export function createPagesRegistrySnapshot(
   options: PagesRegistryOptions
@@ -111,10 +119,10 @@ export function createPagesRegistrySnapshot(
     const importPath = relativeImport.startsWith(".")
       ? relativeImport
       : `./${relativeImport}`;
-    return `  ${JSON.stringify(identifier)}: { load: () => import(${JSON.stringify(importPath)}) },`;
+    return `  ${sourceStringLiteral(identifier)}: { load: () => import(${sourceStringLiteral(importPath)}) },`;
   });
 
-  const runtimeImport = JSON.stringify(target.runtimeImport);
+  const runtimeImport = sourceStringLiteral(target.runtimeImport);
   const rootExport = target.rootExport === "FluxRoot"
     ? "FluxRoot" : `${target.rootExport} as FluxRoot`;
   const propsExport = target.applicationPropsExport === "FluxApplicationProps"

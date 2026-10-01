@@ -163,7 +163,9 @@ Vue/Svelte renderer or satisfy the rest of an adapter's lifecycle contract.
 
 `clientDirective: true` adds `"use client";`; false or omission leaves it out.
 `runtimeImport` must be a non-empty string without control characters and is
-serialized as module-specifier data. Root and props export names must be ASCII
+serialized as module-specifier data. Generated string literals also escape HTML
+delimiters and Unicode line separators while preserving their decoded values.
+Root and props export names must be ASCII
 JavaScript identifiers; names that would collide with generated locals are
 aliased. All target fields are build-tool configuration, not server-selected
 page data. Missing or malformed targets throw before scanning or writing.

@@ -182,6 +182,42 @@ describe("registry target source safety", () => {
     expect(parsed.status, parsed.stderr).toBe(0);
   });
 
+  it("escapes HTML delimiters and Unicode line separators without changing module data", () => {
+    const options = project();
+    const runtimeImport = '@acme/runtime</script><script>compromised</script>\u2028\u2029';
+    const outputFile = path.join(path.dirname(options.outputFile!), "nested", "pages.generated.ts");
+    const source = createPagesRegistrySnapshot({
+      ...options, outputFile, target: { ...nextTarget, runtimeImport },
+    }).content;
+    const escapedRuntime = '"@acme/runtime\\u003c/script\\u003e\\u003cscript\\u003ecompromised\\u003c/script\\u003e\\u2028\\u2029"';
+    const escapedImport = '"../../flux-pages/home/index"';
+    expect(source).toContain(`from ${escapedRuntime};`);
+    expect(source).toContain(`import(${escapedImport})`);
+    expect(JSON.parse(escapedRuntime)).toBe(runtimeImport);
+    expect(source).not.toMatch(/[<\u2028\u2029]/);
+    expect(fs.existsSync(path.dirname(outputFile))).toBe(false);
+    const parsed = spawnSync(process.execPath, ["--input-type=module", "--check"], {
+      input: compileSource(source, "ESNext"), encoding: "utf8", timeout: 30_000,
+    });
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.status, parsed.stderr).toBe(0);
+  });
+
+  it("escapes unsafe characters in the relative import directory, not only page filenames", () => {
+    const options = project();
+    const sourceRoot = path.dirname(options.pagesDir!);
+    const unsafeDir = 'source\u2028\u2029';
+    const pagesDir = path.join(sourceRoot, unsafeDir, "flux-pages");
+    fs.mkdirSync(path.dirname(pagesDir), { recursive: true });
+    fs.renameSync(options.pagesDir!, pagesDir);
+    const source = createPagesRegistrySnapshot({ ...options, pagesDir }).content;
+    const escapedImport = '"../source\\u2028\\u2029/flux-pages/home/index"';
+    expect(source).toContain(`import(${escapedImport})`);
+    expect(JSON.parse(escapedImport)).toBe(`../${unsafeDir}/flux-pages/home/index`);
+    expect(source).not.toMatch(/[<\u2028\u2029]/);
+    expect(fs.existsSync(path.dirname(options.outputFile!))).toBe(false);
+  });
+
   it.each([
     ["@acme/host-runtime", "ApplicationRoot", "ApplicationInput"],
     ["@acme/host-runtime", "default", "default"],
