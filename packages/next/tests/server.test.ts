@@ -6,6 +6,7 @@ import {
   HEADER_DEVTOOLS,
   HEADER_DEVTOOLS_TRACE,
   MAX_DEVTOOLS_TRACE_HEADER_CHARS,
+  ProtocolError,
   serializeCapabilities,
   TransportError,
 } from "@fluxfast/core";
@@ -145,7 +146,7 @@ describe("initial SSR redirect boundary", () => {
       const backendUrl = await listen(backend);
       await expect(fetchInitialEnvelope({ backendUrl, path: "/loop" }))
         .rejects.toThrow(/redirect/i);
-      expect(requests).toBeLessThanOrEqual(21);
+      expect(requests).toBe(21);
     } finally {
       await close(backend);
     }
@@ -190,6 +191,128 @@ describe("initial SSR redirect boundary", () => {
       expect(cancelled).toHaveBeenCalledOnce();
     }
   );
+});
+
+describe("v1.1 initial SSR baseline", () => {
+  it("preserves request mode, authentication, capabilities, and the application bootstrap", async () => {
+    headersMock.mockResolvedValueOnce(new Headers({
+      cookie: "session=test-only",
+      authorization: "Bearer test-only",
+      "accept-language": "en-GB",
+      "user-agent": "baseline-browser",
+      "x-tenant": "test-tenant",
+      "x-unlisted": "must-not-forward",
+    }));
+    const envelope = {
+      protocol: "fluxfast/1",
+      page: { component: "rooms/show", url: "/rooms/a%2Fb?tag=sea+view&tag=suite&empty=" },
+      resources: { rooms: { version: "opaque-version", value: [{ id: 1 }] } },
+      resourceKeys: ["rooms", "report"],
+      deferred: ["report"],
+      live: ["rooms"],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(envelope)));
+    vi.stubGlobal("fetch", fetchMock);
+    const application = () => null;
+    const cache = { maxResources: 128, maxPages: 32 };
+    const page = createFluxNextPage({
+      application,
+      backendUrl: "http://127.0.0.1:8000/",
+      clientUrl: "https://app.example",
+      forwardHeaders: ["X-Tenant"],
+      cache,
+    });
+    const element = await page({
+      params: Promise.resolve({ flux: ["rooms", "a/b"] }),
+      searchParams: Promise.resolve({ tag: ["sea view", "suite"], empty: "", omitted: undefined }),
+    }) as React.ReactElement;
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "http://127.0.0.1:8000/rooms/a%2Fb?tag=sea+view&tag=suite&empty="
+    );
+    const options = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(options).toMatchObject({ method: "GET", cache: "no-store", redirect: "manual" });
+    const requestHeaders = new Headers(options.headers);
+    expect(requestHeaders.get("X-FluxFast-Visit")).toMatch(/^ssr_[a-z0-9]+$/);
+    requestHeaders.delete("X-FluxFast-Visit");
+    expect(Object.fromEntries(requestHeaders)).toEqual({
+      accept: "application/vnd.fluxfast+json",
+      authorization: "Bearer test-only",
+      cookie: "session=test-only",
+      "accept-language": "en-GB",
+      "user-agent": "baseline-browser",
+      "x-tenant": "test-tenant",
+      "x-fluxfast": "1",
+      "x-fluxfast-protocol": "1",
+      "x-fluxfast-capabilities": "deferred-resources,live-resources",
+      "x-fluxfast-devtools": "1",
+    });
+    expect(element.type).toBe(application);
+    expect(element.props).toEqual({ initialEnvelope: envelope, clientUrl: "https://app.example", cache });
+    expect(notFoundMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["", "rooms", "https://other.example/rooms", "//other.example/rooms"])(
+    "rejects a non-origin-relative initial path %s before fetching",
+    async path => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(fetchInitialEnvelope({ backendUrl: "http://127.0.0.1:8000", path }))
+        .rejects.toThrow("FluxFast initial paths must be origin-relative");
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it("allows twenty same-origin redirects and preserves cookies throughout the chain", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => fetchMock.mock.calls.length <= 20
+      ? new Response(null, { status: 307, headers: { location: "/canonical" } })
+      : new Response(JSON.stringify(initialEnvelope)));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchInitialEnvelope({
+      backendUrl: "http://127.0.0.1:8000",
+      path: "/start",
+      headers: { cookie: "session=test-only" },
+    })).resolves.toEqual(initialEnvelope);
+    expect(fetchMock).toHaveBeenCalledTimes(21);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(new Headers(options.headers).get("cookie")).toBe("session=test-only");
+      expect(options.redirect).toBe("manual");
+    }
+  });
+
+  it.each([
+    [422, { error: { type: "ValidationError", message: "Request validation failed" } }, "Request validation failed"],
+    [403, { detail: "Forbidden" }, "Forbidden"],
+    [503, {}, "Failed to fetch initial FluxFast envelope"],
+  ] as const)("preserves HTTP %s error classification", async (status, payload, message) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status })));
+    const result = await fetchInitialEnvelope({ backendUrl: "http://127.0.0.1:8000", path: "/rooms" })
+      .catch((error: unknown) => error);
+    expect(result).toBeInstanceOf(TransportError);
+    expect(result).toMatchObject({ status, details: payload });
+    expect((result as Error).message).toContain(message);
+    expect(notFoundMock).not.toHaveBeenCalled();
+  });
+
+  it("classifies non-JSON upstream bodies as transport failures", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("upstream unavailable", { status: 502 })));
+    const result = await fetchInitialEnvelope({ backendUrl: "http://127.0.0.1:8000", path: "/rooms" })
+      .catch((error: unknown) => error);
+    expect(result).toBeInstanceOf(TransportError);
+    expect(result).toMatchObject({ status: 502 });
+    expect((result as Error).message).toMatch(/parse initial FluxFast response/);
+  });
+
+  it("validates a successful envelope before handing it to the application", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...initialEnvelope,
+      resources: { rooms: { version: 1, value: [] } },
+    }))));
+    await expect(fetchInitialEnvelope({ backendUrl: "http://127.0.0.1:8000", path: "/rooms" }))
+      .rejects.toBeInstanceOf(ProtocolError);
+    expect(notFoundMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("Next adapter paths", () => {
