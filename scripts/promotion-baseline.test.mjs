@@ -96,7 +96,7 @@ function documentedRequestHeaders() {
 }
 
 function generatedFilesFromRuntime() {
-  const source = read("packages/next/src/generate.ts") + read("packages/codegen/src/generate.ts");
+  const source = read("packages/next/src/generate.ts") + read("packages/codegen/src/generate.ts") + read("packages/codegen/src/pages-registry.ts");
   return [
     ...new Set(
       [

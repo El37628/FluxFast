@@ -1,3 +1,5 @@
+export { createPagesRegistrySnapshot } from "./pages-registry.js";
+export type { FluxPageRegistryTarget, PagesRegistryOptions } from "./pages-registry.js";
 export {
   checkFluxFastProject,
   generateFluxFastProject,

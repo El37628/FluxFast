@@ -12,11 +12,11 @@ const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const require = createRequire(import.meta.url);
 const expected = {
   typeOnly: ["FluxFastGenerationCheckResult", "FluxFastGenerationOptions", "FluxFastGenerationResult",
-    "FluxFastSchemaManifest", "JsonSchema", "PagesRegistrySnapshot", "ValidatorCompilationDiagnostic",
+    "FluxFastSchemaManifest", "FluxPageRegistryTarget", "JsonSchema", "PagesRegistryOptions", "PagesRegistrySnapshot", "ValidatorCompilationDiagnostic",
     "ValidatorCompilationOptions", "ValidatorCompilationResult"],
   valueOnly: ["checkFluxFastProject", "compileFluxFastMutations", "compileFluxFastPageRoutes",
     "compileFluxFastResourceTypes", "compileFluxFastValidators", "compileFluxFastValidatorsWithDiagnostics",
-    "compileJsonSchemaToValidationPlan", "findFluxFastContractsWithUnknownTypes",
+    "compileJsonSchemaToValidationPlan", "createPagesRegistrySnapshot", "findFluxFastContractsWithUnknownTypes",
     "findFluxFastResourceKeysWithUnknownTypes", "findFluxFastSchemaModeConflicts",
     "generateFluxFastProject", "generatePagesRegistry", "parseFluxFastSchemaManifest", "validateFluxFastSchemaManifest"],
   typeAndValue: ["SchemaCompilationError", "SchemaManifestValidationError", "ValidatorCompilationError"],
@@ -96,12 +96,28 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
         assert.deepEqual(Object.keys(api).sort(), expected);
         assert.deepEqual(api.compileJsonSchemaToValidationPlan({type:"string", minLength:2}), {root:{kind:"string", minLength:2}});
         const generatedDir = path.resolve(name, "src/.fluxfast");
+        const pagesDir = path.resolve(name, "src/flux-pages");
+        for (const [file, content] of Object.entries(baseline.pages)) {
+          const source = path.join(pagesDir, file);
+          fs.mkdirSync(path.dirname(source), {recursive:true});
+          fs.writeFileSync(source, content);
+        }
+        const registry = api.createPagesRegistrySnapshot({
+          pagesDir, outputFile:path.join(generatedDir, "pages.generated.ts"),
+          target:{runtimeImport:"@fluxfast/next",rootExport:"FluxRoot",applicationPropsExport:"FluxApplicationProps",clientDirective:true},
+        });
+        assert.deepEqual(registry.identifiers, ["(admin)/[room-id]", "home/index", "hotel_rooms/index", "legacy"]);
+        assert.equal(registry.content, fs.readFileSync(path.join(fixture, "pages.generated.ts"), "utf8"));
+        assert.equal(fs.existsSync(generatedDir), false);
+        const custom = api.createPagesRegistrySnapshot({pagesDir, outputFile:path.resolve(name, "src/.host-registry/pages.generated.ts"),
+          target:{runtimeImport:"@acme/host-runtime", rootExport:"ApplicationRoot",applicationPropsExport:"ApplicationInput"},
+        });
+        assert.ok(custom.content.includes('import { ApplicationRoot as FluxRoot } from "@acme/host-runtime";'));
+        assert.ok(!custom.content.includes("@fluxfast/next"));
+        assert.ok(!custom.content.includes('"use client";'));
         const options = {
-          log:false, generatedDir,
+          log:false, generatedDir, registry,
           schemaContent: fs.readFileSync(path.join(fixture, "schema.generated.json"), "utf8"),
-          registry:{files:[], identifiers:[], pagesDir:path.resolve(name, "src/pages"),
-            outputFile:path.join(generatedDir, "pages.generated.ts"),
-            content:fs.readFileSync(path.join(fixture, "pages.generated.ts"), "utf8")},
         };
         assert.equal(api.checkFluxFastProject(options).current, false);
         assert.equal(fs.existsSync(generatedDir), false);
@@ -110,11 +126,12 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
           assert.equal(createHash("sha256").update(fs.readFileSync(path.join(generatedDir, artifact))).digest("hex"), hash, name+" "+artifact);
         }
         assert.equal(api.checkFluxFastProject(options).current, true);
+        api.generatePagesRegistry(custom, {log:false});
         fs.writeFileSync(options.registry.outputFile, "stale registry");
         assert.deepEqual(api.checkFluxFastProject(options).staleFiles, [options.registry.outputFile]);
         assert.equal(fs.readFileSync(options.registry.outputFile, "utf8"), "stale registry");
       }
-      for (const specifier of ["@fluxfast/codegen/schema-compiler", "@fluxfast/codegen/dist/index.js"]) {
+      for (const specifier of ["@fluxfast/codegen/schema-compiler", "@fluxfast/codegen/pages-registry", "@fluxfast/codegen/dist/index.js"]) {
         assert.throws(() => require(specifier), {code:"ERR_PACKAGE_PATH_NOT_EXPORTED"});
         await assert.rejects(import(specifier), {code:"ERR_PACKAGE_PATH_NOT_EXPORTED"});
       }
@@ -123,9 +140,9 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
     run(process.execPath, ["probe.mjs"], consumer);
     const types = `
       import { compileJsonSchemaToValidationPlan, compileFluxFastValidatorsWithDiagnostics,
-        generateFluxFastProject, checkFluxFastProject, validateFluxFastSchemaManifest,
+        generateFluxFastProject, checkFluxFastProject, validateFluxFastSchemaManifest, createPagesRegistrySnapshot,
         type FluxFastGenerationOptions, type FluxFastGenerationResult, type FluxFastGenerationCheckResult,
-        type FluxFastSchemaManifest, type JsonSchema, type PagesRegistrySnapshot,
+        type FluxFastSchemaManifest, type JsonSchema, type PagesRegistrySnapshot, type PagesRegistryOptions, type FluxPageRegistryTarget,
         type ValidatorCompilationOptions, type ValidatorCompilationResult, type ValidatorCompilationDiagnostic } from "@fluxfast/codegen";
       const schema: JsonSchema = {type:"string"};
       const plan = compileJsonSchemaToValidationPlan(schema);
@@ -134,6 +151,13 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
       const diagnostic: ValidatorCompilationDiagnostic | undefined = validation.diagnostics[0];
       const policy: ValidatorCompilationOptions = {unsupported:"report"};
       const registry: PagesRegistrySnapshot = {content:"",files:[],identifiers:[],pagesDir:"src/pages",outputFile:"src/.fluxfast/pages.generated.ts"};
+      const target: FluxPageRegistryTarget = {runtimeImport:"@acme/host-runtime",rootExport:"ApplicationRoot",applicationPropsExport:"ApplicationInput",clientDirective:true};
+      const registryOptions: PagesRegistryOptions = {target, pagesDir:"src/pages", outputFile:registry.outputFile};
+      const scanned: PagesRegistrySnapshot = createPagesRegistrySnapshot(registryOptions);
+      // @ts-expect-error Shared scanning requires an explicit adapter target.
+      const missingTarget: PagesRegistryOptions = {pagesDir:"src/pages"};
+      // @ts-expect-error The client directive policy must be boolean.
+      const invalidTarget: FluxPageRegistryTarget = {...target, clientDirective:"yes"};
       const options: FluxFastGenerationOptions = {registry, generatedDir:"src/.fluxfast", log:false};
       const written: FluxFastGenerationResult = generateFluxFastProject(options);
       const checked: FluxFastGenerationCheckResult = checkFluxFastProject(options);
@@ -146,6 +170,21 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
     run(process.execPath, [path.join(path.dirname(require.resolve("typescript/package.json")), "bin/tsc"),
       "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext",
       "--target", "ES2022", "--lib", "ES2022,DOM,DOM.Iterable", "consumer.cts", "consumer.mts"], consumer);
+    fs.writeFileSync(path.join(consumer, "host-types.d.ts"), `
+      declare module "react" {
+        const React: {createElement<P>(root:(props:P)=>unknown, props:P):unknown};
+        export default React;
+      }
+      declare module "@acme/host-runtime" {
+        export type ComponentRegistry = Record<string, {load:()=>Promise<unknown>}>;
+        export interface ApplicationInput {initialEnvelope:{page:{component:string}};registry?:ComponentRegistry}
+        export function ApplicationRoot(props:ApplicationInput):unknown;
+      }
+    `);
+    run(process.execPath, [path.join(path.dirname(require.resolve("typescript/package.json")), "bin/tsc"),
+      "--noEmit", "--strict", "--skipLibCheck", "--module", "ESNext", "--moduleResolution", "Bundler",
+      "--target", "ES2022", "--jsx", "preserve", "--allowJs", "host-types.d.ts",
+      "esm/src/.host-registry/pages.generated.ts", "cjs/src/.host-registry/pages.generated.ts"], consumer);
   } finally {
     fs.rmSync(temporary, {recursive:true, force:true});
   }

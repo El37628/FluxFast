@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import {
   checkFluxFastProject,
+  createPagesRegistrySnapshot,
   generateFluxFastProject,
   generatePagesRegistry
 } from "../src/generate";
@@ -31,6 +32,23 @@ describe("Pages Registry Generator", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("always selects the Next registry target even when untyped callers supply an extra target", () => {
+    const pagesDir = path.join(tmpDir, "src/flux-pages");
+    const outputFile = path.join(tmpDir, "src/.fluxfast/pages.generated.ts");
+    fs.mkdirSync(pagesDir, { recursive:true });
+    fs.writeFileSync(path.join(pagesDir, "home.tsx"), "export default null;");
+    const options = {
+      pagesDir, outputFile,
+      target: {runtimeImport:"@acme/host-runtime",rootExport:"OtherRoot",applicationPropsExport:"OtherProps",clientDirective:false},
+    };
+    const snapshot = createPagesRegistrySnapshot(options);
+    expect(snapshot.content).toContain('"use client";');
+    expect(snapshot.content).toContain('import { FluxRoot } from "@fluxfast/next";');
+    expect(snapshot.content).not.toContain("@acme/host-runtime");
+    expect(snapshot.identifiers).toEqual(["home"]);
+    expect(fs.existsSync(path.dirname(outputFile))).toBe(false);
   });
 
   it("scans pages directory and outputs registry file", () => {
