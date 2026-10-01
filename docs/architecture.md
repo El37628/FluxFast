@@ -264,6 +264,14 @@ core package does not import Pydantic, generated application modules, React, or
 Next.js. This keeps future frontend adapters from depending on Next-specific
 behavior.
 
+Unreleased v1.2 foundation work moves generic initial-page fetching and safe
+header selection into `@fluxfast/core/server`. The Next.js server entry point
+delegates those operations while keeping `next/headers`, catch-all path encoding,
+backend environment policy, application rendering, and the real Next not-found
+boundary. The validated initial envelope is still handed to the existing
+application for SSR and hydration; no second fetch or browser runtime is added.
+The new subpath is not available in the published v1.1 packages.
+
 The in-memory backend resource cache is per process. Its cache misses do not
 cross an isolation boundary, but scoped invalidation deletes only the current
 process's entry. Multi-worker live deployments therefore have two valid

@@ -591,8 +591,9 @@ names the backend URL and an optional injected fetch implementation.
 
 These types describe the shared server contract. Initial-page fetching is
 available independently; the generic proxy is added in a subsequent foundation
-step. Next.js still owns its existing SSR and transport code until its separate
-delegation steps land.
+step. The unreleased Next.js adapter now delegates initial fetching and header
+selection to these primitives while retaining framework rendering and not-found
+control flow. Transport proxy delegation remains a separate foundation step.
 
 Each exported type can also be used independently when describing an adapter
 boundary. The declarations below are examples, not an instruction to replace

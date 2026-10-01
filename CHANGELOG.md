@@ -14,7 +14,13 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Add independently tested `fetchFluxInitialPage` with explicit fetch/diagnostic
   configuration, authoritative protocol headers, safe redirect following, 404
   classification, envelope validation, bounded error bodies, and separate safe
-  SSR trace metadata. Next.js delegation remains a separate foundation step.
+  SSR trace metadata for adapter-owned rendering and hydration.
+
+### Changed
+
+- Delegate Next.js initial SSR fetching and safe header selection to the shared
+  Core server boundary while preserving the public adapter API, application
+  bootstrap, authentication, diagnostics policy, and lazy not-found timing guard.
 
 ## [1.1.0] - 2026-09-30
 

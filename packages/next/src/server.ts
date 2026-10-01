@@ -3,17 +3,8 @@
 import React from "react";
 import { headers as nextHeaders } from "next/headers";
 import { notFound } from "next/navigation";
-import {
-  assertPageEnvelope,
-  decodeServerDiagnosticTrace,
-  HEADER_CAPABILITIES,
-  HEADER_DEVTOOLS,
-  HEADER_DEVTOOLS_TRACE,
-  PageEnvelope,
-  PROTOCOL_MEDIA_TYPE,
-  serializeCapabilities,
-  TransportError,
-} from "@fluxfast/core";
+import { PageEnvelope } from "@fluxfast/core";
+import { fetchFluxInitialPage, selectFluxForwardHeaders } from "@fluxfast/core/server";
 import { FluxNextConfig, resolveFluxBackendUrl } from "./config.js";
 import type { FluxDevelopmentMetadata } from "./config.js";
 
@@ -40,26 +31,6 @@ export interface FluxNextPageProps {
   params: Promise<{ flux?: string[] }> | { flux?: string[] };
   searchParams?: Promise<FluxSearchParams> | FluxSearchParams;
 }
-
-const DEFAULT_FORWARDED_HEADERS = [
-  "cookie",
-  "authorization",
-  "accept-language",
-  "user-agent",
-] as const;
-
-const NEVER_FORWARD = new Set([
-  "connection",
-  "content-length",
-  "host",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-]);
 
 const INITIAL_NOT_FOUND = Symbol("fluxfast.initial-not-found");
 
@@ -89,102 +60,14 @@ export function buildFluxPath(
   return encoded ? `${pathname}?${encoded}` : pathname;
 }
 
-async function requestInitialEnvelope({
-  backendUrl,
-  path,
-  headers = {},
-}: FetchInitialEnvelopeOptions): Promise<InitialEnvelopeResult> {
-  if (!path.startsWith("/") || path.startsWith("//")) {
-    throw new TypeError("FluxFast initial paths must be origin-relative");
-  }
-  const fullUrl = `${backendUrl.replace(/\/$/, "")}${path}`;
-  const requestHeaders: Record<string, string> = {
-    ...headers,
-    Accept: PROTOCOL_MEDIA_TYPE,
-    "X-FluxFast": "1",
-    "X-FluxFast-Protocol": "1",
-    "X-FluxFast-Visit": `ssr_${Date.now().toString(36)}`,
-    [HEADER_CAPABILITIES]: serializeCapabilities(),
-  };
-  for (const name of Object.keys(requestHeaders)) {
-    if (name.toLowerCase() === HEADER_DEVTOOLS.toLowerCase()) {
-      delete requestHeaders[name];
-    }
-  }
-  if (process.env.NODE_ENV !== "production") {
-    requestHeaders[HEADER_DEVTOOLS] = "1";
-  }
-  const requestInit: RequestInit = {
-    method: "GET",
-    headers: requestHeaders,
-    cache: "no-store",
-    redirect: "manual",
-  };
-  const backendOrigin = new URL(fullUrl).origin;
-  let requestUrl = fullUrl;
-  let response: Response;
-  for (let redirects = 0; ; redirects++) {
-    response = await fetch(requestUrl, requestInit);
-    const location = response.headers.get("location");
-    if (![301, 302, 303, 307, 308].includes(response.status) || location === null) {
-      break;
-    }
-    // Release each discarded response before following or rejecting its target.
-    await response.body?.cancel();
-    if (redirects >= 20) {
-      throw new TransportError("Initial FluxFast response exceeded the redirect limit", response.status);
-    }
-    let destination: URL;
-    try {
-      destination = new URL(location, requestUrl);
-    } catch {
-      throw new TransportError("Initial FluxFast response has an invalid redirect", response.status);
-    }
-    if (destination.origin !== backendOrigin || destination.username || destination.password) {
-      throw new TransportError("Initial FluxFast response redirects outside the configured backend origin", response.status);
-    }
-    // Preserve ordinary FastAPI canonical-path redirects without allowing an
-    // upstream response to choose a different destination for SSR credentials.
-    requestUrl = destination.href;
-  }
-
-  let data: unknown;
-  try {
-    data = await response.json();
-  } catch {
-    throw new TransportError(
-      `Failed to parse initial FluxFast response from ${fullUrl} (HTTP ${response.status})`,
-      response.status
-    );
-  }
-  if (response.status === 404) {
-    return INITIAL_NOT_FOUND;
-  }
-  if (!response.ok) {
-    const detail = data as { error?: { message?: string }; detail?: string };
-    throw new TransportError(
-      detail.error?.message ??
-      detail.detail ??
-      `Failed to fetch initial FluxFast envelope from ${fullUrl} (HTTP ${response.status})`,
-      response.status,
-      data
-    );
-  }
-  assertPageEnvelope(data);
-  const trace = process.env.NODE_ENV === "production"
-    ? undefined
-    : decodeServerDiagnosticTrace(response.headers.get(HEADER_DEVTOOLS_TRACE));
-  return {
-    envelope: data,
-    ...(trace === undefined
-      ? {}
-      : {
-          development: {
-            initialPath: new URL(path, "http://fluxfast.local").pathname.slice(0, 2_048) || "/",
-            initialServerTrace: trace,
-          },
-        }),
-  };
+async function requestInitialEnvelope(
+  options: FetchInitialEnvelopeOptions
+): Promise<InitialEnvelopeResult> {
+  const result = await fetchFluxInitialPage({
+    ...options,
+    diagnostics: process.env.NODE_ENV !== "production",
+  });
+  return result.type === "not-found" ? INITIAL_NOT_FOUND : result;
 }
 
 export async function fetchInitialEnvelope(
@@ -223,24 +106,12 @@ export function createFluxNextPage(config: FluxNextConfig) {
       nextHeaders(),
     ]);
     const path = buildFluxPath(resolvedParams.flux, resolvedSearch);
-    const allowed = new Set<string>([
-      ...DEFAULT_FORWARDED_HEADERS,
-      ...(config.forwardHeaders ?? []).map(name => name.toLowerCase()),
-    ]);
-    const connectionHeaders = new Set(
-      (incomingHeaders.get("connection") ?? "").split(",").map(name => name.trim().toLowerCase())
-    );
-    const forwarded: Record<string, string> = {};
-    for (const name of allowed) {
-      if (NEVER_FORWARD.has(name) || connectionHeaders.has(name) || !/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)) continue;
-      const value = incomingHeaders.get(name);
-      if (value !== null) forwarded[name] = value;
-    }
+    const forwarded = selectFluxForwardHeaders(incomingHeaders, config.forwardHeaders ?? []);
 
     const initial = await requestInitialEnvelope({
       backendUrl: resolveFluxBackendUrl(config.backendUrl),
       path,
-      headers: forwarded,
+      headers: Object.fromEntries(forwarded),
     });
     if (initial === INITIAL_NOT_FOUND) {
       // Unlike Suspense or rendering a fallback directly, this preserves
