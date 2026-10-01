@@ -112,7 +112,7 @@ test("keeps the v0.9 JavaScript contract with reviewed v1.1 and server additions
       "FluxInitialPageResult",
       "FluxTransportProxyOptions",
     ],
-    valueOnly: ["removeFluxHopByHopHeaders", "selectFluxForwardHeaders"],
+    valueOnly: ["fetchFluxInitialPage", "removeFluxHopByHopHeaders", "selectFluxForwardHeaders"],
   };
 
   assert.deepEqual(
@@ -156,7 +156,8 @@ test("keeps the v0.9 JavaScript contract with reviewed v1.1 and server additions
       "diagnostics.d.ts": "b8e0637ca5a7197b3de19662c323bed71b1dbbe5fdce3c9f1bb8db83e17986dd",
       "protocol.d.ts": "572e3e81f256530cfc13b32660da87524eef887b619e27b16a0d8f30ac15c6ef",
       "server/headers.d.ts": "1f696d768bcbf845abda5977ccd16537d99efbf741f2ad798b272c72eb9c3f08",
-      "server/index.d.ts": "df8a181231b92d99c840da139c03198ddf357719be62220e1a5b6bfc2ffa5b3e",
+      "server/index.d.ts": "281e021cc84ef876e70b1ad84a3d8763776795e910b546449c8acebd5d3e4484",
+      "server/initial-page.d.ts": "abac2e2dfc608bfd0475af6ec5cf41bf930bf7e3aa939e004dd9a854a8da0604",
       "server/types.d.ts": "a3181ec6ad068a9dba64c752a3112c61a1019bcd202ebeb91e8de06254d54dc7",
       "transport.d.ts": "279a82ed912bd349041f556926de99012cefcf0b2693973d0788cff58d5582e7",
     }

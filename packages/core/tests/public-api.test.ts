@@ -66,9 +66,11 @@ describe("1.x public API classification", () => {
     expect(names).toEqual([
       "FetchFluxInitialPageOptions", "FluxDevelopmentMetadata",
       "FluxInitialPageResult", "FluxTransportProxyOptions",
+      "fetchFluxInitialPage",
       "removeFluxHopByHopHeaders", "selectFluxForwardHeaders",
     ]);
     expect(Object.keys(server).toSorted()).toEqual([
+      "fetchFluxInitialPage",
       "removeFluxHopByHopHeaders", "selectFluxForwardHeaders",
     ]);
     for (const name of names) expect(name in core).toBe(false);
