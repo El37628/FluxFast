@@ -156,6 +156,47 @@ resource loaders, FastAPI dependencies, authentication, or mutation handlers.
 Generation validates the complete manifest and compiles every output before it
 updates generated files.
 
+### Adapter-aware handoff (unreleased v1.2)
+
+The source-development Python command adds an optional explicit target while
+retaining the existing command above:
+
+```bash
+fluxfast types backend.main:app --frontend frontend --adapter next
+fluxfast types backend.main:app --frontend frontend --adapter next --check
+```
+
+Without `--adapter`, detection reads `@fluxfast/next` in the frontend's
+`package.json` `dependencies` or `devDependencies`. Merely installing `next`,
+`react`, or `vite` does not identify a FluxFast adapter. `next` is the only
+implemented target; future adapter names fail clearly. An explicit `next`
+override also permits compiler-only projects that install Codegen but do not
+declare a runtime adapter. Malformed metadata is rejected before backend import.
+
+Python prefers an already-installed, locally available `fluxfast-codegen`
+binary, passing `generate --adapter next --schema-file PATH`. If that binary
+is absent, it uses the existing `fluxfast generate --schema-file PATH`
+command, so current Python still works with actual published v1.1 JavaScript.
+This fallback is selected before generation; compilation failures are returned,
+not retried with a different compiler. Globally installed binaries are not
+installation evidence, and declaring a package without installing dependencies
+produces an actionable error without downloading packages. Workspace-hoisted
+shims and Yarn Plug'n'Play's installed workspace binary lookup are supported.
+For PnP, make Codegen directly available to the frontend workspace; the older
+Next CLI's filesystem-based package checks still require a `node_modules`
+installation. A selected legacy generator's failure is reported unchanged.
+
+Successful checking still prints `✓ Generated FluxFast files are current.`
+and exits `0`; missing/stale artifacts exit `1` without creating or modifying
+generated files. Compiler output, warnings, and error exit codes are forwarded.
+Unsupported client validators still do not weaken authoritative FastAPI
+validation. The schema/2 upgrade guidance now names the installed FluxFast
+JavaScript tooling rather than requiring a particular adapter package.
+
+This addition is **not published in v1.1.0**. Use the built source candidate to
+test `--adapter`; ordinary published applications retain the existing setup
+commands. No new frontend runtime or manifest format is introduced.
+
 For a `src/` project, output is written under `src/.fluxfast/`; a root-layout
 project uses `.fluxfast/`:
 

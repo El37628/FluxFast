@@ -90,7 +90,14 @@ def _python_cli_surface() -> dict[str, object]:
 
 
 def test_python_cli_surface_matches_v09_promotion_baseline() -> None:
-    assert _python_cli_surface() == _contracts()["pythonCli"]
+    surface = _python_cli_surface()
+    # v1.2 adds one optional override. Prove its default preserves detection,
+    # then compare every historical option/default/required flag unchanged.
+    types = surface["commands"]["types"]  # type: ignore[index]
+    assert types["defaults"].pop("--adapter") is None
+    assert "--adapter" not in types["requiredOptions"]
+    types["options"].remove("--adapter")
+    assert surface == _contracts()["pythonCli"]
 
 
 def test_production_defaults_match_v09_promotion_baseline(tmp_path: Path) -> None:

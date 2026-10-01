@@ -540,6 +540,9 @@ try {
   }
   const installedCoreVersion = assertIsolatedNpmPackage("@fluxfast/core");
   const installedNextVersion = assertIsolatedNpmPackage("@fluxfast/next");
+  manifest.dependencies["@fluxfast/core"] = installedCoreVersion;
+  manifest.dependencies["@fluxfast/next"] = installedNextVersion;
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   if (!publishedConfig) {
     assert.equal(assertIsolatedNpmPackage("@fluxfast/codegen"), installedNextVersion);
   }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import signal
@@ -12,6 +13,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from types import FrameType
 
@@ -69,6 +71,104 @@ class TypeGenerationError(RuntimeError):
     """Raised when full-stack type generation cannot be started."""
 
 
+class FrontendAdapter(str, Enum):
+    """Currently implemented generation targets, not framework guesses."""
+
+    NEXT = "next"
+
+
+_FRONTEND_ADAPTER_PACKAGES = {FrontendAdapter.NEXT: ("@fluxfast/next",)}
+
+
+def _detect_frontend_adapter(
+    frontend: Path,
+    adapter: str | None = None,
+) -> FrontendAdapter:
+    """Select a FluxFast target from declarations without evaluating config."""
+
+    selected = None
+    if adapter is not None:
+        try:
+            selected = FrontendAdapter(adapter)
+        except ValueError as error:
+            raise TypeGenerationError(
+                f"Unsupported FluxFast adapter {adapter!r}. Supported adapters: next."
+            ) from error
+    package_json = frontend / "package.json"
+    try:
+        manifest = json.loads(package_json.read_text(encoding="utf8"))
+    except (OSError, ValueError) as error:
+        raise TypeGenerationError(
+            f"Could not read frontend package.json at {package_json}: {error}"
+        ) from error
+    if not isinstance(manifest, dict):
+        raise TypeGenerationError(
+            f"Frontend package.json at {package_json} must contain a JSON object."
+        )
+    packages: set[str] = set()
+    for section in ("dependencies", "devDependencies"):
+        declarations = manifest.get(section, {})
+        if not isinstance(declarations, dict) or any(
+            not isinstance(value, str) or not value.strip()
+            for value in declarations.values()
+        ):
+            raise TypeGenerationError(
+                f"Frontend package.json at {package_json} must contain an object of non-empty version strings in {section}."
+            )
+        packages.update(declarations)
+    if selected is not None:
+        return selected
+    detected = [
+        target
+        for target, names in _FRONTEND_ADAPTER_PACKAGES.items()
+        if any(name in packages for name in names)
+    ]
+    if len(detected) == 1:
+        return detected[0]
+    raise TypeGenerationError(
+        "Could not detect a supported FluxFast frontend adapter from package.json dependencies or devDependencies. "
+        "Declare @fluxfast/next, or pass --adapter next explicitly. Framework packages such as next, react, and vite are not adapter declarations."
+    )
+
+
+def _frontend_binary_installed(frontend: Path, name: str, *, manager: str) -> bool:
+    """Inspect local/workspace shims only; global PATH is not an installation."""
+
+    roots = (frontend, *frontend.parents)
+    if manager == "yarn" and any(
+        (root / ".pnp.cjs").is_file() or (root / ".pnp.js").is_file()
+        for root in roots
+    ):
+        # PnP has no .bin directory. Ask Yarn about the current workspace's
+        # installed binary (possibly inside a zip), not a global executable.
+        try:
+            result = subprocess.run(
+                [manager, "bin", name],
+                cwd=frontend,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                shell=False,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise TypeGenerationError(
+                f"Could not inspect installed FluxFast tooling with Yarn: {error}"
+            ) from error
+        return result.returncode == 0 and bool(result.stdout.strip())
+    suffixes = ("", ".cmd", ".exe") if os.name == "nt" else ("",)
+    for root in roots:
+        for suffix in suffixes:
+            candidate = root / "node_modules" / ".bin" / f"{name}{suffix}"
+            if candidate.is_file() and (
+                os.name == "nt" or os.access(candidate, os.X_OK)
+            ):
+                return True
+    return False
+
+
 _SCHEMA_V2_OLD_TOOLING_ERROR = (
     'unsupported version "fluxfast-schema/2"; expected "fluxfast-schema/1"'
 )
@@ -99,7 +199,7 @@ def _report_type_generation_output(
         print(
             "FluxFast schema fluxfast-schema/2 requires JavaScript tooling\n"
             "with schema/2 support.\n\n"
-            "Upgrade @fluxfast/next before regenerating contracts.",
+            "Upgrade the installed FluxFast JavaScript tooling before regenerating contracts.",
             file=sys.stderr,
         )
 
@@ -139,11 +239,25 @@ def _type_generation_command(
     schema_file: Path,
     *,
     check: bool,
+    adapter: str | None = None,
 ) -> list[str]:
     manager = _frontend_package_manager(frontend)
     if shutil.which(manager) is None:
         raise TypeGenerationError(
             f"Could not find '{manager}' on PATH for frontend directory {frontend}"
+        )
+    target = _detect_frontend_adapter(frontend, adapter)
+    if _frontend_binary_installed(frontend, "fluxfast-codegen", manager=manager):
+        binary = "fluxfast-codegen"
+        adapter_arguments = ["--adapter", target.value]
+    elif _frontend_binary_installed(frontend, "fluxfast", manager=manager):
+        binary = "fluxfast"
+        adapter_arguments = []
+    else:
+        raise TypeGenerationError(
+            "Could not find installed FluxFast JavaScript tooling in the frontend or its workspace. "
+            "Install the project's dependencies to provide fluxfast-codegen or the legacy fluxfast generator. "
+            "No packages were downloaded."
         )
     prefix = {
         "npm": ["npm", "exec", "--no", "--"],
@@ -153,8 +267,9 @@ def _type_generation_command(
     }[manager]
     command = [
         *prefix,
-        "fluxfast",
+        binary,
         "generate",
+        *adapter_arguments,
         "--schema-file",
         str(schema_file),
     ]
@@ -344,6 +459,7 @@ def run_types(
     *,
     frontend: Path,
     check: bool = False,
+    adapter: str | None = None,
 ) -> int:
     """Export the backend schema and compose it with frontend generation."""
 
@@ -353,12 +469,15 @@ def run_types(
             f"No package.json found in frontend directory {frontend}"
         )
 
+    target = _detect_frontend_adapter(frontend, adapter)
     app = _load_schema_app(app_import)
     manifest_text = _schema_manifest_text(app)
     with tempfile.TemporaryDirectory(prefix="fluxfast-types-") as directory:
         schema_file = Path(directory) / "schema.generated.json"
         schema_file.write_text(manifest_text, encoding="utf8")
-        command = _type_generation_command(frontend, schema_file, check=check)
+        command = _type_generation_command(
+            frontend, schema_file, check=check, adapter=target.value
+        )
         result = subprocess.run(
             command,
             cwd=frontend,
@@ -496,6 +615,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     types.add_argument("--frontend", type=Path, default=Path.cwd())
     types.add_argument(
+        "--adapter",
+        choices=[target.value for target in _FRONTEND_ADAPTER_PACKAGES],
+        help="select a FluxFast adapter; by default inspect the frontend's FluxFast dependencies",
+    )
+    types.add_argument(
         "--check",
         action="store_true",
         help="check the schema and generated frontend files without writing",
@@ -610,6 +734,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.app,
                 frontend=args.frontend,
                 check=args.check,
+                adapter=args.adapter,
             )
         except (SchemaCommandError, TypeGenerationError, OSError) as error:
             print(f"[fluxfast] {error}", file=sys.stderr)

@@ -53,6 +53,10 @@ jobs:
             --release-dir "$RUNNER_TEMP/fluxfast-release-contract" \
             --version "$version" \
             --write-checksums
+      - name: Verify type generation and published v1.1 tooling compatibility
+        env:
+          FLUXFAST_TYPES_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-release-contract
+        run: pnpm test:consumer:types
       - name: Upload the verified v1 candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

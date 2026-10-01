@@ -36,6 +36,12 @@ and `pnpm test:e2e`. Root TypeScript scripts build workspace dependencies before
 checks; focused commands may need those builds too. See `package.json` and
 `.github/workflows/` for production, Redis, container, and release-consumer checks.
 
+For Python-to-JavaScript tooling changes, `pnpm test:consumer:types` builds
+isolated packed consumers and verifies both upgrade orders against actual
+published v1.1.0 packages, including local generator selection, six artifact
+bytes, and read-only missing/current/stale checks in root/src layouts. The
+release-artifact job runs this gate on its already-verified archives.
+
 Protocol changes must update `docs/protocol.md`; cache changes must include
 isolation tests. Performance claims require repeatable benchmark evidence with
 a baseline, workload, result, tradeoff, and correctness checks; select the
