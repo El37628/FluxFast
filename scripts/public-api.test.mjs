@@ -190,14 +190,33 @@ test("keeps the v0.9 JavaScript contract with reviewed v1.1 and server additions
   )) {
     const currentFiles = current.packages["@fluxfast/next"]
       .declarations[entry].files;
+    const movedFiles = new Set(["schema-compiler.d.ts", "schema-manifest.d.ts", "validator-compiler.d.ts"]);
+    if (declaration.files["generate.d.ts"]) {
+      // Only the diagnostic type's owner changed. Check every old declaration,
+      // not a freshly blessed signature hash or a reduced graph assertion.
+      const compatibilityDeclaration = fs.readFileSync(
+        path.join(repositoryRoot, "packages/next/dist/generate.d.ts"), "utf8"
+      ).replace('from "@fluxfast/codegen"', 'from "./validator-compiler.js"');
+      assert.equal(declarationFingerprint(compatibilityDeclaration), declaration.files["generate.d.ts"]);
+      for (const [file, fingerprint] of Object.entries(declaration.files)) {
+        if (!movedFiles.has(file)) continue;
+        let moved = fs.readFileSync(path.join(repositoryRoot, "packages/codegen/dist", file), "utf8");
+        // This new diagnostic helper replaces the identical private Next helper.
+        if (file === "schema-compiler.d.ts") {
+          moved = moved.replace(/^export declare function findFluxFastSchemaModeConflicts\(value: unknown\): string\[\];\r?\n/m, "");
+        }
+        assert.equal(declarationFingerprint(moved), fingerprint, `moved ${file} changed`);
+      }
+    }
     for (const [file, fingerprint] of Object.entries(declaration.files)) {
+      if (declaration.files["generate.d.ts"] && (file === "generate.d.ts" || movedFiles.has(file))) continue;
       assert.equal(
         currentFiles[file],
         v11NextDeclarationChanges[entry]?.[file] ?? fingerprint,
         `${entry} ${file} changed`
       );
     }
-    assert.deepEqual(Object.keys(currentFiles), Object.keys(declaration.files));
+    assert.deepEqual(Object.keys(currentFiles), Object.keys(declaration.files).filter(file => !declaration.files["generate.d.ts"] || !movedFiles.has(file)));
   }
 
   assert.deepEqual(

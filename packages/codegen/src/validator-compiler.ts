@@ -1,5 +1,5 @@
 import {
-  VALIDATION_FORMATS,
+  type ValidationFormat,
   type ValidationPlan,
   type ValidationPlanDocument
 } from "@fluxfast/core";
@@ -277,7 +277,19 @@ const MAX_SCHEMA_DEPTH = 64;
 const MAX_ROOT_CONTRACTS = 10_000;
 const MAX_SCHEMA_STRING_LENGTH = 65_536;
 
-const SUPPORTED_FORMATS = new Set<string>(VALIDATION_FORMATS);
+// Core owns the plan types, not compiler execution. This exhaustive inventory
+// is checked by TypeScript and a contract test without a runtime Core import.
+const COMPILER_FORMATS = {
+  date: true,
+  "date-time": true,
+  email: true,
+  ipv4: true,
+  ipv6: true,
+  time: true,
+  uri: true,
+  uuid: true,
+} satisfies Record<ValidationFormat, true>;
+const SUPPORTED_FORMATS = new Set<string>(Object.keys(COMPILER_FORMATS));
 
 interface SchemaWorkItem {
   readonly schema: SchemaNode;

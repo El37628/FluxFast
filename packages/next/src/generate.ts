@@ -1,12 +1,11 @@
-import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { compileFluxFastMutations } from "./mutation-compiler.js";
-import { compileFluxFastPageRoutes } from "./route-compiler.js";
-import { compileFluxFastResourceTypes } from "./schema-compiler.js";
-import { parseFluxFastSchemaManifest } from "./schema-manifest.js";
-import { compileFluxFastValidatorsWithDiagnostics } from "./validator-compiler.js";
-import type { ValidatorCompilationDiagnostic } from "./validator-compiler.js";
+import {
+  checkFluxFastProject as checkSharedProject,
+  generateFluxFastProject as generateSharedProject,
+  generatePagesRegistry as generateSharedRegistry,
+} from "@fluxfast/codegen";
+import type { ValidatorCompilationDiagnostic } from "@fluxfast/codegen";
 
 export interface GenerateOptions {
   pagesDir?: string;
@@ -47,161 +46,10 @@ export interface FluxFastGenerationCheckResult {
   validatorDiagnostics: readonly ValidatorCompilationDiagnostic[];
 }
 
-interface FluxFastGeneratedArtifact {
-  content: string;
-  path: string;
-}
-
-interface FluxFastProjectSnapshot {
-  artifacts: FluxFastGeneratedArtifact[];
-  generatedValidators: readonly string[];
-  generatedDir: string;
-  pagesDir: string;
-  registryPath: string;
-  schemaContent?: string;
-  schemaFile?: string;
-  validatorDiagnostics: readonly ValidatorCompilationDiagnostic[];
-}
-
 const PAGE_EXTENSION = /\.(tsx|jsx)$/;
 const IGNORED_PAGE = /\.(test|spec|stories)\.(tsx|jsx)$/;
 const SAFE_PAGE_FILE =
   /^[A-Za-z0-9_.@()\[\]-]+(?:\/[A-Za-z0-9_.@()\[\]-]+)*\.(?:tsx|jsx)$/;
-
-function writeGeneratedArtifact(pathname: string, content: string): void {
-  // Keep the temporary file beside its destination so the final rename stays
-  // on one filesystem. Only the temporary name is random; output is unchanged.
-  const temporaryPath = path.join(
-    path.dirname(pathname),
-    `.${path.basename(pathname)}.${process.pid}.${randomUUID()}.tmp`
-  );
-  let descriptor: number | undefined;
-  let temporaryFileCreated = false;
-
-  try {
-    descriptor = fs.openSync(temporaryPath, "wx");
-    temporaryFileCreated = true;
-    fs.writeFileSync(descriptor, content, "utf8");
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    fs.renameSync(temporaryPath, pathname);
-    temporaryFileCreated = false;
-  } catch (error) {
-    if (descriptor !== undefined) {
-      try {
-        fs.closeSync(descriptor);
-      } catch {
-        // Preserve the original generation failure.
-      }
-    }
-    if (temporaryFileCreated) {
-      try {
-        fs.unlinkSync(temporaryPath);
-      } catch {
-        // A concurrent cleanup or filesystem failure must not mask the cause.
-      }
-    }
-    throw error;
-  }
-}
-
-function isWithin(root: string, target: string): boolean {
-  const relative = path.relative(root, target);
-  return (
-    relative === "" ||
-    (!relative.startsWith(`..${path.sep}`) &&
-      relative !== ".." &&
-      !path.isAbsolute(relative))
-  );
-}
-
-function commonDirectory(left: string, right: string): string {
-  const resolvedRight = path.resolve(right);
-  let current = path.resolve(left);
-  while (!isWithin(current, resolvedRight)) {
-    const parent = path.dirname(current);
-    if (parent === current) return current;
-    current = parent;
-  }
-  return current;
-}
-
-function assertGeneratedOutputPath(
-  generatedDir: string,
-  outputPath: string,
-  label: string,
-  trustedRoot = path.dirname(generatedDir)
-): void {
-  const relative = path.relative(generatedDir, outputPath);
-  if (
-    !relative ||
-    relative === ".." ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative)
-  ) {
-    throw new TypeError(
-      `[fluxfast] Generated ${label} must stay inside the configured output directory ${JSON.stringify(generatedDir)}; received ${JSON.stringify(outputPath)}`
-    );
-  }
-
-  const resolvedGeneratedDir = path.resolve(generatedDir);
-  let resolvedTrustedRoot = path.resolve(trustedRoot);
-  if (resolvedTrustedRoot === resolvedGeneratedDir) {
-    resolvedTrustedRoot = path.dirname(resolvedTrustedRoot);
-  }
-  if (!isWithin(resolvedTrustedRoot, resolvedGeneratedDir)) {
-    throw new TypeError(
-      `[fluxfast] Generated ${label} directory must stay inside its project boundary`
-    );
-  }
-  let current = resolvedTrustedRoot;
-  // Include the boundary itself: otherwise a symlinked project root can
-  // redirect every apparently-contained artifact to a different tree.
-  for (const segment of ["", ...path
-    .relative(resolvedTrustedRoot, resolvedGeneratedDir)
-    .split(path.sep)
-    .filter(Boolean)]) {
-    current = path.join(current, segment);
-    try {
-      if (fs.lstatSync(current).isSymbolicLink()) {
-        throw new TypeError(
-          `[fluxfast] Generated ${label} must not traverse the symbolic link ${JSON.stringify(current)}`
-        );
-      }
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ) {
-        break;
-      }
-      throw error;
-    }
-  }
-
-  current = resolvedGeneratedDir;
-  for (const segment of relative.split(path.sep)) {
-    current = path.join(current, segment);
-    try {
-      if (fs.lstatSync(current).isSymbolicLink()) {
-        throw new TypeError(
-          `[fluxfast] Generated ${label} must not traverse the symbolic link ${JSON.stringify(current)}`
-        );
-      }
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ) {
-        continue;
-      }
-      throw error;
-    }
-  }
-}
 
 function assertSafePageFile(file: string): void {
   const hasTraversalSegment = file
@@ -282,183 +130,19 @@ export function createPagesRegistrySnapshot(
 }
 
 export function generatePagesRegistry(options: GenerateOptions = {}): void {
-  const snapshot = createPagesRegistrySnapshot(options);
-  assertGeneratedOutputPath(
-    path.dirname(snapshot.outputFile),
-    snapshot.outputFile,
-    "component registry",
-    path.dirname(
-      commonDirectory(snapshot.pagesDir, path.dirname(snapshot.outputFile))
-    )
-  );
-  fs.mkdirSync(snapshot.pagesDir, { recursive: true });
-  fs.mkdirSync(path.dirname(snapshot.outputFile), { recursive: true });
-
-  writeGeneratedArtifact(snapshot.outputFile, snapshot.content);
-  if (options.log !== false) {
-    console.log(
-      `[fluxfast] Generated component registry with ${snapshot.files.length} pages at ${snapshot.outputFile}`
-    );
-  }
+  generateSharedRegistry(createPagesRegistrySnapshot(options), { log: options.log });
 }
 
-/** Compile every project artifact in memory without modifying the project. */
-function createFluxFastProjectSnapshot(
-  options: FluxFastGenerationOptions = {}
-): FluxFastProjectSnapshot {
-  const registry = createPagesRegistrySnapshot(options);
-  const generatedDir = path.resolve(
-    options.generatedDir ?? path.dirname(registry.outputFile)
-  );
-  const projectBoundary = path.dirname(
-    commonDirectory(registry.pagesDir, generatedDir)
-  );
-  assertGeneratedOutputPath(
-    generatedDir,
-    registry.outputFile,
-    "component registry",
-    projectBoundary
-  );
-  const candidateSchemaFile = path.resolve(
-    options.schemaFile ?? path.join(generatedDir, "schema.generated.json")
-  );
-  if (options.schemaContent !== undefined) {
-    assertGeneratedOutputPath(
-      generatedDir,
-      candidateSchemaFile,
-      "schema manifest",
-      projectBoundary
-    );
-  }
-  const schemaContent = options.schemaContent ?? (
-    fs.existsSync(candidateSchemaFile)
-      ? fs.readFileSync(candidateSchemaFile, "utf8")
-      : undefined
-  );
-  const hasSchema = schemaContent !== undefined;
-  const artifacts: FluxFastGeneratedArtifact[] = [
-    { path: registry.outputFile, content: registry.content }
-  ];
-  let generatedValidators: readonly string[] = Object.freeze([]);
-  let validatorDiagnostics: readonly ValidatorCompilationDiagnostic[] = Object.freeze([]);
-
-  if (hasSchema) {
-    const manifest = parseFluxFastSchemaManifest(schemaContent);
-    const validators = compileFluxFastValidatorsWithDiagnostics(manifest);
-    generatedValidators = validators.contracts;
-    validatorDiagnostics = validators.diagnostics;
-    const schemaArtifacts = [
-      {
-        path: path.join(generatedDir, "types.generated.ts"),
-        content: compileFluxFastResourceTypes(manifest),
-        label: "resource types"
-      },
-      {
-        path: path.join(generatedDir, "validators.generated.ts"),
-        content: validators.content,
-        label: "validators"
-      },
-      {
-        path: path.join(generatedDir, "routes.generated.ts"),
-        content: compileFluxFastPageRoutes(manifest),
-        label: "page routes"
-      },
-      {
-        path: path.join(generatedDir, "mutations.generated.ts"),
-        content: compileFluxFastMutations(manifest),
-        label: "mutation helpers"
-      }
-    ];
-    for (const artifact of schemaArtifacts) {
-      assertGeneratedOutputPath(
-        generatedDir,
-        artifact.path,
-        artifact.label,
-        projectBoundary
-      );
-      artifacts.push({ path: artifact.path, content: artifact.content });
-    }
-  }
-
-  return {
-    artifacts,
-    generatedValidators,
-    generatedDir,
-    pagesDir: registry.pagesDir,
-    registryPath: registry.outputFile,
-    schemaContent: options.schemaContent,
-    schemaFile: hasSchema ? candidateSchemaFile : undefined,
-    validatorDiagnostics
-  };
-}
-
-/** Generate the page registry and any schema-backed developer artifacts. */
+/** Generate through framework-neutral Codegen with the existing Next registry. */
 export function generateFluxFastProject(
   options: FluxFastGenerationOptions = {}
 ): FluxFastGenerationResult {
-  const snapshot = createFluxFastProjectSnapshot(options);
-
-  // Compile every artifact before writing any of them so an invalid manifest
-  // cannot leave the generated directory partially updated.
-  fs.mkdirSync(snapshot.pagesDir, { recursive: true });
-  if (snapshot.schemaContent !== undefined && snapshot.schemaFile) {
-    fs.mkdirSync(path.dirname(snapshot.schemaFile), { recursive: true });
-    writeGeneratedArtifact(snapshot.schemaFile, snapshot.schemaContent);
-  }
-  for (const artifact of snapshot.artifacts) {
-    fs.mkdirSync(path.dirname(artifact.path), { recursive: true });
-    writeGeneratedArtifact(artifact.path, artifact.content);
-  }
-
-  if (options.log !== false) {
-    console.log(
-      `[fluxfast] Generated ${snapshot.artifacts.length} file${snapshot.artifacts.length === 1 ? "" : "s"} in ${snapshot.generatedDir}`
-    );
-  }
-  return {
-    generatedFiles: snapshot.artifacts.map(artifact => artifact.path),
-    generatedValidators: snapshot.generatedValidators,
-    registryPath: snapshot.registryPath,
-    schemaFile: snapshot.schemaFile,
-    validatorDiagnostics: snapshot.validatorDiagnostics
-  };
+  return generateSharedProject({ ...options, registry: createPagesRegistrySnapshot(options) });
 }
 
-/** Check deterministic project artifacts without creating or modifying files. */
+/** Check through Codegen without creating or modifying files. */
 export function checkFluxFastProject(
   options: FluxFastGenerationOptions = {}
 ): FluxFastGenerationCheckResult {
-  const snapshot = createFluxFastProjectSnapshot(options);
-  const checkedFiles = snapshot.artifacts.map(artifact => artifact.path);
-  const staleFiles = snapshot.artifacts
-    .filter(artifact => {
-      try {
-        return fs.readFileSync(artifact.path, "utf8") !== artifact.content;
-      } catch {
-        return true;
-      }
-    })
-    .map(artifact => artifact.path);
-  if (snapshot.schemaContent !== undefined && snapshot.schemaFile) {
-    checkedFiles.unshift(snapshot.schemaFile);
-    try {
-      if (
-        fs.readFileSync(snapshot.schemaFile, "utf8") !== snapshot.schemaContent
-      ) {
-        staleFiles.unshift(snapshot.schemaFile);
-      }
-    } catch {
-      staleFiles.unshift(snapshot.schemaFile);
-    }
-  }
-
-  return {
-    checkedFiles,
-    current: staleFiles.length === 0,
-    generatedValidators: snapshot.generatedValidators,
-    registryPath: snapshot.registryPath,
-    schemaFile: snapshot.schemaFile,
-    staleFiles,
-    validatorDiagnostics: snapshot.validatorDiagnostics
-  };
+  return checkSharedProject({ ...options, registry: createPagesRegistrySnapshot(options) });
 }

@@ -473,7 +473,9 @@ def _includes_devtools_artifact(version: str) -> bool:
     return (major, minor, patch) >= (1, 1, 0)
 
 
-def _artifact_paths(release_dir: Path, version: str) -> tuple[Path, ...]:
+def _artifact_paths(
+    release_dir: Path, version: str, *, include_codegen: bool = False
+) -> tuple[Path, ...]:
     expected_list = [
         release_dir / "python" / f"fluxfast-{version}-py3-none-any.whl",
         release_dir / "python" / f"fluxfast-{version}.tar.gz",
@@ -484,6 +486,8 @@ def _artifact_paths(release_dir: Path, version: str) -> tuple[Path, ...]:
         expected_list.append(
             release_dir / "npm" / f"fluxfast-devtools-{version}.tgz"
         )
+    if include_codegen:
+        expected_list.append(release_dir / "npm" / f"fluxfast-codegen-{version}.tgz")
     expected = tuple(expected_list)
     observed = {
         path
@@ -497,6 +501,8 @@ def _artifact_paths(release_dir: Path, version: str) -> tuple[Path, ...]:
         if _includes_devtools_artifact(version)
         else "the wheel, sdist, Core tarball, and Next tarball"
     )
+    if include_codegen:
+        expected_description += ", plus the Codegen tarball"
     _expect(
         observed == set(expected),
         f"release directory must contain exactly {expected_description}",
@@ -531,7 +537,7 @@ def _verify_checksums(paths: Iterable[Path], checksum_file: Path) -> None:
     _expect(not checksum_file.is_symlink(), "SHA256SUMS cannot be a symlink")
     paths = tuple(paths)
     expected = "".join(f"{_sha256(path)}  {path.name}\n" for path in paths)
-    count = {4: "four", 5: "five"}.get(len(paths), str(len(paths)))
+    count = {4: "four", 5: "five", 6: "six"}.get(len(paths), str(len(paths)))
     _expect(
         checksum_file.read_text() == expected,
         f"SHA256SUMS must contain exactly the {count} verified distribution digests",
@@ -551,7 +557,13 @@ def verify_release_artifacts(
     _expect(bool(_STABLE_VERSION.fullmatch(version)), "version must be MAJOR.MINOR.PATCH")
     release_dir = release_dir.resolve()
     repository_root = repository_root.resolve()
-    artifacts = _artifact_paths(release_dir, version)
+    # Source dependency intent, not a same-version unpublished tarball's presence,
+    # decides the payload. Historical v1.0/v1.1 source contracts stay immutable.
+    next_manifest = json.loads(
+        (repository_root / "packages/next/package.json").read_text()
+    )
+    include_codegen = "@fluxfast/codegen" in next_manifest.get("dependencies", {})
+    artifacts = _artifact_paths(release_dir, version, include_codegen=include_codegen)
     wheel, sdist, core, next_package = artifacts[:4]
     pyproject = tomllib.loads(
         (repository_root / "python/fluxfast/pyproject.toml").read_text()
@@ -591,6 +603,14 @@ def verify_release_artifacts(
             repository_root=repository_root,
             package_directory="packages/devtools",
             package_name="@fluxfast/devtools",
+            version=version,
+        )
+    if include_codegen:
+        _verify_npm_package(
+            artifacts[-1],
+            repository_root=repository_root,
+            package_directory="packages/codegen",
+            package_name="@fluxfast/codegen",
             version=version,
         )
     if write_checksums:

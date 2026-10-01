@@ -7,13 +7,13 @@ import {
 import {
   findFluxFastContractsWithUnknownTypes,
   findFluxFastResourceKeysWithUnknownTypes,
-  pascalIdentifier
-} from "../schema-compiler.js";
+  findFluxFastSchemaModeConflicts
+} from "@fluxfast/codegen";
 import {
   type FluxFastSchemaManifest,
   parseFluxFastSchemaManifest,
   SchemaManifestValidationError,
-} from "../schema-manifest.js";
+} from "@fluxfast/codegen";
 import {
   desiredCatchAllPath,
   desiredHealthRoutePath,
@@ -388,27 +388,6 @@ function countMessage(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function findSchemaModeConflicts(manifest: FluxFastSchemaManifest): string[] {
-  const generatedNames = new Map<
-    string,
-    { mode: string; sourceName: string }
-  >();
-  const conflicts: string[] = [];
-  for (const sourceName of Object.keys(manifest.types ?? {}).sort()) {
-    const entry = manifest.types![sourceName];
-    const generatedName = pascalIdentifier(sourceName, "Type");
-    const previous = generatedNames.get(generatedName);
-    if (previous && previous.mode !== entry.mode) {
-      conflicts.push(
-        `${JSON.stringify(previous.sourceName)} (${previous.mode}) and ${JSON.stringify(sourceName)} (${entry.mode}) both generate ${generatedName}`
-      );
-    } else if (!previous) {
-      generatedNames.set(generatedName, { mode: entry.mode, sourceName });
-    }
-  }
-  return conflicts;
-}
-
 function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
   const diagnostics: FluxDiagnostic[] = [];
   const schemaFile = path.join(project.generatedDir, "schema.generated.json");
@@ -514,7 +493,7 @@ function validateTypeGeneration(project: FluxProjectInfo): FluxDiagnostic[] {
     )
   );
 
-  const modeConflicts = findSchemaModeConflicts(manifest);
+  const modeConflicts = findFluxFastSchemaModeConflicts(manifest);
   diagnostics.push(
     diagnostic(
       "types.modes",

@@ -21,21 +21,22 @@ const python = process.env.FLUXFAST_BENCHMARK_PYTHON ?? (
 const corePackage = require("./packages/core/package.json");
 const nextPackage = require("./packages/next/package.json");
 
+const compilerModule = fs.existsSync(path.join(repositoryRoot, "packages/codegen/package.json"))
+  ? require("./packages/codegen/dist/index.js")
+  : {
+      ...require("./packages/next/dist/mutation-compiler.js"),
+      ...require("./packages/next/dist/route-compiler.js"),
+      ...require("./packages/next/dist/schema-compiler.js"),
+      ...require("./packages/next/dist/validator-compiler.js"),
+      ...require("./packages/next/dist/schema-manifest.js"),
+    };
 const {
   compileFluxFastMutations,
-} = require("./packages/next/dist/mutation-compiler.js");
-const {
   compileFluxFastPageRoutes,
-} = require("./packages/next/dist/route-compiler.js");
-const {
   compileFluxFastResourceTypes,
-} = require("./packages/next/dist/schema-compiler.js");
-const {
   compileFluxFastValidators,
-} = require("./packages/next/dist/validator-compiler.js");
-const {
   parseFluxFastSchemaManifest,
-} = require("./packages/next/dist/schema-manifest.js");
+} = compilerModule;
 const {
   generateFluxFastProject,
 } = require("./packages/next/dist/generate.js");

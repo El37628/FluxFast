@@ -3,6 +3,7 @@ export const STABLE_VERSION = /^\d+\.\d+\.\d+$/;
 export const VERSION_FILES = [
   "package.json",
   "packages/core/package.json",
+  "packages/codegen/package.json",
   "packages/next/package.json",
   "packages/devtools/package.json",
   "pnpm-lock.yaml",
@@ -11,7 +12,23 @@ export const VERSION_FILES = [
   "python/fluxfast/uv.lock",
 ];
 
-const JSON_MANIFESTS = VERSION_FILES.slice(0, 4);
+const JSON_MANIFESTS = VERSION_FILES.filter(file => file.endsWith("package.json"));
+
+const WORKSPACE_DEPENDENCIES = [
+  ["packages/next", "@fluxfast/core", "pnpm-lock.yaml @fluxfast/core"],
+  ["packages/next", "@fluxfast/codegen", "pnpm-lock.yaml @fluxfast/codegen"],
+  ["packages/codegen", "@fluxfast/core", "pnpm-lock.yaml packages/codegen @fluxfast/core"],
+];
+
+function importerPattern(importer) {
+  return new RegExp(
+    `(\\n  ${importer}:\\n    dependencies:\\n)([\\s\\S]*?)(?=\\n    \\S|\\n  \\S|\\n\\S|$)`
+  );
+}
+
+function dependencyPattern(dependency) {
+  return new RegExp(`(      '${dependency}':\\n        specifier: )([^\\n]+)`);
+}
 
 export function validateStableVersion(version) {
   if (!STABLE_VERSION.test(version ?? "")) {
@@ -46,19 +63,25 @@ export function rewriteVersionFiles(files, version) {
   for (const file of JSON_MANIFESTS) {
     const manifest = JSON.parse(files[file]);
     manifest.version = version;
-    if (file === "packages/next/package.json") {
+    if (file === "packages/next/package.json" || file === "packages/codegen/package.json") {
       manifest.dependencies["@fluxfast/core"] = `^${version}`;
+    }
+    if (file === "packages/next/package.json") {
+      manifest.dependencies["@fluxfast/codegen"] = `^${version}`;
     }
     rewritten[file] = `${JSON.stringify(manifest, null, 2)}\n`;
   }
 
   const pnpmLockFile = "pnpm-lock.yaml";
-  rewritten[pnpmLockFile] = replaceExactlyOnce(
-    files[pnpmLockFile],
-    /(\n  packages\/next:\n    dependencies:\n      '@fluxfast\/core':\n        specifier: )[^\n]+/,
-    `$1^${version}`,
-    pnpmLockFile
-  );
+  for (const [importer, dependency] of WORKSPACE_DEPENDENCIES) {
+    const pattern = importerPattern(importer);
+    if (!pattern.test(rewritten[pnpmLockFile])) {
+      throw new Error(`Missing dependency importer ${importer} in ${pnpmLockFile}.`);
+    }
+    rewritten[pnpmLockFile] = rewritten[pnpmLockFile].replace(pattern, (_match, prefix, body) =>
+      prefix + replaceExactlyOnce(body, dependencyPattern(dependency), `$1^${version}`, `${pnpmLockFile} ${importer} ${dependency}`)
+    );
+  }
 
   const pyprojectFile = "python/fluxfast/pyproject.toml";
   const projectSection =
@@ -96,9 +119,10 @@ export function readVersionSnapshot(files) {
   }
 
   const pnpmLockFile = "pnpm-lock.yaml";
-  snapshot[`${pnpmLockFile} @fluxfast/core`] = files[pnpmLockFile].match(
-    /\n  packages\/next:\n    dependencies:\n      '@fluxfast\/core':\n        specifier: ([^\n]+)/
-  )?.[1];
+  for (const [importer, dependency, label] of WORKSPACE_DEPENDENCIES) {
+    const body = files[pnpmLockFile].match(importerPattern(importer))?.[2];
+    snapshot[label] = body?.match(dependencyPattern(dependency))?.[2];
+  }
 
   const pyprojectFile = "python/fluxfast/pyproject.toml";
   const projectSection = files[pyprojectFile].match(
@@ -120,6 +144,12 @@ export function readVersionSnapshot(files) {
 
   snapshot["packages/next/package.json @fluxfast/core"] = JSON.parse(
     files["packages/next/package.json"]
+  ).dependencies?.["@fluxfast/core"];
+  snapshot["packages/next/package.json @fluxfast/codegen"] = JSON.parse(
+    files["packages/next/package.json"]
+  ).dependencies?.["@fluxfast/codegen"];
+  snapshot["packages/codegen/package.json @fluxfast/core"] = JSON.parse(
+    files["packages/codegen/package.json"]
   ).dependencies?.["@fluxfast/core"];
   return snapshot;
 }

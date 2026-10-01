@@ -20,7 +20,7 @@ import {
   type InitPlan,
 } from "./init.js";
 import { detectFluxProject } from "./project.js";
-import type { ValidatorCompilationDiagnostic } from "../validator-compiler.js";
+import type { ValidatorCompilationDiagnostic } from "@fluxfast/codegen";
 
 export interface CliIo {
   cwd: string;

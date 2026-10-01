@@ -259,6 +259,7 @@ try {
   ], consumerRoot);
 
   run(pnpmCommand, ["--filter", "@fluxfast/core", "run", "build"]);
+  run(pnpmCommand, ["--filter", "@fluxfast/codegen", "run", "build"]);
   run(pnpmCommand, ["--filter", "@fluxfast/next", "run", "build"]);
   run(npmCommand, [
     "pack",
@@ -270,6 +271,13 @@ try {
   run(npmCommand, [
     "pack",
     path.join(repositoryRoot, "packages", "next"),
+    "--pack-destination",
+    artifactRoot,
+    "--silent",
+  ]);
+  run(npmCommand, [
+    "pack",
+    path.join(repositoryRoot, "packages", "codegen"),
     "--pack-destination",
     artifactRoot,
     "--silent",
@@ -306,6 +314,7 @@ try {
     "--package-lock=false",
     "--no-save",
     oneArtifact("fluxfast-core-", ".tgz"),
+    oneArtifact("fluxfast-codegen-", ".tgz"),
     oneArtifact("fluxfast-next-", ".tgz"),
   ], frontendRoot);
   const coreVersion = assertInstalledPackage("@fluxfast/core");

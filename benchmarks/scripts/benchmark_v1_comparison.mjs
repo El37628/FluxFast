@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { baselineComparisonTooling } from "../../scripts/align-benchmark-tooling.mjs";
 
 const script = fileURLToPath(import.meta.url);
 const repository = path.resolve(path.dirname(script), "../..");
@@ -47,6 +48,7 @@ function sourceDigest(root) {
     }
   }
   for (const owner of ["python/fluxfast/src", "packages/core/src", "packages/next/src"]) visit(path.join(root, owner));
+  if (fs.existsSync(path.join(root, "packages/codegen/src"))) visit(path.join(root, "packages/codegen/src"));
   return digest(JSON.stringify(entries));
 }
 
@@ -67,7 +69,8 @@ export function runComparison({ baseline, output, python, reverse = false }) {
   assert.ok(baselineChanges.every(name => allowed.has(name)), "baseline runtime sources must not be modified");
   assert.equal(checked("git", ["-C", baseline, "ls-files", "--others", "--exclude-standard"]), "", "baseline must not contain additional untracked inputs");
   for (const name of ["pnpm-lock.yaml", "package.json", "packages/core/package.json", "packages/next/package.json", "tests/browser/frontend/package.json"]) {
-    assert.equal(digest(fs.readFileSync(path.join(baseline, name))), digest(fs.readFileSync(path.join(repository, name))), name + ": comparison tooling must match");
+    const expected = baselineComparisonTooling(name, fs.readFileSync(path.join(repository, name), "utf8"));
+    assert.equal(digest(fs.readFileSync(path.join(baseline, name))), digest(expected), name + ": comparison tooling must match, except the absent Codegen workspace");
   }
   fs.mkdirSync(output); // Reject an existing output directory; never overwrite prior evidence.
   const roots = [["v0.9.0", baseline], ["candidate", repository]];
@@ -78,6 +81,7 @@ export function runComparison({ baseline, output, python, reverse = false }) {
     baselineCommit, candidateCommit: checked("git", ["rev-parse", "HEAD"]),
     node: process.versions.node, python, order: roots.map(([label]) => label),
     lockSha256: digest(fs.readFileSync(path.join(repository, "pnpm-lock.yaml"))),
+    baselineLockSha256: digest(fs.readFileSync(path.join(baseline, "pnpm-lock.yaml"))),
     baselineToolingChanges: baselineChanges, sources: {}, harness: {}, results: [],
     policy: "Timings and heap trends are observations; investigate repeatable meaningful hot-path regressions over 10%. Candidate correctness is mandatory.",
   };
@@ -105,7 +109,8 @@ export function runComparison({ baseline, output, python, reverse = false }) {
     ], { cwd: root }));
     summary.sources[label] = { root, runtimeSha256: sourceDigest(root), python: versions, javascript };
     environments.set(label, env);
-    for (const owner of ["@fluxfast/core", "@fluxfast/next"]) {
+    const owners = ["@fluxfast/core", ...(fs.existsSync(path.join(root, "packages/codegen/package.json")) ? ["@fluxfast/codegen"] : []), "@fluxfast/next"];
+    for (const owner of owners) {
       console.log("prepare " + label + ": build " + owner);
       const result = invoke(pnpm, ["--filter", owner, "run", "build"], { cwd: root, env });
       fs.writeFileSync(path.join(output, label + "-prepare-" + owner.split("/")[1] + ".txt"), (result.stdout ?? "") + (result.stderr ?? ""));

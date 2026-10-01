@@ -84,6 +84,13 @@ Application Contracts](contracts.md), [Native Client Validation](validation.md),
 [ADR-0006](decisions/0006-typed-resource-contracts.md), and
 [ADR-0008](decisions/0008-general-contracts-and-native-validation.md).
 
+Unreleased v1.2 moves generic schema/type/validator/route/mutation compilation
+and atomic artifact persistence into `@fluxfast/codegen`. It depends on Node
+standard-library APIs and Core types, not the Core runtime, React, or Next.js.
+The existing Next generator delegates this shared work and still supplies its
+allowlisted page registry. See the [Codegen API](codegen-api.md); published
+v1.1 consumers continue using the existing Next tooling.
+
 ## Blocking and deferred resource flow
 
 A page may divide its resource graph without changing ownership:

@@ -6,8 +6,28 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { knownBaselineMemoryDefect, runComparison } from "../benchmarks/scripts/benchmark_v1_comparison.mjs";
+import { baselineComparisonTooling } from "./align-benchmark-tooling.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+
+test("historical tooling excludes only the new Codegen workspace topology", () => {
+  const next = fs.readFileSync(path.join(root, "packages/next/package.json"), "utf8");
+  const expected = JSON.parse(next);
+  delete expected.dependencies["@fluxfast/codegen"];
+  assert.deepEqual(JSON.parse(baselineComparisonTooling("packages/next/package.json", next)), expected);
+  const lock = fs.readFileSync(path.join(root, "pnpm-lock.yaml"), "utf8");
+  const normalized = baselineComparisonTooling("pnpm-lock.yaml", lock);
+  assert.doesNotMatch(normalized, /packages\/codegen:|'@fluxfast\/codegen':/);
+  assert.match(normalized, /packages\/next:\n    dependencies:\n      '@fluxfast\/core':/);
+  assert.equal(normalized.slice(normalized.indexOf("\npackages:")), lock.slice(lock.indexOf("\npackages:")), "all external resolutions remain exact");
+  for (const name of ["package.json", "packages/core/package.json", "tests/browser/frontend/package.json"]) {
+    const source = fs.readFileSync(path.join(root, name), "utf8");
+    assert.equal(baselineComparisonTooling(name, source), source);
+  }
+  assert.throws(() => baselineComparisonTooling("pnpm-lock.yaml", lock.replace("version: link:../codegen", "version: unexpected")), /linked Next\/Codegen/);
+  assert.throws(() => baselineComparisonTooling("pnpm-lock.yaml", lock.replace("  packages/next:", "  packages/other:")), /Next importer/);
+  assert.match(fs.readFileSync(path.join(root, ".github/workflows/benchmark.yml"), "utf8"), /node scripts\/align-benchmark-tooling.mjs \.comparison-baseline/);
+});
 
 test("comparison benchmarks cannot silently fall back to the current checkout", () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-benchmark-source-"));

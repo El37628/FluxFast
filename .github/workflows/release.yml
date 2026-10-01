@@ -105,6 +105,7 @@ jobs:
           mkdir -p release/python release/npm
           python -m build --outdir release/python python/fluxfast
           npm pack ./packages/core --pack-destination release/npm
+          npm pack ./packages/codegen --pack-destination release/npm
           npm pack ./packages/next --pack-destination release/npm
           npm pack ./packages/devtools --pack-destination release/npm
           python -m twine check release/python/*
@@ -147,6 +148,7 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false
           npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false --no-save \
             "$GITHUB_WORKSPACE"/release/npm/fluxfast-core-*.tgz \
+            "$GITHUB_WORKSPACE"/release/npm/fluxfast-codegen-*.tgz \
             "$GITHUB_WORKSPACE"/release/npm/fluxfast-next-*.tgz \
             "$GITHUB_WORKSPACE"/release/npm/fluxfast-devtools-*.tgz
           npm run --prefix "$RUNNER_TEMP/fluxfast-release/javascript" generate
@@ -307,12 +309,15 @@ jobs:
           }
 
           core_tarballs=(release/npm/fluxfast-core-*.tgz)
+          codegen_tarballs=(release/npm/fluxfast-codegen-*.tgz)
           next_tarballs=(release/npm/fluxfast-next-*.tgz)
           devtools_tarballs=(release/npm/fluxfast-devtools-*.tgz)
           [ "${#core_tarballs[@]}" -eq 1 ]
+          [ "${#codegen_tarballs[@]}" -eq 1 ]
           [ "${#next_tarballs[@]}" -eq 1 ]
           [ "${#devtools_tarballs[@]}" -eq 1 ]
           publish_package "@fluxfast/core" "${GITHUB_REF_NAME#v}" "${core_tarballs[0]}"
+          publish_package "@fluxfast/codegen" "${GITHUB_REF_NAME#v}" "${codegen_tarballs[0]}"
           publish_package "@fluxfast/next" "${GITHUB_REF_NAME#v}" "${next_tarballs[0]}"
           publish_package "@fluxfast/devtools" "${GITHUB_REF_NAME#v}" "${devtools_tarballs[0]}"
 

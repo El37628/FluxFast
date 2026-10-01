@@ -37,6 +37,7 @@ const pythonSpec =
     : `fluxfast==${expectedPythonVersion}`);
 const coreSpec = process.env.FLUXFAST_CORE_SPEC ?? `@fluxfast/core@${expectedJavaScriptVersion}`;
 const nextSpec = process.env.FLUXFAST_NEXT_SPEC ?? `@fluxfast/next@${expectedJavaScriptVersion}`;
+const codegenSpec = process.env.FLUXFAST_CODEGEN_SPEC;
 const upgradeSequence = process.env.FLUXFAST_UPGRADE_SEQUENCE === "1";
 const releaseVersion = (process.env.FLUXFAST_RELEASE_VERSION ?? repositoryVersion).replace(
   /^v/,
@@ -52,6 +53,7 @@ const currentCoreSpec =
   process.env.FLUXFAST_CURRENT_CORE_SPEC ?? `@fluxfast/core@${releaseVersion}`;
 const currentNextSpec =
   process.env.FLUXFAST_CURRENT_NEXT_SPEC ?? `@fluxfast/next@${releaseVersion}`;
+const currentCodegenSpec = process.env.FLUXFAST_CURRENT_CODEGEN_SPEC;
 
 function cleanEnvironment(extra = {}) {
   const environment = { ...process.env };
@@ -268,7 +270,7 @@ function installDistributedHarnessDependency(python) {
 async function installJavaScriptSpecs(
   selectedCoreSpec,
   selectedNextSpec,
-  { retryRegistry = false, forceReinstall = false } = {}
+  { retryRegistry = false, forceReinstall = false, codegenSpec: selectedCodegenSpec } = {}
 ) {
   const attempts = retryRegistry
     ? Number.parseInt(process.env.FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS ?? "60", 10)
@@ -282,11 +284,16 @@ async function installJavaScriptSpecs(
       recursive: true,
       force: true
     });
+    fs.rmSync(path.join(consumerRoot, "node_modules", "@fluxfast", "codegen"), {
+      recursive: true,
+      force: true
+    });
   }
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const result = runResult(
       npmCommand,
-      ["install", "--package-lock=false", "--no-save", selectedCoreSpec, selectedNextSpec],
+      ["install", "--package-lock=false", "--no-save", selectedCoreSpec, selectedNextSpec,
+        ...(selectedCodegenSpec ? [selectedCodegenSpec] : [])],
       consumerRoot
     );
     if (!result.error && result.status === 0) return;
@@ -384,6 +391,7 @@ try {
     upgradeSequence ? previousCoreSpec : coreSpec,
     upgradeSequence ? previousNextSpec : nextSpec,
     {
+      codegenSpec: upgradeSequence ? undefined : codegenSpec,
       retryRegistry:
         upgradeSequence || (!process.env.FLUXFAST_CORE_SPEC && !process.env.FLUXFAST_NEXT_SPEC)
     }
@@ -442,6 +450,7 @@ try {
       assert.equal(installedPackageVersion("@fluxfast/next"), previousVersion);
     } else {
       await installJavaScriptSpecs(coreSpec, nextSpec, {
+        codegenSpec,
         retryRegistry: !process.env.FLUXFAST_CORE_SPEC && !process.env.FLUXFAST_NEXT_SPEC,
         forceReinstall: true
       });
@@ -460,6 +469,7 @@ try {
 
     if (pairingName === "python-current") {
       await installJavaScriptSpecs(currentCoreSpec, currentNextSpec, {
+        codegenSpec: currentCodegenSpec,
         retryRegistry:
           !process.env.FLUXFAST_CURRENT_CORE_SPEC && !process.env.FLUXFAST_CURRENT_NEXT_SPEC,
         forceReinstall: true
