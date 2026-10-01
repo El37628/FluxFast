@@ -244,8 +244,9 @@ test("keeps public package entry points aligned with manifests and API docs", ()
   );
 
   const coreApi = read("docs/core-api.md");
-  assert.match(coreApi, /one public import\s+path/);
+  assert.match(coreApi, /browser-facing public import\s+path/);
   assert.match(coreApi, /from "@fluxfast\/core"/);
+  assert.match(coreApi, /from "@fluxfast\/core\/server"/);
   assert.match(read("docs/devtools.md"), /import \{\s*FluxDevtools,[\s\S]*from "@fluxfast\/devtools"/);
   assert.deepEqual(
     facts.packageEntryPoints["@fluxfast/next"].toSorted(),

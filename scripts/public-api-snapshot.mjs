@@ -15,6 +15,7 @@ const PACKAGE_ENTRIES = Object.freeze({
   }),
   "@fluxfast/core": Object.freeze({
     ".": "packages/core/dist/index.d.ts",
+    "./server": "packages/core/dist/server/index.d.ts",
   }),
   "@fluxfast/next": Object.freeze({
     ".": "packages/next/dist/index.d.ts",

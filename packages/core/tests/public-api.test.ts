@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import * as core from "../src/index.js";
+import * as server from "../src/server/index.js";
 
 type CoreBaseline = {
   packages: {
@@ -56,6 +58,22 @@ function baselineNames(): string[] {
 }
 
 describe("1.x public API classification", () => {
+  it("classifies every separate server export without leaking it into the root", () => {
+    const names = namesBetween(
+      "<!-- core-server-api-advanced:start -->",
+      "<!-- core-server-api-advanced:end -->"
+    );
+    expect(names).toEqual([
+      "FetchFluxInitialPageOptions", "FluxDevelopmentMetadata",
+      "FluxInitialPageResult", "FluxTransportProxyOptions",
+      "removeFluxHopByHopHeaders", "selectFluxForwardHeaders",
+    ]);
+    expect(Object.keys(server).toSorted()).toEqual([
+      "removeFluxHopByHopHeaders", "selectFluxForwardHeaders",
+    ]);
+    for (const name of names) expect(name in core).toBe(false);
+  });
+
   it("retains every v0.9 export and classifies reviewed v1.1 additions", () => {
     const stable = namesBetween(
       "<!-- core-api-stable:start -->",
