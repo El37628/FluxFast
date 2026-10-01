@@ -1,0 +1,62 @@
+{
+  "capturedFrom": "@fluxfast/next@1.1.0",
+  "captureDate": "2026-10-01",
+  "sourceTag": "v1.1.0",
+  "schemaSource": "tests/fixtures/schema/fluxfast-schema-v2.json",
+  "schemaProducer": "1.1.0",
+  "publishedPackages": [
+    {
+      "name": "@fluxfast/core",
+      "version": "1.1.0",
+      "integrity": "sha512-Z52wvPMYuP/TTXo1bihsPnORVEQqRnyJ5wE9pw1fWNeLB5+lLq5aRLjgxFp8hL6fEdD7ippRns7xJB3y5u7mOA=="
+    },
+    {
+      "name": "@fluxfast/next",
+      "version": "1.1.0",
+      "integrity": "sha512-KWXiqqfqFZXIA/Ts7SbKnyw2lodBm2sQpWJYIXWhZZs0w13fsfsYT3q3ihFUQyAPGOAtGNPBHId+Im9Ayb1z9g=="
+    }
+  ],
+  "pages": {
+    "(admin)/[room-id].tsx": "export default function AdminRoom() { return null; }\n",
+    "home/index.tsx": "export default function Home() { return null; }\n",
+    "hotel_rooms/index.tsx": "export default function HotelRooms() { return null; }\n",
+    "legacy.jsx": "export default function Legacy() { return null; }\n",
+    "home/index.test.tsx": "export default null;\n",
+    "home/index.stories.tsx": "export default null;\n",
+    "home/_private.tsx": "export default null;\n"
+  },
+  "artifactDigests": {
+    "mutations.generated.ts": "350b87775de900fb011922100c90ef2ffa1c9e151e8ac9dbfc1661347a41de4c",
+    "pages.generated.ts": "e859940733c89dca65c43ea639926e07d4f7a4b75deffcd686f28e166e180eb5",
+    "routes.generated.ts": "134ee41b526703accd4477fa92a72063f1d4b860e02d49be411467a5ffc93c01",
+    "schema.generated.json": "518f49e3397572a81af5aa1588b5164a6c96b806d0edf909a85bff37953b413d",
+    "types.generated.ts": "ce2ac8cde61d1f665476923b71025d06ece4403767e2e0fef34f42696d6073cb",
+    "validators.generated.ts": "f61e5a9c1d4ce583bc8f8226939a0efd32f3f863b1c2cecfbfe7810ae6d10b7a"
+  },
+  "cli": {
+    "src": {
+      "generate": {
+        "status": 0,
+        "stdout": "! RoomsResource cannot receive a client validator.\n  [fluxfast] Could not compile schema at $.resources.rooms.schema.$defs.Room.properties.nightlyRate.pattern: pattern uses a regex escape whose semantics are not portable to the native validator\n  TypeScript generation remains available.\n  Server validation remains authoritative.\n✓ Generated FluxFast schema at src/.fluxfast/schema.generated.json\n✓ Generated FluxFast registry at src/.fluxfast/pages.generated.ts\n✓ Generated FluxFast types from src/.fluxfast/schema.generated.json\n  src/.fluxfast/types.generated.ts\n  src/.fluxfast/validators.generated.ts\n  src/.fluxfast/routes.generated.ts\n  src/.fluxfast/mutations.generated.ts\n",
+        "stderr": ""
+      },
+      "check": {
+        "status": 0,
+        "stdout": "! RoomsResource cannot receive a client validator.\n  [fluxfast] Could not compile schema at $.resources.rooms.schema.$defs.Room.properties.nightlyRate.pattern: pattern uses a regex escape whose semantics are not portable to the native validator\n  TypeScript generation remains available.\n  Server validation remains authoritative.\n✓ Generated FluxFast files are current.\n",
+        "stderr": ""
+      }
+    },
+    "root": {
+      "generate": {
+        "status": 0,
+        "stdout": "! RoomsResource cannot receive a client validator.\n  [fluxfast] Could not compile schema at $.resources.rooms.schema.$defs.Room.properties.nightlyRate.pattern: pattern uses a regex escape whose semantics are not portable to the native validator\n  TypeScript generation remains available.\n  Server validation remains authoritative.\n✓ Generated FluxFast schema at .fluxfast/schema.generated.json\n✓ Generated FluxFast registry at .fluxfast/pages.generated.ts\n✓ Generated FluxFast types from .fluxfast/schema.generated.json\n  .fluxfast/types.generated.ts\n  .fluxfast/validators.generated.ts\n  .fluxfast/routes.generated.ts\n  .fluxfast/mutations.generated.ts\n",
+        "stderr": ""
+      },
+      "check": {
+        "status": 0,
+        "stdout": "! RoomsResource cannot receive a client validator.\n  [fluxfast] Could not compile schema at $.resources.rooms.schema.$defs.Room.properties.nightlyRate.pattern: pattern uses a regex escape whose semantics are not portable to the native validator\n  TypeScript generation remains available.\n  Server validation remains authoritative.\n✓ Generated FluxFast files are current.\n",
+        "stderr": ""
+      }
+    }
+  }
+}

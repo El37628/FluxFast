@@ -1,0 +1,2 @@
+# Preserve the published adapter's byte-exact baseline on Linux and Windows.
+tests/fixtures/adapter-baseline-v1.1.0/** text eol=lf
