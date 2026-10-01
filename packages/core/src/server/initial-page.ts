@@ -45,7 +45,9 @@ async function readErrorJson(response: Response): Promise<unknown> {
       if (chunk.done) break;
       bytes += chunk.value.byteLength;
       if (bytes > MAX_INITIAL_ERROR_BYTES) {
-        await reader.cancel().catch(() => {});
+        // A host may retain another tee branch. Initiate cancellation, but do
+        // not wait for a reader that we do not own before rejecting the body.
+        void reader.cancel().catch(() => {});
         throw new TransportError("Initial FluxFast error response exceeded the size limit", response.status);
       }
       chunks.push(decoder.decode(chunk.value, { stream: true }));
@@ -84,7 +86,11 @@ export async function fetchFluxInitialPage({
     response = await fetchImplementation(requestUrl, requestInit);
     const location = response.headers.get("location");
     if (!isFluxRedirectStatus(response.status) || location === null) break;
-    await response.body?.cancel();
+    // Cancelling a tee branch resolves only after the other branch finishes.
+    // SSR hosts can retain that branch for deduplication, so awaiting it here
+    // deadlocks redirect handling. Discard ours without taking ownership of
+    // the host's stream; redirect validation below remains fail-closed.
+    void response.body?.cancel().catch(() => {});
     if (redirects >= maxRedirects) {
       throw new TransportError("Initial FluxFast response exceeded the redirect limit", response.status);
     }

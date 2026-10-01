@@ -43,6 +43,13 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Delegate the Next.js production transport handler to Core while retaining
   catch-all segment encoding and per-request supervisor backend resolution.
 
+### Fixed
+
+- Avoid waiting on host-retained response-stream branches when handling SSR
+  redirects or rejecting oversized error bodies. Canonical redirects can
+  complete under deduplicating SSR fetch implementations, while external
+  redirects, redirect limits, and the one-MiB error bound remain fail-closed.
+
 ## [1.1.0] - 2026-09-30
 
 ### Added
