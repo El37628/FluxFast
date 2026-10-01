@@ -87,8 +87,11 @@ node /path/to/FluxFast/packages/codegen/bin/fluxfast-codegen.js generate --adapt
 
 The compiler does not need React or Next.js installed to run. Its generated
 Next registry does need the selected runtime when the application compiles and
-renders. The Python `fluxfast types` command continues using its existing Next
-tooling in this development step; adapter detection and handoff are separate work.
+renders. The source-development Python `fluxfast types` command now detects the
+Next adapter and prefers this installed binary, with a legacy fallback for older
+JavaScript packages. See the [adapter-aware handoff](type-safety.md#adapter-aware-handoff-unreleased-v12)
+for explicit selection and mixed-tooling behavior; published v1.1 Python keeps
+its existing command.
 
 ## Compile without writing files
 

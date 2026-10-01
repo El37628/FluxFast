@@ -296,7 +296,14 @@ async function installJavaScriptSpecs(
         ...(selectedCodegenSpec ? [selectedCodegenSpec] : [])],
       consumerRoot
     );
-    if (!result.error && result.status === 0) return;
+    if (!result.error && result.status === 0) {
+      const manifestPath = path.join(consumerRoot, "package.json");
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      manifest.dependencies["@fluxfast/core"] = installedPackageVersion("@fluxfast/core");
+      manifest.dependencies["@fluxfast/next"] = installedPackageVersion("@fluxfast/next");
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+      return;
+    }
     if (result.error) throw result.error;
     if (attempt === attempts) {
       throw new Error(

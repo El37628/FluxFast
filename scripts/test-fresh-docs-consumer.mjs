@@ -320,6 +320,11 @@ try {
   const coreVersion = assertInstalledPackage("@fluxfast/core");
   const nextVersion = assertInstalledPackage("@fluxfast/next");
   assert.equal(coreVersion, nextVersion, "the installed Core and Next packages must match");
+  const frontendManifestPath = path.join(frontendRoot, "package.json");
+  const frontendManifest = JSON.parse(fs.readFileSync(frontendManifestPath, "utf8"));
+  frontendManifest.dependencies["@fluxfast/core"] = coreVersion;
+  frontendManifest.dependencies["@fluxfast/next"] = nextVersion;
+  fs.writeFileSync(frontendManifestPath, JSON.stringify(frontendManifest, null, 2) + "\n");
   run(npxCommand, ["--no-install", "fluxfast", "init", "--yes"], frontendRoot);
 
   const documentedFiles = extractFreshConsumerFiles(fs.readFileSync(guidePath, "utf8"));

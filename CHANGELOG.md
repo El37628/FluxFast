@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Make the unreleased Python `fluxfast types` handoff adapter-aware, with
+  dependency-based Next detection, `--adapter next`, installed-only Codegen
+  selection, and the existing generator fallback for published v1.1 tooling.
+  Keep npm, pnpm, Yarn/PnP, and Bun execution local and upgrade errors generic.
 - Add the separate unreleased `fluxfast-codegen` binary with `generate`,
   `--schema-file`, `--check`, and explicit adapter selection through one target
   registry. The only current target is `next`; its output and drift behavior
