@@ -72,28 +72,37 @@ itself does not execute the Core runtime.
 
 ## Generate and check a project
 
-At this extraction step, the adapter renders its page registry and supplies a
-snapshot. Codegen owns the other artifacts and all replacement safeguards. For
-a Next project, keep the higher-level Next API; it supplies the same registry
-automatically. This example illustrates the lower-level adapter contract:
+Codegen's shared scanner renders a registry from the adapter's explicit runtime
+target. The adapter selects its exports; Codegen owns scanning, rendering,
+artifact compilation, and replacement safeguards. For a Next project, keep the
+higher-level Next API; it supplies the unchanged Next target automatically.
+This lower-level example scans existing frontend page modules:
 
 ```js
 import fs from "node:fs";
 import path from "node:path";
-import { generateFluxFastProject, checkFluxFastProject } from "@fluxfast/codegen";
+import {
+  createPagesRegistrySnapshot,
+  generateFluxFastProject,
+  checkFluxFastProject,
+} from "@fluxfast/codegen";
 
 const generatedDir = path.resolve("src/.fluxfast");
+const registry = createPagesRegistrySnapshot({
+  pagesDir: "src/flux-pages",
+  outputFile: path.join(generatedDir, "pages.generated.ts"),
+  target: {
+    runtimeImport: "@fluxfast/next",
+    rootExport: "FluxRoot",
+    applicationPropsExport: "FluxApplicationProps",
+    clientDirective: true,
+  },
+});
 const options = {
+  registry,
   generatedDir,
   schemaContent: fs.readFileSync("backend-schema.json", "utf8"),
   log: false,
-  registry: {
-    pagesDir: path.resolve("src/pages"),
-    outputFile: path.join(generatedDir, "pages.generated.ts"),
-    files: [],
-    identifiers: [],
-    content: "// Adapter-rendered registry.\nexport const pages = {};\n",
-  },
 };
 
 const result = generateFluxFastProject(options);
@@ -110,9 +119,59 @@ console.log(check.current, check.staleFiles);
 // true []
 ```
 
-The example registry is intentionally empty; a real adapter must map
-server-selected component identifiers to allowlisted UI modules. No backend URL,
-credentials, or authorization decision belongs in the generated registry.
+If `src/flux-pages/home/index.tsx` exists, `registry.identifiers` includes
+`"home/index"`, and its registry entry lazy-loads that allowlisted module. The
+snapshot contains source text and resolved paths but creates no files or
+directories. An absent source directory returns an empty registry without
+creating it. Test/spec/story files and private `_`-prefixed basenames are omitted;
+nested symlinks are not followed. Unsafe page paths and duplicate identifiers
+are rejected. No backend URL, credentials, or authorization decision belongs
+in this registry.
+
+## Select an explicit registry target
+
+The shared scanner has no built-in `@fluxfast/next` target. The following is
+an illustrative **React-style host contract**, not an additional released adapter:
+
+```ts
+import { createPagesRegistrySnapshot } from "@fluxfast/codegen";
+import type { FluxPageRegistryTarget, PagesRegistryOptions } from "@fluxfast/codegen";
+
+const target: FluxPageRegistryTarget = {
+  runtimeImport: "@acme/host-runtime",
+  rootExport: "ApplicationRoot",
+  applicationPropsExport: "ApplicationInput",
+  clientDirective: false,
+};
+const options: PagesRegistryOptions = {
+  pagesDir: "src/flux-pages",
+  outputFile: "src/.fluxfast/pages.generated.ts",
+  target,
+};
+const registry = createPagesRegistrySnapshot(options);
+console.log(registry.identifiers);
+// e.g. ["home/index"] for one registered home/index.tsx page.
+```
+
+The generated module imports `ApplicationRoot as FluxRoot` and
+`ApplicationInput as FluxApplicationProps` from the selected runtime; it keeps
+the generated `fluxPages`, `FluxApplication`, and default registry names stable.
+The runtime must also export the `ComponentRegistry` type. Its root receives the
+application props with `registry` fixed to the generated allowlist. This template
+still emits a React `createElement` wrapper; a target alone does not create a
+Vue/Svelte renderer or satisfy the rest of an adapter's lifecycle contract.
+
+`clientDirective: true` adds `"use client";`; false or omission leaves it out.
+`runtimeImport` must be a non-empty string without control characters and is
+serialized as module-specifier data. Root and props export names must be ASCII
+JavaScript identifiers; names that would collide with generated locals are
+aliased. All target fields are build-tool configuration, not server-selected
+page data. Missing or malformed targets throw before scanning or writing.
+
+Omitted `pagesDir` and `outputFile` use `src/flux-pages` and
+`src/.fluxfast/pages.generated.ts`, resolved against the current working directory.
+The shared constructor requires a target; the existing
+`@fluxfast/next/generate` constructor keeps its optional options and Next defaults.
 
 `checkFluxFastProject` compares expected bytes and reports absolute paths for
 missing or stale files. It never creates directories, rewrites schema files,
@@ -124,7 +183,7 @@ symlink traversal and unsafe temporary-file replacement are rejected. See the
 
 ## Public export inventory
 
-These fragments assume `manifest`, `options`, `result`, `check`, and `error`
+These fragments assume `manifest`, `options`, `validation`, `result`, `check`, and `error`
 exist as in the examples above. Types describe data; they do not create a runtime
 object or perform an operation.
 
@@ -147,10 +206,13 @@ object or perform an operation.
 | `compileFluxFastValidatorsWithDiagnostics` | `const result = compileFluxFastValidatorsWithDiagnostics(manifest);` | Produces supported validators and explicit unsupported-contract diagnostics. |
 | `compileJsonSchemaToValidationPlan` | `const plan = compileJsonSchemaToValidationPlan({ type: "string" });` | Produces native Core validation-plan data from one JSON Schema. |
 | `ValidatorCompilationError` | `if (error instanceof ValidatorCompilationError) console.error(error.keyword);` | Identifies validator-specific failures without weakening validation. |
-| `ValidatorCompilationDiagnostic` | `const diagnostic: ValidatorCompilationDiagnostic = result.diagnostics[0];` | Types one omitted contract's path, reason, and optional keyword. |
+| `ValidatorCompilationDiagnostic` | `const diagnostic: ValidatorCompilationDiagnostic \| undefined = validation.diagnostics[0];` | Types one omitted contract's path, reason, and optional keyword. |
 | `ValidatorCompilationOptions` | `const policy: ValidatorCompilationOptions = { unsupported: "report" };` | Selects strict failure or explicit unsupported-contract reporting. |
 | `ValidatorCompilationResult` | `const validation: ValidatorCompilationResult = compileFluxFastValidatorsWithDiagnostics(manifest);` | Types generated source, supported contract names, and diagnostics. |
-| `PagesRegistrySnapshot` | `const registry: PagesRegistrySnapshot = options.registry;` | Types adapter-rendered registry content and confined paths. |
+| `FluxPageRegistryTarget` | `const target: FluxPageRegistryTarget = { runtimeImport: "@acme/host-runtime", rootExport: "ApplicationRoot", applicationPropsExport: "ApplicationInput" };` | Selects the runtime module, root/props exports, and optional client directive. |
+| `PagesRegistryOptions` | `const input: PagesRegistryOptions = { target, pagesDir: "src/flux-pages" };` | Supplies source/output paths and the required adapter target. |
+| `createPagesRegistrySnapshot` | `const registry = createPagesRegistrySnapshot({ target, pagesDir: "src/flux-pages" });` | Scans modules and renders the targeted allowlist without file writes. |
+| `PagesRegistrySnapshot` | `const registry: PagesRegistrySnapshot = options.registry;` | Types registry content, scanned files, identifiers, and resolved paths. |
 | `FluxFastGenerationOptions` | `const input: FluxFastGenerationOptions = options;` | Supplies registry, schema input, output directory, and logging policy. |
 | `generatePagesRegistry` | `generatePagesRegistry(options.registry, { log: false });` | Safely replaces only the adapter-supplied registry. |
 | `generateFluxFastProject` | `const result = generateFluxFastProject(options);` | Compiles and safely persists the full artifact set. |

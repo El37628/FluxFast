@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add an explicit `FluxPageRegistryTarget` and shared read-only page scanner to
+  Codegen. Runtime imports, root/props exports, and the client directive are
+  configurable; Next automatically selects its existing defaults without
+  changing any of its six generated artifact bytes or public signatures.
 - Add the unreleased `@fluxfast/codegen` package for framework-neutral manifest,
   type, validator, route, and mutation compilation plus safe generation and
   read-only drift checks. The existing Next generator delegates shared work
