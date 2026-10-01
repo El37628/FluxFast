@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add the separate unreleased `fluxfast-codegen` binary with `generate`,
+  `--schema-file`, `--check`, and explicit adapter selection through one target
+  registry. The only current target is `next`; its output and drift behavior
+  match the unchanged Next CLI without a competing `fluxfast` binary.
 - Add an explicit `FluxPageRegistryTarget` and shared read-only page scanner to
   Codegen. Runtime imports, root/props exports, and the client directive are
   configurable; Next automatically selects its existing defaults without
