@@ -47,7 +47,8 @@ test("packed Core/server resolves ESM, CommonJS, types, and blocks private deep 
     ], coreRoot));
     for (const target of [
       "dist/server/index.js", "dist/server/index.d.ts", "dist/server/headers.d.ts",
-      "dist/server/types.d.ts", "dist/esm/server/index.js", "dist/esm/package.json",
+      "dist/server/types.d.ts", "dist/server/proxy.d.ts", "dist/server/proxy.js",
+      "dist/esm/server/index.js", "dist/esm/server/proxy.js", "dist/esm/package.json",
     ]) {
       assert.ok(pack.files.some(file => file.path === target), `Missing packed target ${target}`);
     }
@@ -62,7 +63,7 @@ test("packed Core/server resolves ESM, CommonJS, types, and blocks private deep 
       import * as esm from "@fluxfast/core/server";
       const require = createRequire(import.meta.url);
       const cjs = require("@fluxfast/core/server");
-      const expected = ["fetchFluxInitialPage", "removeFluxHopByHopHeaders", "selectFluxForwardHeaders"];
+      const expected = ["createFluxTransportProxy", "fetchFluxInitialPage", "removeFluxHopByHopHeaders", "selectFluxForwardHeaders"];
       assert.deepEqual(Object.keys(esm).sort(), expected);
       assert.deepEqual(Object.keys(cjs).sort(), expected);
       for (const server of [esm, cjs]) {
@@ -73,6 +74,15 @@ test("packed Core/server resolves ESM, CommonJS, types, and blocks private deep 
           backendUrl:"http://127.0.0.1:8000", path:"/missing",
           fetch:async () => new Response(JSON.stringify({detail:"Not Found"}), {status:404}),
         }), {type:"not-found"});
+        const proxy = server.createFluxTransportProxy({
+          backendUrl:"http://127.0.0.1:8000",
+          fetch:async () => new Response("accepted", {status:202}),
+        });
+        const response = await proxy(new Request("https://app.example/rooms", {
+          headers:{"x-fluxfast":"1"},
+        }), "/rooms");
+        assert.equal(response.status, 202);
+        assert.equal(await response.text(), "accepted");
       }
       const browser = await import("@fluxfast/core");
       const browserCjs = require("@fluxfast/core");
@@ -89,7 +99,7 @@ test("packed Core/server resolves ESM, CommonJS, types, and blocks private deep 
     run(process.execPath, ["probe.mjs"], consumer);
 
     const types = `
-      import { fetchFluxInitialPage, selectFluxForwardHeaders, removeFluxHopByHopHeaders,
+      import { createFluxTransportProxy, fetchFluxInitialPage, selectFluxForwardHeaders, removeFluxHopByHopHeaders,
         type FetchFluxInitialPageOptions, type FluxDevelopmentMetadata,
         type FluxInitialPageResult, type FluxTransportProxyOptions } from "@fluxfast/core/server";
       const headers: Headers = selectFluxForwardHeaders(new Headers(), ["X-Tenant"]);
@@ -99,6 +109,8 @@ test("packed Core/server resolves ESM, CommonJS, types, and blocks private deep 
         fetch:globalThis.fetch, diagnostics:false, maxRedirects:20,
       };
       const proxy: FluxTransportProxyOptions = { backendUrl:initial.backendUrl, fetch:globalThis.fetch };
+      const handler: (request:Request, path:string) => Promise<Response> = createFluxTransportProxy(proxy);
+      const proxied: Promise<Response> = handler(new Request("https://app.example/rooms"), "/rooms");
       const pending: Promise<FluxInitialPageResult> = fetchFluxInitialPage(initial);
       const metadata: FluxDevelopmentMetadata = { initialPath:"/rooms", initialServerTrace:{} };
       function consume(result: FluxInitialPageResult): string {

@@ -219,6 +219,12 @@ header selection to `@fluxfast/core/server`. Existing consumer imports and
 generated catch-all files stay unchanged; Next.js still owns request context,
 environment policy, rendering, and its not-found timing boundary.
 
+The production transport handler also delegates HTTP forwarding to
+`createFluxTransportProxy` without changing its public options or generated route.
+Next.js encodes catch-all segments and supplies the supervisor's backend address
+for every request; Core preserves the query, method, body, protocol and credential
+headers, manual redirects, request signal, and open SSE response stream.
+
 Initial SSR fetches follow at most 20 HTTP redirects within the configured
 backend origin, preserving FastAPI canonical-path redirects. Redirects to another
 origin, credential-bearing URLs, and malformed targets fail without forwarding

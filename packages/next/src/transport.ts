@@ -1,19 +1,7 @@
 /** Server-only runtime transport proxy for production FluxFast requests. */
 
 import { resolveFluxBackendUrl } from "./config.js";
-
-const HOP_BY_HOP_HEADERS = [
-  "connection",
-  "content-length",
-  "host",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-] as const;
+import { createFluxTransportProxy } from "@fluxfast/core/server";
 
 export interface FluxTransportHandlerOptions {
   backendUrl?: string;
@@ -26,47 +14,12 @@ export interface FluxTransportRouteContext {
     | { path?: string[] };
 }
 
-function jsonError(status: number, code: string, message: string): Response {
-  return new Response(JSON.stringify({ error: { code, message } }), {
-    status,
-    headers: {
-      "cache-control": "no-store",
-      "content-type": "application/json; charset=utf-8",
-    },
-  });
-}
-
 function safePath(segments: string[] | undefined): string | undefined {
   if (!segments?.length) return "/";
   if (segments.some(segment => !segment || segment === "." || segment === "..")) {
     return undefined;
   }
   return `/${segments.map(encodeURIComponent).join("/")}`;
-}
-
-function removeHopByHopHeaders(headers: Headers): void {
-  // Connection can nominate additional per-hop fields beyond the standard set.
-  // Read it before deleting the header, and ignore malformed field names.
-  for (const token of (headers.get("connection") ?? "").split(",")) {
-    const name = token.trim();
-    if (/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(name)) headers.delete(name);
-  }
-  for (const name of HOP_BY_HOP_HEADERS) headers.delete(name);
-}
-
-function forwardedHeaders(request: Request): Headers {
-  const headers = new Headers(request.headers);
-  removeHopByHopHeaders(headers);
-  // Let the server-side fetch implementation negotiate an encoding that it
-  // can forward without mismatched compression metadata.
-  headers.delete("accept-encoding");
-  return headers;
-}
-
-function responseHeaders(upstream: Response): Headers {
-  const headers = new Headers(upstream.headers);
-  removeHopByHopHeaders(headers);
-  return headers;
 }
 
 /**
@@ -83,52 +36,19 @@ export function createFluxTransportHandler(
   request: Request,
   context: FluxTransportRouteContext
 ) => Promise<Response> {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const proxy = createFluxTransportProxy({
+    // Core owns HTTP mechanics; the adapter supplies its per-request address.
+    // The getter is not read for requests rejected by the shared proxy.
+    get backendUrl() { return resolveFluxBackendUrl(options.backendUrl); },
+    fetch: options.fetch ?? globalThis.fetch,
+  });
 
   return async function fluxTransportHandler(
     request: Request,
     context: FluxTransportRouteContext
   ): Promise<Response> {
-    if (request.headers.get("x-fluxfast") !== "1") {
-      return new Response(null, {
-        status: 404,
-        headers: { "cache-control": "no-store" },
-      });
-    }
-
     const { path: segments } = await context.params;
     const pathname = safePath(segments);
-    if (!pathname) {
-      return jsonError(400, "invalid_transport_path", "Invalid FluxFast path");
-    }
-
-    const source = new URL(request.url);
-    const target = `${resolveFluxBackendUrl(options.backendUrl)}${pathname}${source.search}`;
-    const method = request.method.toUpperCase();
-    const body = method === "GET" || method === "HEAD"
-      ? undefined
-      : await request.arrayBuffer();
-
-    try {
-      const upstream = await fetchImplementation(target, {
-        method,
-        headers: forwardedHeaders(request),
-        body,
-        cache: "no-store",
-        redirect: "manual",
-        signal: request.signal,
-      });
-      return new Response(upstream.body, {
-        status: upstream.status,
-        statusText: upstream.statusText,
-        headers: responseHeaders(upstream),
-      });
-    } catch {
-      return jsonError(
-        503,
-        "transport_unavailable",
-        "FluxFast backend is unavailable"
-      );
-    }
+    return proxy(request, pathname ?? "");
   };
 }
