@@ -1,0 +1,160 @@
+# Codegen API
+
+`@fluxfast/codegen` is the Node.js, framework-neutral compiler package being
+introduced in **unreleased v1.2**. It is not part of the published v1.1.0 payload.
+Do not install `@fluxfast/codegen@1.1.0` from npm: the workspace's synchronized
+development version is not a publication claim.
+
+Ordinary Next.js projects should continue using `fluxfast generate`,
+`fluxfast types APP`, and the existing `@fluxfast/next/generate` API. Their
+arguments and output remain unchanged. This lower-level package is for adapter
+authors and tooling that must compile a FastAPI-owned manifest without installing
+React or Next.js. It does not define backend routes or replace runtime validation.
+
+The root export is the only public entry point. All exports below are classified
+as **Advanced Stable upon v1.2 publication**. Internal compiler modules, naming
+helpers, filesystem helpers, and private deep imports are not public APIs.
+
+## Compile without writing files
+
+Export the manifest from the authoritative FastAPI application first:
+
+```sh
+fluxfast schema backend:app --output backend-schema.json
+```
+
+Then a Node.js tool can inspect or compile it. This example requires the local
+v1.2 source build, not the published v1.1 packages:
+
+```js
+import fs from "node:fs";
+import {
+  parseFluxFastSchemaManifest,
+  compileFluxFastResourceTypes,
+  compileFluxFastValidatorsWithDiagnostics,
+  compileFluxFastPageRoutes,
+  compileFluxFastMutations,
+} from "@fluxfast/codegen";
+
+const manifest = parseFluxFastSchemaManifest(
+  fs.readFileSync("backend-schema.json", "utf8"),
+);
+const types = compileFluxFastResourceTypes(manifest);
+const validation = compileFluxFastValidatorsWithDiagnostics(manifest);
+const routes = compileFluxFastPageRoutes(manifest);
+const mutations = compileFluxFastMutations(manifest);
+
+console.log(typeof types, typeof routes, typeof mutations);
+// string string string — each is deterministic TypeScript source.
+console.log(validation.contracts);
+// e.g. ["RegistrationInput", "CreateRoomBody"] for supported input contracts.
+console.log(validation.diagnostics);
+// [] when every contract is supported; otherwise precise contract/path reasons.
+```
+
+Diagnostics never mean an unsupported contract received a weaker validator.
+That contract's validator is omitted; its TypeScript type remains available,
+and FastAPI still validates every actual request. Strict
+`compileFluxFastValidators(manifest)` throws instead of reporting omissions.
+
+## Build a native validation plan
+
+```js
+import { compileJsonSchemaToValidationPlan } from "@fluxfast/codegen";
+
+console.log(compileJsonSchemaToValidationPlan({ type: "string", minLength: 2 }));
+// { root: { kind: "string", minLength: 2 } }
+```
+
+This returns plan data, not a validation result. An application uses Core's
+native validation runtime to evaluate a value against the plan. Generation
+itself does not execute the Core runtime.
+
+## Generate and check a project
+
+At this extraction step, the adapter renders its page registry and supplies a
+snapshot. Codegen owns the other artifacts and all replacement safeguards. For
+a Next project, keep the higher-level Next API; it supplies the same registry
+automatically. This example illustrates the lower-level adapter contract:
+
+```js
+import fs from "node:fs";
+import path from "node:path";
+import { generateFluxFastProject, checkFluxFastProject } from "@fluxfast/codegen";
+
+const generatedDir = path.resolve("src/.fluxfast");
+const options = {
+  generatedDir,
+  schemaContent: fs.readFileSync("backend-schema.json", "utf8"),
+  log: false,
+  registry: {
+    pagesDir: path.resolve("src/pages"),
+    outputFile: path.join(generatedDir, "pages.generated.ts"),
+    files: [],
+    identifiers: [],
+    content: "// Adapter-rendered registry.\nexport const pages = {};\n",
+  },
+};
+
+const result = generateFluxFastProject(options);
+console.log(result.generatedFiles.map(file => path.basename(file)));
+// ["pages.generated.ts", "types.generated.ts", "validators.generated.ts",
+//  "routes.generated.ts", "mutations.generated.ts"]
+console.log(path.basename(result.registryPath));
+// pages.generated.ts — also available directly as registryPath.
+console.log(path.basename(result.schemaFile));
+// schema.generated.json — persisted schema is reported separately.
+
+const check = checkFluxFastProject(options);
+console.log(check.current, check.staleFiles);
+// true []
+```
+
+The example registry is intentionally empty; a real adapter must map
+server-selected component identifiers to allowlisted UI modules. No backend URL,
+credentials, or authorization decision belongs in the generated registry.
+
+`checkFluxFastProject` compares expected bytes and reports absolute paths for
+missing or stale files. It never creates directories, rewrites schema files,
+or replaces artifacts. All schema-backed output compiles before generation's
+first write. Replacements are atomic **per file**, not a transaction across all
+six files. Destinations must stay inside the selected output directory;
+symlink traversal and unsafe temporary-file replacement are rejected. See the
+[generated artifact contract](generated-artifacts.md) for full safety semantics.
+
+## Public export inventory
+
+These fragments assume `manifest`, `options`, `result`, `check`, and `error`
+exist as in the examples above. Types describe data; they do not create a runtime
+object or perform an operation.
+
+<!-- codegen-api-examples:start -->
+| Export | Declaration or use | Purpose |
+| --- | --- | --- |
+| `parseFluxFastSchemaManifest` | `const manifest = parseFluxFastSchemaManifest(json);` | Parses and validates exported schema/1 or schema/2 JSON. |
+| `validateFluxFastSchemaManifest` | `const manifest = validateFluxFastSchemaManifest(value);` | Validates an already-parsed unknown value. |
+| `FluxFastSchemaManifest` | `const manifest: FluxFastSchemaManifest = validateFluxFastSchemaManifest(value);` | Types the validated schema contract. |
+| `JsonSchema` | `const schema: JsonSchema = { type: "string" };` | Types the supported JSON Schema input object. |
+| `SchemaManifestValidationError` | `if (error instanceof SchemaManifestValidationError) console.error(error.path);` | Identifies a closed-shape or schema-manifest validation failure. |
+| `compileFluxFastResourceTypes` | `const source = compileFluxFastResourceTypes(manifest);` | Produces deterministic application/resource/mutation TypeScript types. |
+| `findFluxFastContractsWithUnknownTypes` | `const names = findFluxFastContractsWithUnknownTypes(manifest);` | Reports root contracts that compile to unknown types. |
+| `findFluxFastResourceKeysWithUnknownTypes` | `const keys = findFluxFastResourceKeysWithUnknownTypes(manifest);` | Reports resources whose generated type includes unknown. |
+| `findFluxFastSchemaModeConflicts` | `const conflicts = findFluxFastSchemaModeConflicts(manifest);` | Reports validation/serialization contracts with colliding normalized names. |
+| `SchemaCompilationError` | `if (error instanceof SchemaCompilationError) console.error(error.path);` | Identifies a deterministic compiler error at one schema location. |
+| `compileFluxFastPageRoutes` | `const source = compileFluxFastPageRoutes(manifest);` | Produces named frontend builders for backend-owned page routes. |
+| `compileFluxFastMutations` | `const source = compileFluxFastMutations(manifest);` | Produces typed helpers for backend-owned JSON mutation routes. |
+| `compileFluxFastValidators` | `const source = compileFluxFastValidators(manifest);` | Compiles validators strictly; unsupported contracts cause an error. |
+| `compileFluxFastValidatorsWithDiagnostics` | `const result = compileFluxFastValidatorsWithDiagnostics(manifest);` | Produces supported validators and explicit unsupported-contract diagnostics. |
+| `compileJsonSchemaToValidationPlan` | `const plan = compileJsonSchemaToValidationPlan({ type: "string" });` | Produces native Core validation-plan data from one JSON Schema. |
+| `ValidatorCompilationError` | `if (error instanceof ValidatorCompilationError) console.error(error.keyword);` | Identifies validator-specific failures without weakening validation. |
+| `ValidatorCompilationDiagnostic` | `const diagnostic: ValidatorCompilationDiagnostic = result.diagnostics[0];` | Types one omitted contract's path, reason, and optional keyword. |
+| `ValidatorCompilationOptions` | `const policy: ValidatorCompilationOptions = { unsupported: "report" };` | Selects strict failure or explicit unsupported-contract reporting. |
+| `ValidatorCompilationResult` | `const validation: ValidatorCompilationResult = compileFluxFastValidatorsWithDiagnostics(manifest);` | Types generated source, supported contract names, and diagnostics. |
+| `PagesRegistrySnapshot` | `const registry: PagesRegistrySnapshot = options.registry;` | Types adapter-rendered registry content and confined paths. |
+| `FluxFastGenerationOptions` | `const input: FluxFastGenerationOptions = options;` | Supplies registry, schema input, output directory, and logging policy. |
+| `generatePagesRegistry` | `generatePagesRegistry(options.registry, { log: false });` | Safely replaces only the adapter-supplied registry. |
+| `generateFluxFastProject` | `const result = generateFluxFastProject(options);` | Compiles and safely persists the full artifact set. |
+| `FluxFastGenerationResult` | `const written: FluxFastGenerationResult = generateFluxFastProject(options);` | Types paths, generated validator names, and diagnostics after generation. |
+| `checkFluxFastProject` | `const check = checkFluxFastProject(options);` | Reports deterministic drift without any file writes. |
+| `FluxFastGenerationCheckResult` | `const status: FluxFastGenerationCheckResult = checkFluxFastProject(options);` | Types current/stale status, checked paths, and validator diagnostics. |
+<!-- codegen-api-examples:end -->

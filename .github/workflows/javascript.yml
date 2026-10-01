@@ -46,4 +46,5 @@ jobs:
       - run: npm install --global pnpm@10.15.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fluxfast/core run build
+      - run: pnpm --filter @fluxfast/codegen run build
       - run: pnpm --filter @fluxfast/next exec vitest run tests/generated-artifact-contract.test.ts tests/adapter-baseline.test.ts

@@ -1249,3 +1249,26 @@ export function findFluxFastContractsWithUnknownTypes(
   const manifest = validateFluxFastSchemaManifest(value);
   return new ResourceTypeCompiler(manifest).contractsWithUnknownTypes();
 }
+
+/** Diagnose validation/serialization contracts that normalize to one name. */
+export function findFluxFastSchemaModeConflicts(value: unknown): string[] {
+  const manifest = validateFluxFastSchemaManifest(value);
+  const generatedNames = new Map<
+    string,
+    { mode: string; sourceName: string }
+  >();
+  const conflicts: string[] = [];
+  for (const sourceName of Object.keys(manifest.types ?? {}).sort()) {
+    const entry = manifest.types![sourceName];
+    const generatedName = pascalIdentifier(sourceName, "Type");
+    const previous = generatedNames.get(generatedName);
+    if (previous && previous.mode !== entry.mode) {
+      conflicts.push(
+        `${JSON.stringify(previous.sourceName)} (${previous.mode}) and ${JSON.stringify(sourceName)} (${entry.mode}) both generate ${generatedName}`
+      );
+    } else if (!previous) {
+      generatedNames.set(generatedName, { mode: entry.mode, sourceName });
+    }
+  }
+  return conflicts;
+}

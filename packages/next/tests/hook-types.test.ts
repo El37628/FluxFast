@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { compileFluxFastResourceTypes } from "../src/schema-compiler";
+import { compileFluxFastResourceTypes } from "@fluxfast/codegen";
 
 describe("generated resource hook types", () => {
   it("infers registered keys while preserving dynamic and explicit types", () => {

@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add the unreleased `@fluxfast/codegen` package for framework-neutral manifest,
+  type, validator, route, and mutation compilation plus safe generation and
+  read-only drift checks. The existing Next generator delegates shared work
+  while preserving its public signatures, CLI, and all six artifact bytes.
 - Begin the unreleased v1.2 adapter foundation with a separate
   `@fluxfast/core/server` entry point, framework-neutral header sanitation and
   SSR allowlist helpers, internal same-origin redirect validation, and server

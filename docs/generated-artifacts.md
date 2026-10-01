@@ -31,6 +31,12 @@ user-owned and preserved.
 
 ## Stable generated API
 
+Under unreleased v1.2 development, the framework-neutral compilers and safe
+file-writing/checking infrastructure live in [`@fluxfast/codegen`](codegen-api.md).
+Next.js retains its public generator API and registry rendering while delegating
+the shared work. This ownership change preserves all six Next artifact bytes;
+it does not change the published v1.1 setup commands or manifest protocol.
+
 Application code may depend on these semantic exports:
 
 | Artifact | Public generated concepts |

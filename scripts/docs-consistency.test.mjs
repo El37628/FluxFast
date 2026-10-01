@@ -68,7 +68,7 @@ function validationFormatsFromDocumentation() {
 }
 
 function generatedFilesFromRuntime() {
-  const source = read("packages/next/src/generate.ts");
+  const source = read("packages/next/src/generate.ts") + read("packages/codegen/src/generate.ts");
   return [
     ...new Set(
       [...source.matchAll(/["'](?:[^"']*\/)?([a-z]+\.generated\.(?:json|ts))["']/g)]
@@ -159,7 +159,7 @@ test("keeps protocol, schema, and capability names aligned across runtimes and d
   assert.equal(namedString(coreProtocol, "PROTOCOL_VERSION"), facts.protocolVersion);
 
   const pythonSchema = read("python/fluxfast/src/fluxfast/schema_manifest.py");
-  const nextSchema = read("packages/next/src/schema-manifest.ts");
+  const nextSchema = read("packages/codegen/src/schema-manifest.ts");
   const pythonSchemaVersions = [
     namedString(pythonSchema, "SCHEMA_MANIFEST_V1"),
     namedString(pythonSchema, "SCHEMA_MANIFEST_V2"),

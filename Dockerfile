@@ -19,6 +19,7 @@ WORKDIR /workspace
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/package.json
+COPY packages/codegen/package.json packages/codegen/package.json
 COPY packages/next/package.json packages/next/package.json
 COPY packages/next/bin packages/next/bin
 COPY packages/devtools/package.json packages/devtools/package.json
@@ -36,6 +37,7 @@ COPY tests/browser/frontend tests/browser/frontend
 RUN python3 -m venv /opt/fluxfast \
     && /opt/fluxfast/bin/python -m pip install './python/fluxfast[redis]' \
     && pnpm --filter @fluxfast/core run build \
+    && pnpm --filter @fluxfast/codegen run build \
     && pnpm --filter @fluxfast/next run build \
     && pnpm --filter @fluxfast/devtools run build \
     && /opt/fluxfast/bin/fluxfast types tests.browser.backend:app \
