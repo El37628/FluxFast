@@ -54,7 +54,7 @@ The following contracts are stable throughout the 1.x release line:
 | Surface | Stable contract |
 | --- | --- |
 | Python package | The documented `fluxfast.__all__` names, call shapes, and behavior. |
-| Core package | The `@fluxfast/core` root path, its declarations, and framework-neutral runtime behavior. |
+| Core package | The `@fluxfast/core` root path, its declarations, and framework-neutral runtime behavior; the additive `@fluxfast/core/server` integration surface under unreleased v1.2 development. |
 | Next package | The five documented `@fluxfast/next` export-map paths and their per-path declarations. |
 | DevTools package | The `@fluxfast/devtools` root path, `FluxDevtools`, `FluxDevtoolsProps`, and development/production conditional behavior introduced in v1.1. |
 | Browser protocol | `fluxfast/1`, its media type, headers, capabilities, envelopes, events, and patch semantics. |
@@ -128,7 +128,7 @@ Markdown compiler.
   ],
   "packageEntryPoints": {
     "fluxfast": ["fluxfast"],
-    "@fluxfast/core": ["."],
+    "@fluxfast/core": [".", "./server"],
     "@fluxfast/next": [
       ".",
       "./client",

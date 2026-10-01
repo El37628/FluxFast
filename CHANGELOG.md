@@ -5,6 +5,13 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+### Added
+
+- Begin the unreleased v1.2 adapter foundation with a separate
+  `@fluxfast/core/server` entry point, framework-neutral header sanitation and
+  SSR allowlist helpers, internal same-origin redirect validation, and server
+  contract types. Existing Core root exports and Next.js behavior are unchanged.
+
 ## [1.1.0] - 2026-09-30
 
 ### Added

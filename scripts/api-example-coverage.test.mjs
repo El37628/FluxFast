@@ -98,6 +98,11 @@ const contracts = [
       "advanced-api-examples-next"
     ),
   },
+  {
+    label: "Core Server Advanced Stable",
+    expected: textInventory("core-api.md", "core-server-api-advanced"),
+    actual: exampleInventory("core-api.md", "core-server-api-examples"),
+  },
 ];
 
 for (const contract of contracts) {

@@ -32,6 +32,11 @@
       "import": "./dist/esm/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/esm/server/index.js",
+      "require": "./dist/server/index.js"
     }
   },
   "scripts": {
