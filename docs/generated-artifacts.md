@@ -37,6 +37,9 @@ Codegen scans and renders page registries through explicit runtime/export target
 Next.js retains its public generator API and automatically supplies its default
 target. This ownership change preserves all six Next artifact bytes;
 it does not change the published v1.1 setup commands or manifest protocol.
+The separate unreleased `fluxfast-codegen generate --adapter next` binary uses
+the same artifact engine without replacing Next's existing `fluxfast generate`
+binary. Its `--schema-file` and read-only `--check` modes preserve the same bytes.
 
 Application code may depend on these semantic exports:
 

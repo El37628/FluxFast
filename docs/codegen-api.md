@@ -11,9 +11,84 @@ arguments and output remain unchanged. This lower-level package is for adapter
 authors and tooling that must compile a FastAPI-owned manifest without installing
 React or Next.js. It does not define backend routes or replace runtime validation.
 
-The root export is the only public entry point. All exports below are classified
+The root export is the only public JavaScript entry point. All exports below are classified
 as **Advanced Stable upon v1.2 publication**. Internal compiler modules, naming
 helpers, filesystem helpers, and private deep imports are not public APIs.
+The separate `fluxfast-codegen` binary is documented below; its private CLI
+implementation is not an importable package API.
+
+## Generic Codegen CLI (unreleased)
+
+The new binary is named `fluxfast-codegen`, not `fluxfast`. It can be installed
+alongside Next's existing `fluxfast` binary without a package-manager name
+collision. Existing Next.js applications may keep `fluxfast generate`; both
+commands delegate to the same scanner, schema compilers, and safe writer.
+The existing Next CLI also retains its application-package compatibility checks;
+the generic CLI only compiles artifacts and does not validate an installed runtime.
+
+The command and meaningful flags are:
+
+```sh
+fluxfast-codegen generate --adapter next --schema-file backend-schema.json
+fluxfast-codegen generate --adapter next --schema-file backend-schema.json --check
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--adapter next` | Selects the Next registry target. `next` is the default and the only currently supported choice; other names fail rather than silently selecting it. |
+| `--schema-file PATH` | Reads an authoritative exported manifest relative to the directory where the command was invoked, validates it, and includes its exact bytes in generation or drift checking. |
+| `--check` | Compares expected artifacts without creating directories or changing files. |
+
+The CLI finds the nearest `package.json` in the current directory or its parents
+without evaluating project configuration. The Next target uses the same root or
+`src/` layout precedence as the legacy Next CLI. It scans that layout's
+`flux-pages` directory and writes to its `.fluxfast` directory.
+Without `--schema-file`, it reads an existing `.fluxfast/schema.generated.json`;
+if neither schema source exists, it generates or checks only the registry.
+
+For a `src/` project with an exported schema whose validators are all supported,
+successful generation prints:
+
+```text
+✓ Generated FluxFast schema at src/.fluxfast/schema.generated.json
+✓ Generated FluxFast registry at src/.fluxfast/pages.generated.ts
+✓ Generated FluxFast types from src/.fluxfast/schema.generated.json
+  src/.fluxfast/types.generated.ts
+  src/.fluxfast/validators.generated.ts
+  src/.fluxfast/routes.generated.ts
+  src/.fluxfast/mutations.generated.ts
+```
+
+The corresponding successful check prints:
+
+```text
+✓ Generated FluxFast files are current.
+```
+
+Exit `0` means generation succeeded or checked files are current. Exit `1`
+means missing/stale files or a project, input, compilation, or filesystem error.
+Exit `2` means invalid command usage, repeated/missing flags, or an unsupported
+adapter. Unsupported-validator diagnostics remain visible even when generation
+or checking succeeds; they do not weaken backend validation. Compilation errors
+leave existing artifacts unchanged, and check mode is always read-only.
+
+This CLI is not yet on npm. To exercise it from a source checkout, build Core
+and Codegen first, then invoke the local binary **from the frontend project**:
+
+```sh
+# In the FluxFast source checkout:
+corepack pnpm --filter @fluxfast/core build
+corepack pnpm --filter @fluxfast/codegen build
+
+# In the consuming frontend, using the actual path to that checkout:
+node /path/to/FluxFast/packages/codegen/bin/fluxfast-codegen.js generate --adapter next --schema-file backend-schema.json
+node /path/to/FluxFast/packages/codegen/bin/fluxfast-codegen.js generate --adapter next --schema-file backend-schema.json --check
+```
+
+The compiler does not need React or Next.js installed to run. Its generated
+Next registry does need the selected runtime when the application compiles and
+renders. The Python `fluxfast types` command continues using its existing Next
+tooling in this development step; adapter detection and handoff are separate work.
 
 ## Compile without writing files
 

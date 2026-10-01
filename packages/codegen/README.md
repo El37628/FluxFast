@@ -29,5 +29,19 @@ Next.js bytes. Next supplies its default registry target; shared scanning,
 rendering, and safe persistence live in Codegen. Other tooling must explicitly
 select its runtime exports rather than inheriting a hardcoded Next import.
 
+The unreleased package also provides a separate binary, without competing for
+Next's existing `fluxfast` command:
+
+```sh
+fluxfast-codegen generate --adapter next --schema-file backend-schema.json
+fluxfast-codegen generate --adapter next --schema-file backend-schema.json --check
+```
+
+`next` is the default and currently the only CLI target. The command discovers
+the nearest frontend `package.json` and preserves the existing root/src layout.
+Checks never write files. Exit codes are `0` for generated/current, `1` for
+stale files or generation errors, and `2` for invalid usage or unsupported targets.
+Use a source build until publication; this is not an npm installation instruction.
+
 See the [Codegen API guide](https://github.com/El37628/FluxFast/blob/main/docs/codegen-api.md)
-for complete generation/check examples, diagnostics, and every public export.
+for source-build commands, complete API and CLI examples, diagnostics, and every public export.

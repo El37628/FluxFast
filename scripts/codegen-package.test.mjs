@@ -40,7 +40,9 @@ test("Codegen has one explicit documented Advanced Stable surface, with an examp
     ".": { types: "./dist/index.d.ts", import: "./dist/esm/index.js", require: "./dist/index.js", default: "./dist/index.js" },
   });
   const manifest = JSON.parse(fs.readFileSync(path.join(repository, "packages/codegen/package.json"), "utf8"));
-  assert.equal(manifest.bin, undefined, "a generic CLI is not part of compiler extraction");
+  assert.deepEqual(manifest.bin, { "fluxfast-codegen": "bin/fluxfast-codegen.js" });
+  const nextManifest = JSON.parse(fs.readFileSync(path.join(repository, "packages/next/package.json"), "utf8"));
+  assert.deepEqual(nextManifest.bin, { fluxfast: "bin/fluxfast.js" });
   assert.deepEqual(manifest.dependencies, { "@fluxfast/core": `^${manifest.version}` });
   assert.equal(manifest.peerDependencies, undefined);
   const guide = fs.readFileSync(path.join(repository, "docs/codegen-api.md"), "utf8");
@@ -64,7 +66,7 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
       const [pack] = JSON.parse(run("npm", ["pack", "--ignore-scripts", "--offline", "--json", "--pack-destination", temporary], path.join(repository, "packages", owner)));
       archives.push(path.join(temporary, pack.filename));
       if (owner === "codegen") {
-        for (const target of ["README.md", "LICENSE", "dist/index.d.ts", "dist/index.js", "dist/esm/index.js", "dist/esm/package.json"]) {
+        for (const target of ["README.md", "LICENSE", "bin/fluxfast-codegen.js", "dist/cli/index.js", "dist/cli/targets.js", "dist/cli/project.js", "dist/index.d.ts", "dist/index.js", "dist/esm/index.js", "dist/esm/package.json"]) {
           assert.ok(pack.files.some(file => file.path === target), `missing ${target}`);
         }
       }
@@ -131,13 +133,30 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
         assert.deepEqual(api.checkFluxFastProject(options).staleFiles, [options.registry.outputFile]);
         assert.equal(fs.readFileSync(options.registry.outputFile, "utf8"), "stale registry");
       }
-      for (const specifier of ["@fluxfast/codegen/schema-compiler", "@fluxfast/codegen/pages-registry", "@fluxfast/codegen/dist/index.js"]) {
+      for (const specifier of ["@fluxfast/codegen/schema-compiler", "@fluxfast/codegen/pages-registry", "@fluxfast/codegen/cli", "@fluxfast/codegen/cli/targets", "@fluxfast/codegen/dist/index.js"]) {
         assert.throws(() => require(specifier), {code:"ERR_PACKAGE_PATH_NOT_EXPORTED"});
         await assert.rejects(import(specifier), {code:"ERR_PACKAGE_PATH_NOT_EXPORTED"});
       }
     `;
     fs.writeFileSync(path.join(consumer, "probe.mjs"), probe);
     run(process.execPath, ["probe.mjs"], consumer);
+    const cliProject = path.join(consumer, "cli-project");
+    fs.mkdirSync(path.join(cliProject, "src/app"), { recursive: true });
+    fs.writeFileSync(path.join(cliProject, "package.json"), '{"private":true}');
+    const baseline = JSON.parse(fs.readFileSync(path.join(fixture, "baseline.json"), "utf8"));
+    for (const [file, content] of Object.entries(baseline.pages)) {
+      const source = path.join(cliProject, "src/flux-pages", file);
+      fs.mkdirSync(path.dirname(source), { recursive: true });
+      fs.writeFileSync(source, content);
+    }
+    fs.writeFileSync(path.join(cliProject, "backend-schema.json"), fs.readFileSync(path.join(fixture, "schema.generated.json")));
+    const cli = path.join(consumer, "node_modules/@fluxfast/codegen/bin/fluxfast-codegen.js");
+    assert.match(run(process.execPath, [cli, "--help"], cliProject), /fluxfast-codegen generate/);
+    run(process.execPath, [cli, "generate", "--adapter", "next", "--schema-file", "backend-schema.json"], cliProject);
+    assert.match(run(process.execPath, [cli, "generate", "--schema-file", "backend-schema.json", "--check"], cliProject), /files are current/);
+    for (const filename of Object.keys(baseline.artifactDigests)) {
+      assert.deepEqual(fs.readFileSync(path.join(cliProject, "src/.fluxfast", filename)), fs.readFileSync(path.join(fixture, filename)));
+    }
     const types = `
       import { compileJsonSchemaToValidationPlan, compileFluxFastValidatorsWithDiagnostics,
         generateFluxFastProject, checkFluxFastProject, validateFluxFastSchemaManifest, createPagesRegistrySnapshot,
