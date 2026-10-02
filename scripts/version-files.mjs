@@ -24,6 +24,7 @@ const WORKSPACE_DEPENDENCIES = [
   ["packages/devtools", "@fluxfast/react", "pnpm-lock.yaml packages/devtools @fluxfast/react"],
   ["packages/codegen", "@fluxfast/core", "pnpm-lock.yaml packages/codegen @fluxfast/core"],
   ["packages/vite", "@fluxfast/core", "pnpm-lock.yaml packages/vite @fluxfast/core"],
+  ["packages/vite", "@fluxfast/codegen", "pnpm-lock.yaml packages/vite @fluxfast/codegen"],
   ["packages/vite", "@fluxfast/react", "pnpm-lock.yaml packages/vite @fluxfast/react"],
 ];
 
@@ -80,7 +81,10 @@ export function rewriteVersionFiles(files, version) {
     if (file === "packages/devtools/package.json") {
       manifest.dependencies["@fluxfast/react"] = `^${version}`;
     }
-    if (file === "packages/vite/package.json") manifest.dependencies["@fluxfast/react"] = `^${version}`;
+    if (file === "packages/vite/package.json") {
+      manifest.dependencies["@fluxfast/react"] = `^${version}`;
+      manifest.dependencies["@fluxfast/codegen"] = `^${version}`;
+    }
     rewritten[file] = `${JSON.stringify(manifest, null, 2)}\n`;
   }
 
@@ -163,7 +167,7 @@ export function readVersionSnapshot(files) {
   snapshot["packages/codegen/package.json @fluxfast/core"] = JSON.parse(
     files["packages/codegen/package.json"]
   ).dependencies?.["@fluxfast/core"];
-  for (const [owner, dependency] of [["next", "react"], ["react", "core"], ["devtools", "react"], ["vite", "core"], ["vite", "react"]]) {
+  for (const [owner, dependency] of [["next", "react"], ["react", "core"], ["devtools", "react"], ["vite", "core"], ["vite", "codegen"], ["vite", "react"]]) {
     snapshot[`packages/${owner}/package.json @fluxfast/${dependency}`] = JSON.parse(
       files[`packages/${owner}/package.json`]
     ).dependencies?.[`@fluxfast/${dependency}`];
