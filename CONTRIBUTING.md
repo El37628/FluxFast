@@ -40,6 +40,13 @@ Next harness. `pnpm test:adapter-conformance:production` also builds the fixture
 and checks that production startup and test execution do not modify its inputs.
 The existing `test:e2e` and `test:e2e:production` commands remain aliases. DevTools
 UI and distributed-worker suites keep their separate commands and CI coverage.
+Use `pnpm test:adapter-conformance:react` and
+`pnpm test:adapter-conformance:react:production` for the same assertions on React.
+`pnpm test:e2e:react:distributed:production` reuses the existing three-worker Redis
+scenarios; `pnpm test:consumer:react:browser` verifies initialized actual packed
+consumers, cold hydration, first navigation, automatic source synchronization and
+production browsers without source or build tooling. See the suite guide for
+Node/React peer selection, ports and isolated test outputs.
 
 Broader checks are `pnpm test:python`, `pnpm typecheck`, `pnpm test`, `pnpm build`,
 and `pnpm test:e2e`. Root TypeScript scripts build workspace dependencies before

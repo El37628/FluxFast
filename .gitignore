@@ -16,4 +16,11 @@ tests/browser/frontend/AGENTS.md
 tests/browser/frontend/CLAUDE.md
 tests/browser/frontend/next-env.d.ts
 tests/browser/frontend/src/.fluxfast/
+tests/browser/react-frontend/AGENTS.md
+tests/browser/react-frontend/CLAUDE.md
+tests/browser/react-frontend/src/.fluxfast/
+# React browser fixture UI is generated from the single shared Next fixture.
+tests/browser/react-frontend/src/components/
+tests/browser/react-frontend/src/flux-pages/
+tests/browser/react-frontend/src/lib/
 NEXT_PHASE.md

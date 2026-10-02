@@ -3,4 +3,5 @@ linkWorkspacePackages: true
 packages:
   - "packages/*"
   - "tests/browser/frontend"
+  - "tests/browser/react-frontend"
   - "tests/adapter-conformance"

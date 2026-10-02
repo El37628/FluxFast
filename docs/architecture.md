@@ -37,8 +37,10 @@ Separate React server/client entries now provide the unreleased SSR/hydration
 boundary for host authors. The source-development [Vite host](vite-host.md) adds
 asset serving, client/SSR builds, initialization and HTTP lifecycle cleanup.
 The source Python CLI now selects this host for generation and the existing
-development/production supervisor. Full browser conformance remains future
-work; this is not a completed or published frontend adapter.
+development/production supervisor. React/Vite now runs the same browser contract
+in both modes, including packed initialized consumers and three-worker Redis
+production tests. It remains unreleased until final release gates and registry
+publication complete.
 
 Live Resources add a synchronization path without changing that ownership:
 

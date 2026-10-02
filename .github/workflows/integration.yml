@@ -169,6 +169,71 @@ jobs:
           --samples 2
           --skip-build
 
+  react-browser:
+    name: React/Vite browser flow (Node ${{ matrix.node }}, React ${{ matrix.react }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: "22"
+            react: "19.0.0"
+          - node: "24"
+            react: "19.3.0"
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - run: npm install --global pnpm@10.15.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - run: python -m pip install 'python/fluxfast[dev,redis]'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir tests/browser/react-frontend exec playwright install --with-deps chromium
+      - name: Verify unchanged shared contracts on React in development
+        run: pnpm test:adapter-conformance:react
+        env:
+          FLUXFAST_E2E_PYTHON: python
+      - name: Verify authoritative Python React handoff and read-only drift checks
+        run: |
+          python -m fluxfast.cli types tests.browser.backend:app --frontend tests/browser/react-frontend
+          python -m fluxfast.cli types tests.browser.backend:app --frontend tests/browser/react-frontend --check
+          pnpm --dir tests/browser/react-frontend run generate --check --check-schema
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          PYTHONPATH: python/fluxfast/src:.
+      - name: Verify unchanged shared contracts on React in production
+        run: pnpm test:adapter-conformance:react:production
+        env:
+          FLUXFAST_E2E_PYTHON: python
+      - name: Verify Redis isolation and live synchronization across three workers
+        run: pnpm test:e2e:react:distributed:production
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_E2E_PORT: "3180"
+          FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      - name: Verify initialized packed browser consumer and React peer floor
+        run: pnpm test:consumer:react:browser
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_REACT_CONSUMER_VERSION: ${{ matrix.react }}
+
   distributed-browser:
     name: Distributed browser flow
     runs-on: ubuntu-latest

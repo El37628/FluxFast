@@ -6,10 +6,10 @@ ownership; it does not require another adapter to reproduce Next.js internals.
 Application developers should start with the [Next.js adapter](nextjs-adapter.md)
 and [Stable APIs](stable-apis.md).
 
-Next.js is the only implemented frontend host. The multi-adapter foundation on
+Next.js is the published frontend host. The multi-adapter foundation on
 `main` is **unreleased v1.2 development**: `@fluxfast/core/server` and
 `@fluxfast/codegen` are not available in published v1.1 packages. This document
-does not announce a React or Vite adapter, a React SSR host, or a new release.
+does not announce a new release.
 Existing Next.js applications retain their imports, generated filenames, CLI
 entry points, and deployment behavior.
 
@@ -18,11 +18,11 @@ into the **unreleased** `@fluxfast/react` package. `@fluxfast/next` re-exports
 those same context/components/hooks, and DevTools consumes their shared context.
 The separate [React SSR/hydration boundary](react-ssr.md) provides a Node server
 entry and browser hydration entry without widening the bindings browser graph.
-It is not a completed frontend host: Next remains the only implemented host
-until Vite assets/build, initialization, Python integration and conformance are ready.
 The source-development [Vite host](vite-host.md) now supplies assets, dual builds,
-HTTP streaming and lifecycle cleanup; initialization, Python supervision and full
-shared browser conformance are still pending before adapter promotion/publication.
+HTTP streaming, initialization, Python supervision and lifecycle cleanup. Next
+and React/Vite execute the identical shared browser expectations in both modes;
+packed consumers and three-worker Redis production tests add deployment evidence.
+Final release gates and registry publication remain pending.
 See the [React bindings reference](react-api.md) for responsibilities, examples,
 and the complete new package inventory.
 
@@ -459,8 +459,8 @@ A production-capable integration must also preserve:
 Phase A does **not** add React production detection or a new process abstraction.
 The subsequent source-development React phase integrates its Vite host with
 the existing `fluxfast dev/build/start/doctor` lifecycle; it does not introduce
-a second supervisor. Its full shared browser conformance and publication are
-still pending. A future host must implement and verify this lifecycle explicitly;
+a second supervisor. Its shared browser conformance now executes in both modes;
+publication remains pending. A future host must implement and verify this lifecycle explicitly;
 this document alone does not make it supported. See [production](production.md)
 and [containers](containers.md) for current commands and operational boundaries.
 
@@ -512,12 +512,16 @@ Run from the repository root after the [suite's setup](../tests/adapter-conforma
 ```sh
 pnpm test:adapter-conformance
 pnpm test:adapter-conformance:production
+pnpm test:adapter-conformance:react
+pnpm test:adapter-conformance:react:production
+pnpm test:e2e:react:distributed:production
+pnpm test:consumer:react:browser
 ```
 
 Both modes are required: development diagnostic assertions and production-only
 deployment assertions execute in their own mode. Their opposite-mode skips are
-not a waiver. Next is the current registered harness; these commands do not
-imply another adapter exists. Production also verifies unchanged frontend
+not a waiver. Next and React are registered harnesses; the default remains Next.
+Production also verifies unchanged frontend
 inputs and graceful process cleanup.
 
 Passing the browser suite is necessary, not sufficient. Core/package regressions
