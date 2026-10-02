@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import net from "node:net";
 import test from "node:test";
 import { createProcessHarness } from "../tests/adapter-conformance/process-harness.mjs";
@@ -96,4 +97,17 @@ test("forced shutdown releases the fixture port but cannot pass graceful-shutdow
     await assert.rejects(harness.stop(), /graceful shutdown timed out/);
     await assert.rejects(fetch(harness.baseUrl));
   } finally { await harness.stop(); }
+});
+
+test("container runner discovers the existing contract cases after the suite moves", () => {
+  const output = execFileSync(process.platform === "win32" ? "pnpm.cmd" : "pnpm", [
+    "--dir", "tests/browser/frontend", "exec", "playwright", "test",
+    "--config", "playwright.container.config.ts", "--list",
+  ], {
+    encoding: "utf8",
+    env: { ...process.env, FLUXFAST_CONTAINER_BASE_URL: "http://127.0.0.1:3000", FLUXFAST_E2E_PRODUCTION: "1" },
+  });
+  assert.match(output, /critical-flow\.spec\.ts/);
+  assert.match(output, /live-flow\.spec\.ts/);
+  assert.match(output, /Total: 17 tests in 2 files/);
 });

@@ -6,7 +6,7 @@ if (!baseURL) {
 }
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "../../adapter-conformance/contract",
   testMatch: ["critical-flow.spec.ts", "live-flow.spec.ts"],
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,

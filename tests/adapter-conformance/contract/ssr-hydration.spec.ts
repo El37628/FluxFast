@@ -9,8 +9,10 @@ test("raw SSR renders the selected route and preserves query, cookie and configu
     const response = await page.goto(`${baseURL}/contract/42?run=${uniqueRun(info)}&tag=one&tag=two&search=space%20value`);
     expect(response!.status()).toBe(200);
     expect(response!.headers()["content-type"]).toContain("text/html");
-    const html = (await response!.text()).replace(/<!--.*?-->/g, "");
-    expect(html).toContain("Contract page 42");
+    expect(await response!.text()).toContain("Contract page");
+    // The JavaScript-disabled browser parses real SSR markup. Do not strip
+    // HTML with a regular expression to concatenate framework text markers.
+    await expect(page.getByTestId("contract-page").locator("h1")).toHaveText("Contract page 42");
     await expect(page.getByTestId("contract-page")).toHaveAttribute("data-hydrated", "false");
     const payload = JSON.parse((await page.getByTestId("contract-context").textContent())!);
     expect(payload).toMatchObject({ number: 42, cookie: "conformance-cookie", authorization: "Bearer conformance-forward" });
@@ -51,7 +53,7 @@ test("hard navigation to an unknown route returns an actual HTTP 404", async ({ 
 test("an internal backend canonical redirect still produces meaningful SSR", async ({ request }) => {
   const response = await request.get("/contract-canonical");
   expect(response.status()).toBe(200);
-  expect((await response.text()).replace(/<!--.*?-->/g, "")).toContain("Garden Suite");
+  expect(await response.text()).toContain("Garden Suite");
 });
 
 test("SSR rejects an external backend redirect without contacting the other origin", async ({ request }) => {
