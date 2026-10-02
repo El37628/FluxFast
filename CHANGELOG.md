@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Document the frontend adapter implementation contract, including ownership,
+  same-envelope SSR/hydration, navigation and resource lifecycles, mutations,
+  deferred/live authority, diagnostics, and production/conformance requirements.
+  The multi-adapter foundation remains unreleased; Next is the implemented host.
 - Add the shared adapter-conformance suite with Next as its first harness,
   covering SSR/hydration, navigation/cache behavior, real mutation patches,
   deferred/live lifecycles, diagnostics, and production startup/shutdown.

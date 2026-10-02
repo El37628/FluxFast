@@ -16,6 +16,10 @@ Unreleased v1.2 foundation work adds a separate server integration path,
 Server helpers are never re-exported from the browser-facing root; existing
 Next.js applications keep their current imports and behavior.
 
+The [adapter implementation contract](adapter-contract.md) describes how these
+public primitives fit into an SSR host without duplicating Core's navigation,
+resource, mutation, deferred, or live authority.
+
 Application developers should begin with the [Stable APIs guide](stable-apis.md).
 Adapter, transport, live-runtime, protocol, and validation-tooling authors
 should also read [Advanced Stable APIs](advanced-stable-apis.md). This page is
