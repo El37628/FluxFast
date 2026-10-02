@@ -23,6 +23,11 @@ FastAPI is authoritative for URLs, authentication, authorization, validation,
 mutations, and the component identifier. The frontend registry is authoritative
 for mapping that identifier to an allowlisted UI module.
 
+The [frontend adapter implementation contract](adapter-contract.md) specifies
+document ownership, SSR/hydration, navigation, resource/deferred/mutation/live
+bindings, diagnostics, and production requirements for future hosts. Next.js
+remains the only implemented host; the multi-adapter foundation is unreleased.
+
 Live Resources add a synchronization path without changing that ownership:
 
 ```text
@@ -83,6 +88,14 @@ boundary. See [typed contracts and code generation](type-safety.md), [General
 Application Contracts](contracts.md), [Native Client Validation](validation.md),
 [ADR-0006](decisions/0006-typed-resource-contracts.md), and
 [ADR-0008](decisions/0008-general-contracts-and-native-validation.md).
+
+Unreleased v1.2 moves generic schema/type/validator/route/mutation compilation
+and atomic artifact persistence into `@fluxfast/codegen`. It depends on Node
+standard-library APIs and Core types, not the Core runtime, React, or Next.js.
+Codegen also scans page modules and renders the allowlisted registry through an
+explicit adapter target. Next's unchanged generator selects its runtime exports
+and client directive automatically. See the [Codegen API](codegen-api.md); published
+v1.1 consumers continue using the existing Next tooling.
 
 ## Blocking and deferred resource flow
 
@@ -263,6 +276,18 @@ Generated resource types augment the framework-neutral `FluxResourceMap`; the
 core package does not import Pydantic, generated application modules, React, or
 Next.js. This keeps future frontend adapters from depending on Next-specific
 behavior.
+
+Unreleased v1.2 foundation work moves generic initial-page fetching and safe
+header selection into `@fluxfast/core/server`. The Next.js server entry point
+delegates those operations while keeping `next/headers`, catch-all path encoding,
+backend environment policy, application rendering, and the real Next not-found
+boundary. Its production transport handler also delegates HTTP proxying to
+`createFluxTransportProxy`, retaining only Next catch-all parameter encoding and
+per-request supervisor address resolution. Both HTTP boundaries use the same header
+sanitizer; response streams and cancellation remain unbuffered. The validated
+initial envelope is still handed to the existing
+application for SSR and hydration; no second fetch or browser runtime is added.
+The new subpath is not available in the published v1.1 packages.
 
 The in-memory backend resource cache is per process. Its cache misses do not
 cross an isolation boundary, but scoped invalidation deletes only the current

@@ -362,6 +362,7 @@ guidance.
 
 - [Getting Started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
+- [Frontend Adapter Contract](docs/adapter-contract.md)
 - [Resources](#resources)
 - [Mutations](docs/mutations.md)
 - [Caching](docs/caching.md)

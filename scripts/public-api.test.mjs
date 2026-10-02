@@ -95,7 +95,7 @@ const v11DevtoolsContract = Object.freeze({
   }),
 });
 
-test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () => {
+test("keeps the v0.9 JavaScript contract with reviewed v1.1 and server additions", () => {
   const expected = JSON.parse(fs.readFileSync(v09BaselinePath, "utf8"));
   const current = createPublicApiSnapshot();
   const expectedCoreEntries = structuredClone(
@@ -105,6 +105,15 @@ test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () =>
     expectedCoreEntries["."][group].push(...names);
     expectedCoreEntries["."][group].sort();
   }
+  expectedCoreEntries["./server"] = {
+    typeOnly: [
+      "FetchFluxInitialPageOptions",
+      "FluxDevelopmentMetadata",
+      "FluxInitialPageResult",
+      "FluxTransportProxyOptions",
+    ],
+    valueOnly: ["createFluxTransportProxy", "fetchFluxInitialPage", "removeFluxHopByHopHeaders", "selectFluxForwardHeaders"],
+  };
 
   assert.deepEqual(
     current.packages["@fluxfast/core"].entries,
@@ -112,7 +121,14 @@ test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () =>
   );
   assert.deepEqual(
     current.packages["@fluxfast/core"].exportMap,
-    expected.packages["@fluxfast/core"].exportMap
+    {
+      ...expected.packages["@fluxfast/core"].exportMap,
+      "./server": {
+        types: "./dist/server/index.d.ts",
+        import: "./dist/esm/server/index.js",
+        require: "./dist/server/index.js",
+      },
+    }
   );
   const expectedCoreFiles =
     expected.packages["@fluxfast/core"].declarations["."].files;
@@ -133,6 +149,19 @@ test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () =>
   assert.equal(
     currentCoreFiles["diagnostics.d.ts"],
     "b8e0637ca5a7197b3de19662c323bed71b1dbbe5fdce3c9f1bb8db83e17986dd"
+  );
+  assert.deepEqual(
+    current.packages["@fluxfast/core"].declarations["./server"].files,
+    {
+      "diagnostics.d.ts": "b8e0637ca5a7197b3de19662c323bed71b1dbbe5fdce3c9f1bb8db83e17986dd",
+      "protocol.d.ts": "572e3e81f256530cfc13b32660da87524eef887b619e27b16a0d8f30ac15c6ef",
+      "server/headers.d.ts": "1f696d768bcbf845abda5977ccd16537d99efbf741f2ad798b272c72eb9c3f08",
+      "server/index.d.ts": "c3bc6b296418e3848665421b268d58856dd315a1792d49fbabf6229dfb4c9c36",
+      "server/initial-page.d.ts": "abac2e2dfc608bfd0475af6ec5cf41bf930bf7e3aa939e004dd9a854a8da0604",
+      "server/proxy.d.ts": "f6aecc67ea2bf791ede187b584cc1df01b74de53a99d342a6feff8f5f33deedb",
+      "server/types.d.ts": "a3181ec6ad068a9dba64c752a3112c61a1019bcd202ebeb91e8de06254d54dc7",
+      "transport.d.ts": "279a82ed912bd349041f556926de99012cefcf0b2693973d0788cff58d5582e7",
+    }
   );
 
   const expectedNextEntries = structuredClone(
@@ -161,14 +190,33 @@ test("keeps the v0.9 JavaScript contract while adding reviewed v1.1 APIs", () =>
   )) {
     const currentFiles = current.packages["@fluxfast/next"]
       .declarations[entry].files;
+    const movedFiles = new Set(["schema-compiler.d.ts", "schema-manifest.d.ts", "validator-compiler.d.ts"]);
+    if (declaration.files["generate.d.ts"]) {
+      // Only the diagnostic type's owner changed. Check every old declaration,
+      // not a freshly blessed signature hash or a reduced graph assertion.
+      const compatibilityDeclaration = fs.readFileSync(
+        path.join(repositoryRoot, "packages/next/dist/generate.d.ts"), "utf8"
+      ).replace('from "@fluxfast/codegen"', 'from "./validator-compiler.js"');
+      assert.equal(declarationFingerprint(compatibilityDeclaration), declaration.files["generate.d.ts"]);
+      for (const [file, fingerprint] of Object.entries(declaration.files)) {
+        if (!movedFiles.has(file)) continue;
+        let moved = fs.readFileSync(path.join(repositoryRoot, "packages/codegen/dist", file), "utf8");
+        // This new diagnostic helper replaces the identical private Next helper.
+        if (file === "schema-compiler.d.ts") {
+          moved = moved.replace(/^export declare function findFluxFastSchemaModeConflicts\(value: unknown\): string\[\];\r?\n/m, "");
+        }
+        assert.equal(declarationFingerprint(moved), fingerprint, `moved ${file} changed`);
+      }
+    }
     for (const [file, fingerprint] of Object.entries(declaration.files)) {
+      if (declaration.files["generate.d.ts"] && (file === "generate.d.ts" || movedFiles.has(file))) continue;
       assert.equal(
         currentFiles[file],
         v11NextDeclarationChanges[entry]?.[file] ?? fingerprint,
         `${entry} ${file} changed`
       );
     }
-    assert.deepEqual(Object.keys(currentFiles), Object.keys(declaration.files));
+    assert.deepEqual(Object.keys(currentFiles), Object.keys(declaration.files).filter(file => !declaration.files["generate.d.ts"] || !movedFiles.has(file)));
   }
 
   assert.deepEqual(

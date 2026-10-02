@@ -96,4 +96,15 @@ describe("framework-neutral architecture", () => {
 
     expect(source).not.toMatch(/\bBuffer\b/);
   });
+
+  it("keeps server primitives on standard Web APIs with host-owned environment policy", () => {
+    const serverFiles = sourceFiles().filter(file => file.path.includes(`${path.sep}server${path.sep}`));
+    expect(serverFiles.length).toBeGreaterThan(0);
+    for (const file of serverFiles) {
+      for (const specifier of importedPackages(file.source)) {
+        expect(specifier.startsWith("."), `${file.path} imports ${specifier}`).toBe(true);
+      }
+      expect(file.source, file.path).not.toMatch(/\bprocess\s*(?:\.|\[)|\bimport\.meta\.env\b/);
+    }
+  });
 });

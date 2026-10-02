@@ -205,6 +205,7 @@ def _package_manifest(
     *,
     next_package: bool,
     devtools_package: bool = False,
+    codegen_dependency: bool = False,
 ) -> dict:
     manifest = {
         "name": name,
@@ -236,6 +237,8 @@ def _package_manifest(
     if next_package:
         manifest["bin"] = {"fluxfast": "bin/fluxfast.js"}
         manifest["dependencies"] = {"@fluxfast/core": f"^{version}"}
+        if codegen_dependency:
+            manifest["dependencies"]["@fluxfast/codegen"] = f"^{version}"
         manifest["peerDependencies"] = {
             "next": ">=16.3.0 <17.0.0",
             "react": ">=19.0.0",
@@ -275,6 +278,7 @@ def _build_npm_archive(
     package: str,
     next_package: bool,
     devtools_package: bool = False,
+    codegen_dependency: bool = False,
     packed_name: str | None = None,
     add_link: bool = False,
 ) -> None:
@@ -284,13 +288,14 @@ def _build_npm_archive(
         if devtools_package
         else "@fluxfast/next"
         if next_package
-        else "@fluxfast/core"
+        else f"@fluxfast/{package}"
     )
     manifest = _package_manifest(
         name,
         version,
         next_package=next_package,
         devtools_package=devtools_package,
+        codegen_dependency=codegen_dependency,
     )
     _write(package_root / "package.json", json.dumps(manifest))
     _write(package_root / "README.md", f"# {name}\n")
@@ -340,6 +345,7 @@ def _build_release(
     version: str = "0.9.0",
     packed_core_name: str | None = None,
     core_link: bool = False,
+    include_codegen: bool = False,
 ) -> tuple[Path, Path, str]:
     repository = root / "repository"
     release = root / "release"
@@ -359,6 +365,7 @@ def _build_release(
         version,
         package="next",
         next_package=True,
+        codegen_dependency=include_codegen,
     )
     if verifier._includes_devtools_artifact(version):
         _build_npm_archive(
@@ -369,7 +376,51 @@ def _build_release(
             next_package=False,
             devtools_package=True,
         )
+    if include_codegen:
+        _build_npm_archive(
+            repository, release, version, package="codegen", next_package=False
+        )
     return repository, release, version
+
+
+def test_codegen_source_intent_requires_all_six_distributions(tmp_path: Path) -> None:
+    repository, release, version = _build_release(
+        tmp_path, version="1.1.0", include_codegen=True
+    )
+    artifacts = verifier.verify_release_artifacts(
+        repository_root=repository,
+        release_dir=release,
+        version=version,
+        write_checksums=True,
+    )
+    assert len(artifacts) == 6
+    assert artifacts[-1].name == "fluxfast-codegen-1.1.0.tgz"
+    assert len((release / "SHA256SUMS").read_text().splitlines()) == 6
+    assert verifier.verify_release_artifacts(
+        repository_root=repository, release_dir=release, version=version
+    ) == artifacts
+
+
+def test_codegen_source_intent_rejects_missing_codegen(tmp_path: Path) -> None:
+    repository, release, version = _build_release(
+        tmp_path, version="1.1.0", include_codegen=True
+    )
+    (release / "npm/fluxfast-codegen-1.1.0.tgz").unlink()
+    with pytest.raises(verifier.ArtifactVerificationError, match="Codegen tarball"):
+        verifier.verify_release_artifacts(
+            repository_root=repository, release_dir=release, version=version
+        )
+
+
+def test_codegen_contents_must_match_the_built_source(tmp_path: Path) -> None:
+    repository, release, version = _build_release(
+        tmp_path, version="1.1.0", include_codegen=True
+    )
+    _write(repository / "packages/codegen/dist/index.js", "module.exports = {tampered: true};\n")
+    with pytest.raises(verifier.ArtifactVerificationError, match="index.js"):
+        verifier.verify_release_artifacts(
+            repository_root=repository, release_dir=release, version=version
+        )
 
 
 def test_verifies_all_distributions_and_writes_checksums(tmp_path: Path) -> None:

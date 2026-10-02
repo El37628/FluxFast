@@ -36,6 +36,7 @@ jobs:
       - name: Build candidate and stable runtime packages
         run: |
           pnpm --filter @fluxfast/core run build
+          pnpm --filter @fluxfast/codegen run build
           pnpm --filter @fluxfast/next run build
           pnpm --filter @fluxfast/devtools run build
           pnpm --dir .devtools-performance-baseline --filter @fluxfast/core run build

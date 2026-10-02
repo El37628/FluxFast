@@ -68,6 +68,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fluxfast/codegen": "^1.1.0",
     "@fluxfast/core": "^1.1.0"
   },
   "peerDependencies": {

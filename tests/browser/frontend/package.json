@@ -14,7 +14,7 @@
     "pretypecheck": "pnpm run generate",
     "typecheck": "next typegen && tsc --noEmit",
     "pretest:e2e": "pnpm run check:schema",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --config ../../adapter-conformance/playwright.config.ts",
     "pretest:e2e:devtools": "pnpm run check:schema",
     "test:e2e:devtools": "playwright test --config playwright.devtools.config.ts",
     "pretest:e2e:distributed": "pnpm run check:schema",
@@ -22,7 +22,7 @@
     "pretest:e2e:distributed:production": "node ./generate-types.mjs --check-schema --check-generated",
     "test:e2e:distributed:production": "playwright test --config playwright.production-distributed.config.ts",
     "pretest:e2e:production": "node ./generate-types.mjs --check-schema --check-generated",
-    "test:e2e:production": "playwright test e2e/critical-flow.spec.ts e2e/deferred-flow.spec.ts e2e/live-flow.spec.ts e2e/devtools.spec.ts"
+    "test:e2e:production": "playwright test --config ../../adapter-conformance/playwright.config.ts"
   },
   "dependencies": {
     "@fluxfast/core": "workspace:*",

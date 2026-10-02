@@ -115,6 +115,7 @@ jobs:
           cp packages/core/package.json .comparison-baseline/packages/core/package.json
           cp packages/next/package.json .comparison-baseline/packages/next/package.json
           cp tests/browser/frontend/package.json .comparison-baseline/tests/browser/frontend/package.json
+          node scripts/align-benchmark-tooling.mjs .comparison-baseline
           pnpm install --frozen-lockfile
           pnpm --dir .comparison-baseline install --frozen-lockfile
       - name: Compare baseline then candidate

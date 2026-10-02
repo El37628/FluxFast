@@ -5,17 +5,17 @@ import path from "node:path";
 import { createValidator } from "@fluxfast/core";
 import { describe, expect, it } from "vitest";
 import { generateFluxFastProject } from "../src/generate";
-import { compileFluxFastMutations } from "../src/mutation-compiler";
-import { compileFluxFastPageRoutes } from "../src/route-compiler";
-import { compileFluxFastResourceTypes } from "../src/schema-compiler";
+import { compileFluxFastMutations } from "@fluxfast/codegen";
+import { compileFluxFastPageRoutes } from "@fluxfast/codegen";
+import { compileFluxFastResourceTypes } from "@fluxfast/codegen";
 import {
   parseFluxFastSchemaManifest,
   type FluxFastSchemaManifest
-} from "../src/schema-manifest";
+} from "@fluxfast/codegen";
 import {
   compileFluxFastValidators,
   compileJsonSchemaToValidationPlan
-} from "../src/validator-compiler";
+} from "@fluxfast/codegen";
 
 const fingerprint = "9".repeat(64);
 

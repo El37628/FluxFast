@@ -5,6 +5,59 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+### Added
+
+- Document the frontend adapter implementation contract, including ownership,
+  same-envelope SSR/hydration, navigation and resource lifecycles, mutations,
+  deferred/live authority, diagnostics, and production/conformance requirements.
+  The multi-adapter foundation remains unreleased; Next is the implemented host.
+- Add the shared adapter-conformance suite with Next as its first harness,
+  covering SSR/hydration, navigation/cache behavior, real mutation patches,
+  deferred/live lifecycles, diagnostics, and production startup/shutdown.
+  Existing browser commands remain aliases; both modes run in the same CI gate.
+- Make the unreleased Python `fluxfast types` handoff adapter-aware, with
+  dependency-based Next detection, `--adapter next`, installed-only Codegen
+  selection, and the existing generator fallback for published v1.1 tooling.
+  Keep npm, pnpm, Yarn/PnP, and Bun execution local and upgrade errors generic.
+- Add the separate unreleased `fluxfast-codegen` binary with `generate`,
+  `--schema-file`, `--check`, and explicit adapter selection through one target
+  registry. The only current target is `next`; its output and drift behavior
+  match the unchanged Next CLI without a competing `fluxfast` binary.
+- Add an explicit `FluxPageRegistryTarget` and shared read-only page scanner to
+  Codegen. Runtime imports, root/props exports, and the client directive are
+  configurable; Next automatically selects its existing defaults without
+  changing any of its six generated artifact bytes or public signatures.
+- Add the unreleased `@fluxfast/codegen` package for framework-neutral manifest,
+  type, validator, route, and mutation compilation plus safe generation and
+  read-only drift checks. The existing Next generator delegates shared work
+  while preserving its public signatures, CLI, and all six artifact bytes.
+- Begin the unreleased v1.2 adapter foundation with a separate
+  `@fluxfast/core/server` entry point, framework-neutral header sanitation and
+  SSR allowlist helpers, internal same-origin redirect validation, and server
+  contract types. Existing Core root exports and Next.js behavior are unchanged.
+- Add independently tested `fetchFluxInitialPage` with explicit fetch/diagnostic
+  configuration, authoritative protocol headers, safe redirect following, 404
+  classification, envelope validation, bounded error bodies, and separate safe
+  SSR trace metadata for adapter-owned rendering and hydration.
+- Add framework-neutral `createFluxTransportProxy` with protocol gating, safe
+  target construction, exact query/method/body forwarding, shared bidirectional
+  header sanitation, manual redirects, cancellation, and unbuffered live streams.
+
+### Changed
+
+- Delegate Next.js initial SSR fetching and safe header selection to the shared
+  Core server boundary while preserving the public adapter API, application
+  bootstrap, authentication, diagnostics policy, and lazy not-found timing guard.
+- Delegate the Next.js production transport handler to Core while retaining
+  catch-all segment encoding and per-request supervisor backend resolution.
+
+### Fixed
+
+- Avoid waiting on host-retained response-stream branches when handling SSR
+  redirects or rejecting oversized error bodies. Canonical redirects can
+  complete under deduplicating SSR fetch implementations, while external
+  redirects, redirect limits, and the one-MiB error bound remain fail-closed.
+
 ## [1.1.0] - 2026-09-30
 
 ### Added

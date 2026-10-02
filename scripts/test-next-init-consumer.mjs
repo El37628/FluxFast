@@ -477,6 +477,7 @@ try {
   if (!configuredArtifactRoot && !publishedConfig) {
     if (process.env.FLUXFAST_SKIP_BUILD !== "1") {
       run(pnpmCommand, ["--filter", "@fluxfast/core", "build"]);
+      run(pnpmCommand, ["--filter", "@fluxfast/codegen", "build"]);
       run(pnpmCommand, ["--filter", "@fluxfast/next", "build"]);
     }
     fs.mkdirSync(artifactRoot, { recursive: true });
@@ -489,6 +490,12 @@ try {
     run(npmCommand, [
       "pack",
       path.join(repositoryRoot, "packages", "next"),
+      "--pack-destination",
+      artifactRoot,
+    ]);
+    run(npmCommand, [
+      "pack",
+      path.join(repositoryRoot, "packages", "codegen"),
       "--pack-destination",
       artifactRoot,
     ]);
@@ -525,6 +532,7 @@ try {
         "--package-lock=false",
         "--no-save",
         findArtifact("core"),
+        findArtifact("codegen"),
         findArtifact("next"),
       ],
       consumerRoot
@@ -532,6 +540,12 @@ try {
   }
   const installedCoreVersion = assertIsolatedNpmPackage("@fluxfast/core");
   const installedNextVersion = assertIsolatedNpmPackage("@fluxfast/next");
+  manifest.dependencies["@fluxfast/core"] = installedCoreVersion;
+  manifest.dependencies["@fluxfast/next"] = installedNextVersion;
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  if (!publishedConfig) {
+    assert.equal(assertIsolatedNpmPackage("@fluxfast/codegen"), installedNextVersion);
+  }
   assert.equal(
     installedCoreVersion,
     installedNextVersion,

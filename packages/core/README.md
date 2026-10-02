@@ -34,6 +34,15 @@ evaluation limits, and synchronous refinements with zero external dependencies.
 supports Node.js 22 and 24, while the browser-facing APIs target modern web
 runtimes.
 
+Unreleased v1.2 foundation work adds server adapter primitives through
+`@fluxfast/core/server`, separately from this browser-facing root. The initial
+surface provides `fetchFluxInitialPage`, `selectFluxForwardHeaders`, and
+`removeFluxHopByHopHeaders`;
+it does not require a change to existing Next.js applications. This subpath is
+not present in the published v1.1 package. See the
+[Core API inventory](https://github.com/El37628/FluxFast/blob/main/docs/core-api.md#server-adapter-primitives-unreleased-v12)
+for the supported inputs, outputs, and security boundaries.
+
 See the [FluxFast architecture](https://github.com/El37628/FluxFast/blob/main/docs/architecture.md),
 [native client validation](https://github.com/El37628/FluxFast/blob/main/docs/validation.md),
 [wire protocol](https://github.com/El37628/FluxFast/blob/main/docs/protocol.md),

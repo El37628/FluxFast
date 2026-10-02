@@ -96,7 +96,7 @@ function documentedRequestHeaders() {
 }
 
 function generatedFilesFromRuntime() {
-  const source = read("packages/next/src/generate.ts");
+  const source = read("packages/next/src/generate.ts") + read("packages/codegen/src/generate.ts") + read("packages/codegen/src/pages-registry.ts");
   return [
     ...new Set(
       [
@@ -153,7 +153,7 @@ test("freezes protocol constants and request headers across code and docs", () =
 
 test("freezes schema constants and generated filenames across code and docs", () => {
   const schema = baseline.contracts.schema;
-  const nextSchema = read("packages/next/src/schema-manifest.ts");
+  const nextSchema = read("packages/codegen/src/schema-manifest.ts");
   const v1 = namedString(nextSchema, "FLUXFAST_SCHEMA_MANIFEST_V1");
   const v2 = namedString(nextSchema, "FLUXFAST_SCHEMA_MANIFEST_V2");
   assert.deepEqual(

@@ -153,38 +153,3 @@ test.describe("development DevTools", () => {
     }
   });
 });
-
-test.describe("production DevTools exclusion", () => {
-  test.skip(!production, "production-only behavior");
-
-  test("has no UI, browser opt-in header, trace response, or serialized timeline", async ({
-    page,
-  }) => {
-    const devtoolsHeaders: string[] = [];
-    page.on("request", request => {
-      const value = request.headers()["x-fluxfast-devtools"];
-      if (value !== undefined) devtoolsHeaders.push(value);
-    });
-
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Control Center" })).toBeVisible();
-    await page.getByRole("link", { name: "Manage rooms" }).click();
-    await expect(page.getByRole("heading", { name: "Rooms" })).toBeVisible();
-    await expect(devtools(page)).toHaveCount(0);
-    expect(devtoolsHeaders).toEqual([]);
-
-    const forced = await page.request.get("/rooms", {
-      headers: {
-        "X-FluxFast": "1",
-        "X-FluxFast-Protocol": "1",
-        "X-FluxFast-DevTools": "1",
-      },
-    });
-    expect(forced.status()).toBe(200);
-    expect(forced.headers()["x-fluxfast-devtools-trace"]).toBeUndefined();
-    const html = await page.locator("html").evaluate(element => element.innerHTML);
-    expect(html).not.toContain("data-fluxfast-devtools-host");
-    expect(html).not.toContain("fluxfast-devtools/1");
-    expect(html).not.toContain("diagnostic event timeline");
-  });
-});

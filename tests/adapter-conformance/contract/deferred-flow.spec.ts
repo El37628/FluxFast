@@ -23,6 +23,7 @@ test("renders the shell before deferred data and isolates a retryable failure", 
 }) => {
   const browserErrors = observeBrowserErrors(page);
   const resourceBatches = observeResourceBatches(page);
+  const initialBatch = page.waitForResponse(response => response.request().headers()["x-fluxfast-only"]?.split(",").sort().join(",") === "activity,analytics");
 
   await page.goto("/deferred");
 
@@ -32,9 +33,14 @@ test("renders the shell before deferred data and isolates a retryable failure", 
   await expect.poll(() => resourceBatches.length).toBe(1);
 
   await expect(page.getByTestId("analytics-value")).toContainText("95000");
-  await expect(page.getByTestId("activity-error")).toContainText(
-    "A deferred resource could not be resolved"
-  );
+  const failedBatch = await initialBatch;
+  expect(failedBatch.status()).toBe(200);
+  const failure = (await failedBatch.json()).resourceErrors.activity;
+  expect(failure.type).toBe("ResourceError");
+  await expect(page.getByTestId("activity-error")).toContainText(failure.message);
+  if (process.env.FLUXFAST_E2E_PRODUCTION === "1") {
+    expect(failure.message).toBe("A deferred resource could not be resolved");
+  }
   expect(resourceBatches).toEqual([["activity", "analytics"]]);
 
   await page.getByRole("button", { name: "Retry activity" }).click();

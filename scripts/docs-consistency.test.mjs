@@ -68,7 +68,7 @@ function validationFormatsFromDocumentation() {
 }
 
 function generatedFilesFromRuntime() {
-  const source = read("packages/next/src/generate.ts");
+  const source = read("packages/next/src/generate.ts") + read("packages/codegen/src/generate.ts") + read("packages/codegen/src/pages-registry.ts");
   return [
     ...new Set(
       [...source.matchAll(/["'](?:[^"']*\/)?([a-z]+\.generated\.(?:json|ts))["']/g)]
@@ -159,7 +159,7 @@ test("keeps protocol, schema, and capability names aligned across runtimes and d
   assert.equal(namedString(coreProtocol, "PROTOCOL_VERSION"), facts.protocolVersion);
 
   const pythonSchema = read("python/fluxfast/src/fluxfast/schema_manifest.py");
-  const nextSchema = read("packages/next/src/schema-manifest.ts");
+  const nextSchema = read("packages/codegen/src/schema-manifest.ts");
   const pythonSchemaVersions = [
     namedString(pythonSchema, "SCHEMA_MANIFEST_V1"),
     namedString(pythonSchema, "SCHEMA_MANIFEST_V2"),
@@ -244,8 +244,9 @@ test("keeps public package entry points aligned with manifests and API docs", ()
   );
 
   const coreApi = read("docs/core-api.md");
-  assert.match(coreApi, /one public import\s+path/);
+  assert.match(coreApi, /browser-facing public import\s+path/);
   assert.match(coreApi, /from "@fluxfast\/core"/);
+  assert.match(coreApi, /from "@fluxfast\/core\/server"/);
   assert.match(read("docs/devtools.md"), /import \{\s*FluxDevtools,[\s\S]*from "@fluxfast\/devtools"/);
   assert.deepEqual(
     facts.packageEntryPoints["@fluxfast/next"].toSorted(),

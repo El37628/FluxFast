@@ -194,6 +194,13 @@ def test_type_generation_command_uses_local_frontend_package_manager(
     lockfile: str,
     expected_prefix: list[str],
 ) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"dependencies":{"@fluxfast/next":"^1.1.0"}}', encoding="utf8"
+    )
+    shim = tmp_path / "node_modules/.bin/fluxfast"
+    shim.parent.mkdir(parents=True)
+    shim.touch()
+    shim.chmod(0o755)
     (tmp_path / lockfile).touch()
     schema_file = tmp_path / "schema.json"
     monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
@@ -402,7 +409,9 @@ def test_types_command_passes_current_schema_to_frontend_cli(
 ) -> None:
     frontend = tmp_path / "frontend"
     frontend.mkdir()
-    (frontend / "package.json").write_text("{}\n", encoding="utf8")
+    (frontend / "package.json").write_text(
+        '{"dependencies":{"@fluxfast/next":"^1.1.0"}}\n', encoding="utf8"
+    )
     app = _schema_app()
     observed: dict[str, object] = {}
 
@@ -413,10 +422,12 @@ def test_types_command_passes_current_schema_to_frontend_cli(
         schema_file: Path,
         *,
         check: bool,
+        adapter: str,
     ) -> list[str]:
         observed["frontend"] = received_frontend
         observed["schema_file"] = schema_file
         observed["check"] = check
+        observed["adapter"] = adapter
         return ["frontend-cli", str(schema_file)]
 
     def run(
@@ -447,6 +458,7 @@ def test_types_command_passes_current_schema_to_frontend_cli(
     assert observed["frontend"] == frontend.resolve()
     assert observed["cwd"] == frontend.resolve()
     assert observed["check"] is True
+    assert observed["adapter"] == "next"
     assert observed["subprocess_check"] is False
     assert observed["capture_output"] is True
     assert observed["text"] is True
@@ -463,14 +475,16 @@ def test_types_command_explains_schema_v2_mismatch_with_old_javascript_tooling(
 ) -> None:
     frontend = tmp_path / "frontend"
     frontend.mkdir()
-    (frontend / "package.json").write_text("{}\n", encoding="utf8")
+    (frontend / "package.json").write_text(
+        '{"dependencies":{"@fluxfast/next":"^1.1.0"}}\n', encoding="utf8"
+    )
     app = FastAPI()
     FluxFast(app).define_type("Room", Room)
 
     monkeypatch.setattr("fluxfast.cli._load_schema_app", lambda _app_import: app)
     monkeypatch.setattr(
         "fluxfast.cli._type_generation_command",
-        lambda _frontend, _schema_file, *, check: ["frontend-cli"],
+        lambda _frontend, _schema_file, *, check, adapter: ["frontend-cli"],
     )
     old_tooling_error = (
         "[fluxfast] Invalid schema manifest at $.types: is not a supported field\n"
@@ -489,7 +503,7 @@ def test_types_command_explains_schema_v2_mismatch_with_old_javascript_tooling(
     assert (
         "FluxFast schema fluxfast-schema/2 requires JavaScript tooling\n"
         "with schema/2 support.\n\n"
-        "Upgrade @fluxfast/next before regenerating contracts."
+        "Upgrade the installed FluxFast JavaScript tooling before regenerating contracts."
     ) in captured.err
 
 
@@ -500,7 +514,9 @@ def test_types_command_does_not_mislabel_other_generation_failures(
 ) -> None:
     frontend = tmp_path / "frontend"
     frontend.mkdir()
-    (frontend / "package.json").write_text("{}\n", encoding="utf8")
+    (frontend / "package.json").write_text(
+        '{"dependencies":{"@fluxfast/next":"^1.1.0"}}\n', encoding="utf8"
+    )
 
     monkeypatch.setattr(
         "fluxfast.cli._load_schema_app", lambda _app_import: _schema_app()
@@ -511,7 +527,7 @@ def test_types_command_does_not_mislabel_other_generation_failures(
     )
     monkeypatch.setattr(
         "fluxfast.cli._type_generation_command",
-        lambda _frontend, _schema_file, *, check: ["frontend-cli"],
+        lambda _frontend, _schema_file, *, check, adapter: ["frontend-cli"],
     )
     monkeypatch.setattr(
         "fluxfast.cli.subprocess.run",
@@ -534,7 +550,9 @@ def test_types_command_does_not_mislabel_schema_one_types_errors(
 ) -> None:
     frontend = tmp_path / "frontend"
     frontend.mkdir()
-    (frontend / "package.json").write_text("{}\n", encoding="utf8")
+    (frontend / "package.json").write_text(
+        '{"dependencies":{"@fluxfast/next":"^1.1.0"}}\n', encoding="utf8"
+    )
 
     monkeypatch.setattr(
         "fluxfast.cli._load_schema_app", lambda _app_import: _schema_app()
@@ -545,7 +563,7 @@ def test_types_command_does_not_mislabel_schema_one_types_errors(
     )
     monkeypatch.setattr(
         "fluxfast.cli._type_generation_command",
-        lambda _frontend, _schema_file, *, check: ["frontend-cli"],
+        lambda _frontend, _schema_file, *, check, adapter: ["frontend-cli"],
     )
     monkeypatch.setattr(
         "fluxfast.cli.subprocess.run",
@@ -567,7 +585,8 @@ def test_types_parser_forwards_frontend_and_check(
 ) -> None:
     observed: dict[str, object] = {}
 
-    def run(app: str, *, frontend: Path, check: bool) -> int:
+    def run(app: str, *, frontend: Path, check: bool, adapter: str | None) -> int:
+        assert adapter is None
         observed.update(app=app, frontend=frontend, check=check)
         return 0
 

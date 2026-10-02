@@ -242,6 +242,6 @@ test("renders not-found after a mutation redirects to an unknown page", async ({
 
   expect(notFoundResponse.status()).toBe(404);
   await expect(page).toHaveURL(/\/route-that-does-not-exist$/);
-  await expect(page.getByText("This page could not be found.")).toBeVisible();
+  await expect(page.locator("body")).toContainText(/not found|could not be found/i);
   expect(pageErrors).toEqual([]);
 });
