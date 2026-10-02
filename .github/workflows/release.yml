@@ -115,6 +115,11 @@ jobs:
             --release-dir release \
             --version "${GITHUB_REF_NAME#v}" \
             --write-checksums
+      - name: Verify exact React publication payload in both browser modes
+        env:
+          FLUXFAST_TYPES_ARTIFACT_DIR: ${{ github.workspace }}/release
+          FLUXFAST_E2E_PYTHON: python
+        run: pnpm test:consumer:react:browser
       - name: Verify combined artifacts in a clean typed live consumer
         env:
           FLUXFAST_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-deferred-consumer/artifacts
@@ -334,6 +339,10 @@ jobs:
     name: Verify published v1.1/v1.0.1 upgrade and rollback
     needs: [publish-pypi, publish-npm]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        previous-version: ["1.0.1", "1.1.0"]
     services:
       redis:
         image: redis:8.10.1-alpine3.23
@@ -364,7 +373,7 @@ jobs:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PAIRING: python-current
           FLUXFAST_RELEASE_VERSION: ${{ github.ref_name }}
-          FLUXFAST_PREVIOUS_VERSION: 1.0.1
+          FLUXFAST_PREVIOUS_VERSION: ${{ matrix.previous-version }}
           FLUXFAST_UPGRADE_SEQUENCE: "1"
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
           FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"
@@ -374,7 +383,7 @@ jobs:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_PAIRING: javascript-current
           FLUXFAST_RELEASE_VERSION: ${{ github.ref_name }}
-          FLUXFAST_PREVIOUS_VERSION: 1.0.1
+          FLUXFAST_PREVIOUS_VERSION: ${{ matrix.previous-version }}
           FLUXFAST_UPGRADE_SEQUENCE: "1"
           FLUXFAST_TEST_REDIS_URL: redis://127.0.0.1:6379/0
           FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"
@@ -460,6 +469,35 @@ jobs:
           FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"
         run: node scripts/test-next-init-consumer.mjs
 
+  verify-published-react:
+    name: Verify published React SSR application
+    needs: [publish-pypi, publish-npm]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: npm install --global pnpm@10.15.0
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
+      - name: Verify registry-only initialization, hydration, HMR, and immutable production
+        env:
+          FLUXFAST_E2E_PYTHON: python
+          FLUXFAST_PUBLISHED_VERSION: ${{ github.ref_name }}
+          FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"
+        run: pnpm test:consumer:react:browser
+
   github-release:
     name: Create GitHub release
     needs:
@@ -467,6 +505,7 @@ jobs:
       - publish-npm
       - verify-published-production
       - verify-published-mixed-version
+      - verify-published-react
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -11,6 +11,10 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { createReactHarness } from "../tests/adapter-conformance/harnesses/react.mjs";
 import { prepareReactFixture } from "../tests/adapter-conformance/react-fixture.mjs";
+import { REACT_RELEASE_PACKAGES, resolveReactPublishedConfig, waitForReactPublication } from "./react-published-config.mjs";
+
+const published = resolveReactPublishedConfig({ version: process.env.FLUXFAST_PUBLISHED_VERSION,
+  artifactDirectory: process.env.FLUXFAST_TYPES_ARTIFACT_DIR, attempts: process.env.FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS });
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-react-browser-"));
@@ -131,7 +135,7 @@ async function coldHydrationAndReload(python) {
       assert.deepEqual([...socketOrigins], [host.baseUrl], "HMR must not bind a second browser port");
     } finally { fs.writeFileSync(source, before); }
     await context.close();
-    console.log("Cold packed hydration: identical envelope, no reload/refetch, one origin; source edits update browser and SSR automatically.");
+    console.log(`Cold ${published ? "published" : "packed"} hydration: identical envelope, no reload/refetch, one origin; source edits update browser and SSR automatically.`);
   } finally {
     try { await browser?.close(); }
     finally {
@@ -159,14 +163,15 @@ async function contracts(python, production) {
 
 try {
   assert.ok(path.relative(repository, temporary).startsWith(".." + path.sep), "Consumer must be outside the checkout");
+  if (published) await waitForReactPublication(published);
   fs.mkdirSync(frontend, { recursive: true });
   const virtualenv = path.join(temporary, "python");
   run(bootstrap, ["-m", "venv", virtualenv]);
   const python = path.join(virtualenv, windows ? "Scripts/python.exe" : "bin/python");
   const fluxfast = path.join(virtualenv, windows ? "Scripts/fluxfast.exe" : "bin/fluxfast");
-  if (!configuredArtifacts) {
+  if (!configuredArtifacts && !published) {
     fs.mkdirSync(path.join(artifacts, "npm"), { recursive: true }); fs.mkdirSync(path.join(artifacts, "python"));
-    for (const owner of ["core", "codegen", "react", "vite", "devtools"]) {
+    for (const owner of REACT_RELEASE_PACKAGES) {
       run(pnpm, ["--filter", "@fluxfast/" + owner, "run", "build"], repository);
       run(npm, ["pack", "--ignore-scripts", "--json", "--pack-destination", path.join(artifacts, "npm")], path.join(repository, "packages", owner));
     }
@@ -175,13 +180,19 @@ try {
   const tooling = createRequire(path.join(repository, "packages/vite/package.json"));
   const versions = Object.fromEntries(["react", "react-dom", "vite", "typescript", "@types/node", "@types/react", "@types/react-dom"].map(name => [name, JSON.parse(fs.readFileSync(tooling.resolve(name + "/package.json"), "utf8")).version]));
   if (process.env.FLUXFAST_REACT_CONSUMER_VERSION) versions.react = versions["react-dom"] = process.env.FLUXFAST_REACT_CONSUMER_VERSION;
-  const version = JSON.parse(fs.readFileSync(path.join(repository, "packages/vite/package.json"), "utf8")).version;
+  const version = published?.version ?? JSON.parse(fs.readFileSync(path.join(repository, "packages/vite/package.json"), "utf8")).version;
   fs.writeFileSync(path.join(frontend, "package.json"), JSON.stringify({ private: true, type: "module",
     dependencies: { "@fluxfast/vite": version, ...versions }, scripts: { dev: "node -e 'throw Error()'", build: "node -e 'throw Error()'", start: "node -e 'throw Error()'" } }));
-  run(npm, ["install", ...["core", "codegen", "react", "vite", "devtools"].map(owner => one(path.join(artifacts, "npm"), "fluxfast-" + owner + "-", ".tgz")), "--ignore-scripts", "--legacy-peer-deps", "--no-audit", "--no-fund", "--no-package-lock"], frontend);
+  const npmPackages = published?.npmSpecs ?? REACT_RELEASE_PACKAGES.map(owner => one(path.join(artifacts, "npm"), "fluxfast-" + owner + "-", ".tgz"));
+  run(npm, ["install", ...npmPackages, "--registry=https://registry.npmjs.org/", "--ignore-scripts", "--legacy-peer-deps", "--no-audit", "--no-fund", "--no-package-lock"], frontend);
+  for (const owner of REACT_RELEASE_PACKAGES) {
+    assert.equal(JSON.parse(fs.readFileSync(path.join(frontend, "node_modules/@fluxfast", owner, "package.json"), "utf8")).version,
+      version, "consumer must install the matching " + owner + " distribution");
+  }
   for (const name of ["next", "@fluxfast/next"]) assert.equal(fs.existsSync(path.join(frontend, "node_modules", name)), false);
-  run(python, ["-m", "pip", "install", "--quiet", one(path.join(artifacts, "python"), "fluxfast-", ".whl")]);
-  run(python, ["-c", "import fluxfast,sys; from pathlib import Path; assert Path(fluxfast.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())"]);
+  run(python, ["-m", "pip", "install", "--quiet", ...(published ? ["--index-url", "https://pypi.org/simple", "--only-binary=fluxfast"] : []),
+    published?.pythonSpec ?? one(path.join(artifacts, "python"), "fluxfast-", ".whl")]);
+  run(python, ["-c", "import fluxfast,sys; from pathlib import Path; from importlib.metadata import version; assert Path(fluxfast.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()); assert version('fluxfast') == sys.argv[1]", version]);
   for (const name of ["tests/__init__.py", "tests/browser/__init__.py", "tests/browser/backend.py", "tests/browser/conformance.py"]) {
     const output = path.join(temporary, name); fs.mkdirSync(path.dirname(output), { recursive: true }); fs.copyFileSync(path.join(repository, name), output);
   }
@@ -211,5 +222,5 @@ try {
   }
   for (const name of ["src", "fluxfast.html", "fluxfast.vite.config.mjs", "vite.config.mjs", "node_modules/vite", "node_modules/@fluxfast/codegen", "node_modules/typescript"]) fs.rmSync(path.join(frontend, name), { recursive: true, force: true });
   await contracts(python, true);
-  console.log(`Packed React ${versions.react} conformance passes in both modes; production hydrates without Next, source, Vite, Codegen or TypeScript.`);
+  console.log(`${published ? "Published" : "Packed"} FluxFast ${version}, React ${versions.react}: conformance passes in both modes; production hydrates without Next, source, Vite, Codegen or TypeScript.`);
 } finally { fs.rmSync(temporary, { recursive: true, force: true }); }

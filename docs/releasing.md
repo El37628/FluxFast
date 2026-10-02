@@ -40,20 +40,22 @@ reused from the shared cache by another, invalidated by a mutation on a third,
 synchronized over Redis Pub/Sub, and then reused at its new value without
 running another loader. Its frontend uses the optimized production build, and
 the gate verifies graceful shutdown of the frontend, proxy, and all workers.
-Before publication, the release-artifact workflow creates a real consumer using
-published 0.9.0 packages. One run installs the built current Python candidate
-first while JavaScript remains at 0.9.0; a second installs the built current
-JavaScript candidate first while Python remains at 0.9.0. Both mixed states
+Before publication, the release-artifact workflow creates real consumers using
+published 1.0.1 and 1.1.0 packages. For each baseline, one run installs the built
+current Python candidate first while JavaScript remains at that baseline; a
+second installs the built current JavaScript candidate first while Python stays
+at the baseline. Both mixed states
 must pass the full deferred, live, typed, mutation, navigation, and distributed
 Redis browser scenario before the remaining packages are upgraded. The matched
-candidate is tested again, then both sides are rolled back to 0.9.0 and must
+candidate is tested again, then both sides are rolled back to the baseline and must
 regenerate, typecheck, production-build, and run without `fluxfast init`
 rewriting the initialized scaffold. The branch gate retains one current-Python
 and JavaScript 0.8.1 historical smoke; v0.8.1 is no longer the complete matrix.
 
 After registry publication, the release workflow repeats both complete upgrade
-and rollback orders using only registry packages. The GitHub release is created
-only after these registry-backed compatibility checks pass.
+and rollback orders against both baselines using only registry packages. The
+GitHub release is created only after these registry-backed compatibility checks
+and the matched Next and React production consumers pass.
 
 A release that changes typed contracts or code generation must also prove the
 developer-tooling path from built artifacts: install the wheel and npm
@@ -65,6 +67,14 @@ not as hand-maintained package source. The mixed-version jobs must continue to
 prove that an older JavaScript client can consume the unchanged browser
 protocol from a typed Python server and that current JavaScript still supports
 an older Python server without a developer manifest.
+
+The tooling compatibility gate checks all six generated artifacts. Each schema
+and typed header must name the Python distribution actually installed in that
+consumer. A package-version promotion changes that producer metadata, not the
+contract: comparison normalizes only the validated top-level producer field
+and the four generated producer comments. Fingerprints, protocol/schema IDs,
+types, validators, routes, mutations, registries and all other bytes must match.
+Read-only checks still preserve the original files, bytes and modification times.
 
 The normal integration workflow also exercises the real Redis cache, live
 broker, restart behavior, and independent Uvicorn workers against the oldest
@@ -113,12 +123,27 @@ The protected check context retains the historical name
 `Four-distribution contract` for branch-rule continuity, but its v1.1 run uses
 the version-aware five-distribution verifier described above.
 
-Unreleased v1.2 development additionally requires Codegen and React tarballs
-when the source Next manifest declares those dependencies. The verifier then
-checks seven distributions against source intent, including dependency/optional
+Unreleased v1.2 development additionally requires Codegen, React and Vite
+tarballs when the source manifests declare those dependencies. The verifier
+checks eight distributions against source intent, including dependency/optional
 peer metadata and all packed output. Historical v1.0/v1.1 payloads are unchanged.
-Do not publish this extraction alone: React SSR/Vite host conformance must pass
-before v1.2.0. New npm package names also need their own trusted-publisher setup
+The candidate-artifact job runs the same React browser contracts against these
+exact verified archives, not separately rebuilt copies. The tag workflow also
+tests its final publication payload in both modes before uploading it to the
+registry jobs. React cold hydration, navigation, same-origin source/HMR updates,
+initialization, Python supervision, and immutable production execution without
+source, Next, Vite, Codegen or TypeScript must all pass.
+
+After publication, a separate consumer installs the matching Python distribution
+and Core, Codegen, React, Vite and DevTools from the registries only, verifies their
+installed versions, and repeats the development and production contracts. It
+cannot fall back to checkout builds or local archives. Only a missing registry
+version (HTTP 404) receives bounded propagation retries; authentication, network,
+malformed-data and other HTTP failures fail closed. The GitHub release waits for
+this job as well as the Next and upgrade/rollback consumers.
+
+Do not publish the foundation alone: complete React SSR/Vite host conformance
+must pass before v1.2.0. New npm package names also need their own trusted-publisher setup
 before the tag workflow can publish them; existing publishers do not grant
 publication rights to newly introduced packages automatically.
 After downloading the six v1.1 release assets into one directory, verify them

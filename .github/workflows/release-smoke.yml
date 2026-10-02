@@ -67,6 +67,13 @@ jobs:
         env:
           FLUXFAST_TYPES_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-release-contract
         run: pnpm test:consumer:react
+      - name: Install Chromium for the exact React release candidate
+        run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
+      - name: Verify exact React candidate browser conformance in both modes
+        env:
+          FLUXFAST_TYPES_ARTIFACT_DIR: ${{ runner.temp }}/fluxfast-release-contract
+          FLUXFAST_E2E_PYTHON: python
+        run: pnpm test:consumer:react:browser
       - name: Upload the verified v1 candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
