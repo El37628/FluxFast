@@ -31,14 +31,19 @@ def binary(root: Path, name: str) -> Path:
 
 
 @pytest.mark.parametrize("section", ["dependencies", "devDependencies"])
-def test_adapter_is_detected_only_from_fluxfast_packages(tmp_path: Path, section: str):
-    manifest(tmp_path, {section: {"@fluxfast/next": "^1.1.0"}})
-    assert _detect_frontend_adapter(tmp_path).value == "next"
+@pytest.mark.parametrize(
+    ("package", "target"), [("@fluxfast/next", "next"), ("@fluxfast/vite", "react")]
+)
+def test_adapter_is_detected_only_from_fluxfast_packages(
+    tmp_path: Path, section: str, package: str, target: str
+):
+    manifest(tmp_path, {section: {package: "^1.1.0"}})
+    assert _detect_frontend_adapter(tmp_path).value == target
 
 
 @pytest.mark.parametrize(
     "package",
-    ["next", "react", "vite", "@fluxfast/core", "@fluxfast/react", "@fluxfast/vite"],
+    ["next", "react", "vite", "@fluxfast/core", "@fluxfast/react"],
 )
 def test_unrelated_or_future_packages_do_not_activate_an_adapter(
     tmp_path: Path, package: str
@@ -53,7 +58,7 @@ def test_explicit_adapter_allows_a_codegen_only_project(tmp_path: Path):
     assert _detect_frontend_adapter(tmp_path, "next").value == "next"
 
 
-@pytest.mark.parametrize("adapter", ["react", "NEXT", "__proto__", ""])
+@pytest.mark.parametrize("adapter", ["svelte", "NEXT", "__proto__", ""])
 def test_unknown_override_fails_closed(tmp_path: Path, adapter: str):
     manifest(tmp_path, {"dependencies": {"@fluxfast/next": "*"}})
     with pytest.raises(TypeGenerationError, match="Unsupported FluxFast adapter"):
@@ -98,22 +103,27 @@ def test_invalid_json_and_missing_metadata_report_tooling_errors(tmp_path: Path)
     ],
 )
 @pytest.mark.parametrize("generic", [False, True])
+@pytest.mark.parametrize("target", ["next", "react"])
 def test_generator_prefers_local_codegen_and_keeps_legacy_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     lock: str,
     prefix: list[str],
     generic: bool,
+    target: str,
 ):
-    manifest(tmp_path, {"dependencies": {"@fluxfast/next": "^1.1.0"}})
+    package = "@fluxfast/next" if target == "next" else "@fluxfast/vite"
+    fallback = "fluxfast" if target == "next" else "fluxfast-vite"
+    manifest(tmp_path, {"dependencies": {package: "^1.1.0"}})
     (tmp_path / lock).touch()
     binary(tmp_path, "fluxfast")
+    binary(tmp_path, fallback)
     if generic:
         binary(tmp_path, "fluxfast-codegen")
     monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
-    expected = [*prefix, "fluxfast-codegen" if generic else "fluxfast", "generate"]
+    expected = [*prefix, "fluxfast-codegen" if generic else fallback, "generate"]
     if generic:
-        expected.extend(["--adapter", "next"])
+        expected.extend(["--adapter", target])
     expected.extend(
         ["--schema-file", str(tmp_path / "schema with spaces.json"), "--check"]
     )
@@ -153,12 +163,15 @@ def test_workspace_hoisted_bin_is_found(
 
 
 @pytest.mark.parametrize("generic", [False, True])
+@pytest.mark.parametrize("target", ["next", "react"])
 def test_yarn_pnp_probes_only_installed_workspace_binaries(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, generic: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, generic: bool, target: str
 ):
+    package = "@fluxfast/next" if target == "next" else "@fluxfast/vite"
+    fallback = "fluxfast" if target == "next" else "fluxfast-vite"
     manifest(
         tmp_path,
-        {"dependencies": {"@fluxfast/next": "*"}, "packageManager": "yarn@4.0.0"},
+        {"dependencies": {package: "*"}, "packageManager": "yarn@4.0.0"},
     )
     (tmp_path / ".pnp.cjs").touch()
     monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
@@ -176,7 +189,7 @@ def test_yarn_pnp_probes_only_installed_workspace_binaries(
             "shell": False,
             "timeout": 10,
         }
-        exists = command[-1] == ("fluxfast-codegen" if generic else "fluxfast")
+        exists = command[-1] == ("fluxfast-codegen" if generic else fallback)
         return CompletedProcess(
             command,
             0 if exists else 1,
@@ -186,9 +199,9 @@ def test_yarn_pnp_probes_only_installed_workspace_binaries(
 
     monkeypatch.setattr("fluxfast.cli.subprocess.run", probe)
     command = _type_generation_command(tmp_path, tmp_path / "schema.json", check=False)
-    assert command[2] == ("fluxfast-codegen" if generic else "fluxfast")
+    assert command[2] == ("fluxfast-codegen" if generic else fallback)
     assert observed == [["yarn", "bin", "fluxfast-codegen"]] + (
-        [] if generic else [["yarn", "bin", "fluxfast"]]
+        [] if generic else [["yarn", "bin", fallback]]
     )
 
 
@@ -216,14 +229,20 @@ def test_yarn_probe_failures_are_actionable_without_installing_or_falling_back(
         _type_generation_command(tmp_path, tmp_path / "schema.json", check=False)
 
 
+@pytest.mark.parametrize("target", ["next", "react"])
 def test_failing_generic_generator_is_not_retried_with_legacy(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    target: str,
 ):
     app = FastAPI()
     FluxFast(app)
-    manifest(tmp_path, {"dependencies": {"@fluxfast/next": "*"}})
+    package = "@fluxfast/next" if target == "next" else "@fluxfast/vite"
+    manifest(tmp_path, {"dependencies": {package: "*"}})
     binary(tmp_path, "fluxfast-codegen")
     binary(tmp_path, "fluxfast")
+    binary(tmp_path, "fluxfast-vite")
     monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
     monkeypatch.setattr("fluxfast.cli._load_schema_app", lambda _: app)
     observed = []
@@ -263,12 +282,17 @@ def test_parser_exposes_supported_override_and_preserves_old_defaults():
     assert args.adapter is None
     explicit = _parser().parse_args(["types", "backend:app", "--adapter", "next"])
     assert explicit.adapter == "next"
+    react = _parser().parse_args(["types", "backend:app", "--adapter", "react"])
+    assert react.adapter == "react"
     with pytest.raises(SystemExit) as error:
-        _parser().parse_args(["types", "backend:app", "--adapter", "react"])
+        _parser().parse_args(["types", "backend:app", "--adapter", "vite"])
     assert error.value.code == 2
 
 
-def test_explicit_override_is_forwarded_to_run_types(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize("target", ["next", "react"])
+def test_explicit_override_is_forwarded_to_run_types(
+    monkeypatch: pytest.MonkeyPatch, target: str
+):
     observed: dict[str, object] = {}
     monkeypatch.setattr(
         "fluxfast.cli.run_types",
@@ -282,7 +306,7 @@ def test_explicit_override_is_forwarded_to_run_types(monkeypatch: pytest.MonkeyP
                 "--frontend",
                 "frontend",
                 "--adapter",
-                "next",
+                target,
                 "--check",
             ]
         )
@@ -292,11 +316,92 @@ def test_explicit_override_is_forwarded_to_run_types(monkeypatch: pytest.MonkeyP
         "app": "backend:app",
         "frontend": Path("frontend"),
         "check": True,
-        "adapter": "next",
+        "adapter": target,
     }
 
 
 def test_direct_unknown_override_is_a_tooling_error(tmp_path: Path):
     manifest(tmp_path, {"dependencies": {"@fluxfast/next": "*"}})
     with pytest.raises(TypeGenerationError, match="Unsupported FluxFast adapter"):
-        run_types("backend:app", frontend=tmp_path, adapter="react")
+        run_types("backend:app", frontend=tmp_path, adapter="vue")
+
+
+def test_ambiguous_adapters_require_an_explicit_generation_target(tmp_path: Path):
+    manifest(
+        tmp_path,
+        {
+            "dependencies": {"@fluxfast/next": "*"},
+            "devDependencies": {"@fluxfast/vite": "*"},
+        },
+    )
+    before = (tmp_path / "package.json").read_bytes()
+    with pytest.raises(
+        TypeGenerationError, match="Multiple FluxFast frontend adapters"
+    ):
+        _detect_frontend_adapter(tmp_path)
+    assert _detect_frontend_adapter(tmp_path, "next").value == "next"
+    assert _detect_frontend_adapter(tmp_path, "react").value == "react"
+    assert (tmp_path / "package.json").read_bytes() == before
+
+
+def test_explicit_react_codegen_only_project_uses_the_shared_generator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    manifest(tmp_path, {"devDependencies": {"@fluxfast/codegen": "*"}})
+    binary(tmp_path, "fluxfast-codegen")
+    monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
+    command = _type_generation_command(
+        tmp_path, tmp_path / "schema.json", check=False, adapter="react"
+    )
+    assert command[4:8] == ["fluxfast-codegen", "generate", "--adapter", "react"]
+
+
+def test_react_never_uses_a_legacy_next_binary_from_the_workspace_or_global_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    manifest(frontend, {"dependencies": {"@fluxfast/vite": "*"}})
+    binary(tmp_path, "fluxfast")
+    monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/global/{name}")
+    with pytest.raises(TypeGenerationError, match="fluxfast-vite generator"):
+        _type_generation_command(frontend, tmp_path / "schema.json", check=False)
+    assert not (frontend / "node_modules").exists()
+
+
+def test_react_workspace_hoisted_host_binary_is_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    frontend = tmp_path / "workspace" / "frontend"
+    frontend.mkdir(parents=True)
+    manifest(frontend, {"devDependencies": {"@fluxfast/vite": "*"}})
+    binary(tmp_path, "fluxfast-vite")
+    monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
+    command = _type_generation_command(frontend, tmp_path / "schema.json", check=True)
+    assert command[4:6] == ["fluxfast-vite", "generate"]
+    assert "--adapter" not in command
+    assert command[-1] == "--check"
+
+
+def test_private_runtime_default_does_not_mask_ambiguous_or_invalid_metadata(
+    tmp_path: Path,
+):
+    from fluxfast._frontend_adapter import (
+        FrontendAdapter,
+        FrontendAdapterError,
+        detect_frontend_adapter,
+    )
+
+    manifest(tmp_path, {})
+    assert (
+        detect_frontend_adapter(tmp_path, legacy_default=FrontendAdapter.NEXT)
+        is FrontendAdapter.NEXT
+    )
+    with pytest.raises(FrontendAdapterError, match="Could not detect"):
+        detect_frontend_adapter(tmp_path)
+    manifest(tmp_path, {"dependencies": {"@fluxfast/vite": "*", "@fluxfast/next": "*"}})
+    with pytest.raises(FrontendAdapterError, match="Multiple"):
+        detect_frontend_adapter(tmp_path, legacy_default=FrontendAdapter.NEXT)
+    manifest(tmp_path, {"dependencies": []})
+    with pytest.raises(FrontendAdapterError, match="non-empty version strings"):
+        detect_frontend_adapter(tmp_path, legacy_default=FrontendAdapter.NEXT)

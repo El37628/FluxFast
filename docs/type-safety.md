@@ -164,19 +164,27 @@ retaining the existing command above:
 ```bash
 fluxfast types backend.main:app --frontend frontend --adapter next
 fluxfast types backend.main:app --frontend frontend --adapter next --check
+fluxfast types backend.main:app --frontend frontend --adapter react
+fluxfast types backend.main:app --frontend frontend --adapter react --check
 ```
 
-Without `--adapter`, detection reads `@fluxfast/next` in the frontend's
-`package.json` `dependencies` or `devDependencies`. Merely installing `next`,
-`react`, or `vite` does not identify a FluxFast adapter. `next` is the only
-implemented target; future adapter names fail clearly. An explicit `next`
-override also permits compiler-only projects that install Codegen but do not
-declare a runtime adapter. Malformed metadata is rejected before backend import.
+Without `--adapter`, detection reads FluxFast packages in the frontend's
+`package.json` `dependencies` or `devDependencies`: `@fluxfast/next` selects
+`next`, and `@fluxfast/vite` selects `react`. Merely installing framework packages
+(`next`, `react`, or `vite`), Core, or the shared React bindings does not identify
+a host. Both host declarations are ambiguous: use separate frontend projects or
+select the intended generation target explicitly. An explicit `next` or `react`
+override also permits compiler-only projects that install Codegen without a
+runtime adapter. Unsupported targets and malformed metadata fail before backend import.
 
 Python prefers an already-installed, locally available `fluxfast-codegen`
-binary, passing `generate --adapter next --schema-file PATH`. If that binary
-is absent, it uses the existing `fluxfast generate --schema-file PATH`
+binary, passing `generate --adapter TARGET --schema-file PATH`. If that binary
+is absent, Next uses the existing `fluxfast generate --schema-file PATH`
 command, so current Python still works with actual published v1.1 JavaScript.
+React uses the installed `fluxfast-vite generate --schema-file PATH` fallback;
+it never runs Next's generator, even if a legacy Next binary is present in the
+workspace or global PATH. That host fallback requires declared React/React DOM/Vite
+peers; a Codegen-only project should make the generic binary directly available.
 This fallback is selected before generation; compilation failures are returned,
 not retried with a different compiler. Globally installed binaries are not
 installation evidence, and declaring a package without installing dependencies
@@ -186,8 +194,9 @@ For PnP, make Codegen directly available to the frontend workspace; the older
 Next CLI's filesystem-based package checks still require a `node_modules`
 installation. A selected legacy generator's failure is reported unchanged.
 
-Successful checking still prints `✓ Generated FluxFast files are current.`
-and exits `0`; missing/stale artifacts exit `1` without creating or modifying
+Successful checking exits `0`; the Next/generic generator prints
+`✓ Generated FluxFast files are current.`, while the host fallback prints
+`Generated FluxFast files are current.` Missing/stale artifacts exit `1` without creating or modifying
 generated files. Compiler output, warnings, and error exit codes are forwarded.
 Unsupported client validators still do not weaken authoritative FastAPI
 validation. The schema/2 upgrade guidance now names the installed FluxFast
@@ -195,7 +204,51 @@ JavaScript tooling rather than requiring a particular adapter package.
 
 This addition is **not published in v1.1.0**. Use the built source candidate to
 test `--adapter`; ordinary published applications retain the existing setup
-commands. No new frontend runtime or manifest format is introduced.
+commands. This generation handoff introduces no new manifest format or runtime
+behavior. Python supervision of the React/Vite host remains separate work.
+
+For example, after [initializing a source-built React/Vite frontend](vite-host.md),
+this backend contract works with either host:
+
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+from fluxfast import FluxFast, Page, resource
+
+class Item(BaseModel):
+    id: int
+
+app = FastAPI()
+flux = FluxFast(app)
+ITEMS = flux.define_resource("items", list[Item])
+
+@flux.page("/")
+async def home() -> Page:
+    return Page(component="home/index", resources=[
+        resource(ITEMS, lambda: [Item(id=7)]),
+    ])
+```
+
+The same `Item`/`items` declaration produces the same schema,
+resource types, native validators, route builders and mutation helpers. Only the
+page registry changes: it imports `FluxRoot` from `@fluxfast/react` and has no
+Next client directive. A component can consume the generated resource without
+redeclaring its wire shape:
+
+```tsx
+import { useResource } from "@fluxfast/react";
+import { resourceKeys } from "../../.fluxfast/types.generated";
+
+export default function Home() {
+  const items = useResource(resourceKeys.items); // Item[] from the Python contract
+  return <ul>{items.map(item => <li key={item.id}>{item.id}</li>)}</ul>;
+}
+```
+
+Input `[{"id": 7}]` renders a list item containing `7`. The backend must return
+the declared resource; schema export does not execute its page handler or loader.
+Regeneration and read-only checking use the same six-file artifact engine in
+both root and `src/` layouts.
 
 For a `src/` project, output is written under `src/.fluxfast/`; a root-layout
 project uses `.fluxfast/`:

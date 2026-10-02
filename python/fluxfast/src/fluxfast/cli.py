@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shutil
 import signal
@@ -13,13 +12,20 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from types import FrameType
 
 from fastapi import FastAPI
 
 from . import __version__
+from ._frontend_adapter import (
+    ADAPTER_PACKAGES as _FRONTEND_ADAPTER_PACKAGES,
+)
+from ._frontend_adapter import (
+    FrontendAdapter,
+    FrontendAdapterError,
+    detect_frontend_adapter,
+)
 from ._process_lifecycle import stop_process_tree
 from .application_import import ApplicationImportError, load_fastapi_application
 from .production import (
@@ -71,64 +77,16 @@ class TypeGenerationError(RuntimeError):
     """Raised when full-stack type generation cannot be started."""
 
 
-class FrontendAdapter(str, Enum):
-    """Currently implemented generation targets, not framework guesses."""
-
-    NEXT = "next"
-
-
-_FRONTEND_ADAPTER_PACKAGES = {FrontendAdapter.NEXT: ("@fluxfast/next",)}
-
-
 def _detect_frontend_adapter(
     frontend: Path,
     adapter: str | None = None,
 ) -> FrontendAdapter:
     """Select a FluxFast target from declarations without evaluating config."""
 
-    selected = None
-    if adapter is not None:
-        try:
-            selected = FrontendAdapter(adapter)
-        except ValueError as error:
-            raise TypeGenerationError(
-                f"Unsupported FluxFast adapter {adapter!r}. Supported adapters: next."
-            ) from error
-    package_json = frontend / "package.json"
     try:
-        manifest = json.loads(package_json.read_text(encoding="utf8"))
-    except (OSError, ValueError) as error:
-        raise TypeGenerationError(
-            f"Could not read frontend package.json at {package_json}: {error}"
-        ) from error
-    if not isinstance(manifest, dict):
-        raise TypeGenerationError(
-            f"Frontend package.json at {package_json} must contain a JSON object."
-        )
-    packages: set[str] = set()
-    for section in ("dependencies", "devDependencies"):
-        declarations = manifest.get(section, {})
-        if not isinstance(declarations, dict) or any(
-            not isinstance(value, str) or not value.strip()
-            for value in declarations.values()
-        ):
-            raise TypeGenerationError(
-                f"Frontend package.json at {package_json} must contain an object of non-empty version strings in {section}."
-            )
-        packages.update(declarations)
-    if selected is not None:
-        return selected
-    detected = [
-        target
-        for target, names in _FRONTEND_ADAPTER_PACKAGES.items()
-        if any(name in packages for name in names)
-    ]
-    if len(detected) == 1:
-        return detected[0]
-    raise TypeGenerationError(
-        "Could not detect a supported FluxFast frontend adapter from package.json dependencies or devDependencies. "
-        "Declare @fluxfast/next, or pass --adapter next explicitly. Framework packages such as next, react, and vite are not adapter declarations."
-    )
+        return detect_frontend_adapter(frontend, adapter)
+    except FrontendAdapterError as error:
+        raise TypeGenerationError(str(error)) from error
 
 
 def _frontend_binary_installed(frontend: Path, name: str, *, manager: str) -> bool:
@@ -250,13 +208,18 @@ def _type_generation_command(
     if _frontend_binary_installed(frontend, "fluxfast-codegen", manager=manager):
         binary = "fluxfast-codegen"
         adapter_arguments = ["--adapter", target.value]
-    elif _frontend_binary_installed(frontend, "fluxfast", manager=manager):
-        binary = "fluxfast"
+    elif _frontend_binary_installed(
+        frontend,
+        "fluxfast-vite" if target is FrontendAdapter.REACT else "fluxfast",
+        manager=manager,
+    ):
+        binary = "fluxfast-vite" if target is FrontendAdapter.REACT else "fluxfast"
         adapter_arguments = []
     else:
         raise TypeGenerationError(
             "Could not find installed FluxFast JavaScript tooling in the frontend or its workspace. "
-            "Install the project's dependencies to provide fluxfast-codegen or the legacy fluxfast generator. "
+            "Install the project's dependencies to provide fluxfast-codegen or "
+            f"the {'fluxfast-vite' if target is FrontendAdapter.REACT else 'legacy fluxfast'} generator. "
             "No packages were downloaded."
         )
     prefix = {
