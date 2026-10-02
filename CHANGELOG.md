@@ -7,6 +7,12 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Bind React/Vite browser release checks to the exact checksum-verified candidate,
+  and verify matching npm/PyPI installations in both development and production
+  before creating the GitHub release. Registry upgrade/rollback checks cover both
+  published 1.0.1 and 1.1.0 baselines in both upgrade orders. Mixed tooling checks
+  validate the installed producer version while retaining byte-identical generated
+  contracts and fingerprints apart from that intentional metadata change.
 - Run the unchanged shared adapter browser contracts on unreleased React/Vite
   in both modes, with real StrictMode, initialized packed consumers, Node 22/24
   and React 19 peer-floor CI, and three-worker Redis isolation/reconnect tests.

@@ -87,6 +87,33 @@ test("release publication waits for full production and container CI", () => {
   const githubRelease = jobBlock(source, "github-release");
   assert.match(githubRelease, /- verify-published-production/);
   assert.match(githubRelease, /- verify-published-mixed-version/);
+  assert.match(githubRelease, /- verify-published-react/);
+});
+
+test("React publication is bound to the verified archives and registry-only browser conformance", () => {
+  const candidate = jobBlock(readWorkflow("release-smoke.yml"), "artifact-contract");
+  assert.match(candidate, /FLUXFAST_TYPES_ARTIFACT_DIR: \$\{\{ runner\.temp \}\}\/fluxfast-release-contract/);
+  assert.match(candidate, /run: pnpm test:consumer:react:browser/);
+  assert.ok(candidate.indexOf("Verify exact React candidate browser") < candidate.indexOf("Upload the verified v1 candidate"));
+  const release = readWorkflow("release.yml");
+  const build = jobBlock(release, "build");
+  assert.match(build, /FLUXFAST_TYPES_ARTIFACT_DIR: \$\{\{ github\.workspace \}\}\/release/);
+  assert.match(build, /run: pnpm test:consumer:react:browser/);
+  const published = jobBlock(release, "verify-published-react");
+  assert.match(published, /needs: \[publish-pypi, publish-npm\]/);
+  assert.match(published, /FLUXFAST_PUBLISHED_VERSION: \$\{\{ github\.ref_name \}\}/);
+  assert.match(published, /FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"/);
+  assert.match(published, /run: pnpm test:consumer:react:browser/);
+  assert.doesNotMatch(published, /FLUXFAST_TYPES_ARTIFACT_DIR|npm pack|python -m build|continue-on-error/);
+  const runner = readRepositoryFile("scripts/test-react-browser-consumer.mjs");
+  assert.match(runner, /if \(!configuredArtifacts && !published\)/);
+  assert.match(runner, /published\?\.npmSpecs/);
+  assert.match(runner, /published\?\.pythonSpec/);
+  assert.match(runner, /"--index-url", "https:\/\/pypi\.org\/simple"/);
+  assert.match(runner, /"--registry=https:\/\/registry\.npmjs\.org\/"/);
+  assert.match(runner, /await waitForReactPublication\(published\)/);
+  assert.match(runner, /await contracts\(python, false\)/);
+  assert.match(runner, /await contracts\(python, true\)/);
 });
 
 test("freezes release artifact metadata, contents, digests, and provenance", () => {
@@ -236,9 +263,11 @@ test("compatibility gates preserve v1.0.1 and add actual published v1.1 upgrade 
     /Verify published v1\.1\/v1\.0\.1 upgrade and rollback/
   );
   assert.equal(
-    publishedSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 1\.0\.1/g)?.length,
+    publishedSmoke.match(/FLUXFAST_PREVIOUS_VERSION: \$\{\{ matrix\.previous-version \}\}/g)?.length,
     2
   );
+  assert.match(publishedSmoke, /previous-version: \["1\.0\.1", "1\.1\.0"\]/);
+  assert.match(publishedSmoke, /fail-fast: false/);
   assert.match(publishedSmoke, /playwright@1\.63\.0/);
   assert.equal(publishedSmoke.match(/FLUXFAST_UPGRADE_SEQUENCE: "1"/g)?.length, 2);
   assert.equal(
