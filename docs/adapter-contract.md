@@ -20,6 +20,9 @@ The separate [React SSR/hydration boundary](react-ssr.md) provides a Node server
 entry and browser hydration entry without widening the bindings browser graph.
 It is not a completed frontend host: Next remains the only implemented host
 until Vite assets/build, initialization, Python integration and conformance are ready.
+The source-development [Vite host](vite-host.md) now supplies assets, dual builds,
+HTTP streaming and lifecycle cleanup; initialization, Python supervision and full
+shared browser conformance are still pending before adapter promotion/publication.
 See the [React bindings reference](react-api.md) for responsibilities, examples,
 and the complete new package inventory.
 

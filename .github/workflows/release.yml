@@ -107,6 +107,7 @@ jobs:
           npm pack ./packages/core --pack-destination release/npm
           npm pack ./packages/codegen --pack-destination release/npm
           npm pack ./packages/react --pack-destination release/npm
+          npm pack ./packages/vite --pack-destination release/npm
           npm pack ./packages/next --pack-destination release/npm
           npm pack ./packages/devtools --pack-destination release/npm
           python -m twine check release/python/*
@@ -313,16 +314,19 @@ jobs:
           core_tarballs=(release/npm/fluxfast-core-*.tgz)
           codegen_tarballs=(release/npm/fluxfast-codegen-*.tgz)
           react_tarballs=(release/npm/fluxfast-react-*.tgz)
+          vite_tarballs=(release/npm/fluxfast-vite-*.tgz)
           next_tarballs=(release/npm/fluxfast-next-*.tgz)
           devtools_tarballs=(release/npm/fluxfast-devtools-*.tgz)
           [ "${#core_tarballs[@]}" -eq 1 ]
           [ "${#codegen_tarballs[@]}" -eq 1 ]
           [ "${#react_tarballs[@]}" -eq 1 ]
+          [ "${#vite_tarballs[@]}" -eq 1 ]
           [ "${#next_tarballs[@]}" -eq 1 ]
           [ "${#devtools_tarballs[@]}" -eq 1 ]
           publish_package "@fluxfast/core" "${GITHUB_REF_NAME#v}" "${core_tarballs[0]}"
           publish_package "@fluxfast/codegen" "${GITHUB_REF_NAME#v}" "${codegen_tarballs[0]}"
           publish_package "@fluxfast/react" "${GITHUB_REF_NAME#v}" "${react_tarballs[0]}"
+          publish_package "@fluxfast/vite" "${GITHUB_REF_NAME#v}" "${vite_tarballs[0]}"
           publish_package "@fluxfast/next" "${GITHUB_REF_NAME#v}" "${next_tarballs[0]}"
           publish_package "@fluxfast/devtools" "${GITHUB_REF_NAME#v}" "${devtools_tarballs[0]}"
 
@@ -423,6 +427,7 @@ jobs:
             "@fluxfast/core@${version}" \
             "@fluxfast/next@${version}" \
             "@fluxfast/devtools@${version}" \
+            "@fluxfast/vite@${version}" \
             --registry=https://registry.npmjs.org/
           (
             cd "$consumer"
@@ -431,7 +436,7 @@ jobs:
               const fs = require("node:fs");
               const path = require("node:path");
               const expected = process.argv[1];
-              for (const name of ["core", "codegen", "react", "next", "devtools"]) {
+              for (const name of ["core", "codegen", "react", "vite", "next", "devtools"]) {
                 const manifest = JSON.parse(fs.readFileSync(path.join(
                   path.dirname(require.resolve(`@fluxfast/${name}`)),
                   "..",

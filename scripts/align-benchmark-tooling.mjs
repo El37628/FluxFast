@@ -30,6 +30,11 @@ export function baselineComparisonTooling(name, source) {
     assert.equal([...source.matchAll(reactImporter)].length, 1, "one React importer required");
     normalized = normalized.replace(reactImporter, "").replace(/      '@fluxfast\/react':\n        specifier: [^\n]+\n        version: link:\.\.\/react\n/g, "");
   }
+  if (source.includes("\n  packages/vite:\n")) {
+    const viteImporter = /\n  packages\/vite:\n[\s\S]*?(?=\n  \S|\npackages:|\nsnapshots:|$)/g;
+    assert.equal([...source.matchAll(viteImporter)].length, 1, "one Vite host importer required");
+    normalized = normalized.replace(viteImporter, "");
+  }
   return normalized;
 }
 

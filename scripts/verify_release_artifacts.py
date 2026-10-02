@@ -476,7 +476,7 @@ def _includes_devtools_artifact(version: str) -> bool:
 
 def _artifact_paths(
     release_dir: Path, version: str, *, include_codegen: bool = False,
-    include_react: bool = False,
+    include_react: bool = False, include_vite: bool = False,
 ) -> tuple[Path, ...]:
     expected_list = [
         release_dir / "python" / f"fluxfast-{version}-py3-none-any.whl",
@@ -492,6 +492,8 @@ def _artifact_paths(
         expected_list.append(release_dir / "npm" / f"fluxfast-codegen-{version}.tgz")
     if include_react:
         expected_list.append(release_dir / "npm" / f"fluxfast-react-{version}.tgz")
+    if include_vite:
+        expected_list.append(release_dir / "npm" / f"fluxfast-vite-{version}.tgz")
     expected = tuple(expected_list)
     observed = {
         path
@@ -509,6 +511,8 @@ def _artifact_paths(
         expected_description += ", plus the Codegen tarball"
     if include_react:
         expected_description += ", plus the React tarball"
+    if include_vite:
+        expected_description += ", plus the Vite host tarball"
     _expect(
         observed == set(expected),
         f"release directory must contain exactly {expected_description}",
@@ -570,9 +574,14 @@ def verify_release_artifacts(
     )
     include_codegen = "@fluxfast/codegen" in next_manifest.get("dependencies", {})
     include_react = "@fluxfast/react" in next_manifest.get("dependencies", {})
+    vite_manifest_path = repository_root / "packages/vite/package.json"
+    include_vite = vite_manifest_path.is_file()
+    if include_vite:
+        vite_manifest = json.loads(vite_manifest_path.read_text())
+        _expect(vite_manifest.get("name") == "@fluxfast/vite", "wrong Vite host source manifest")
     artifacts = _artifact_paths(
         release_dir, version, include_codegen=include_codegen,
-        include_react=include_react,
+        include_react=include_react, include_vite=include_vite,
     )
     wheel, sdist, core, next_package = artifacts[:4]
     pyproject = tomllib.loads(
@@ -629,6 +638,14 @@ def verify_release_artifacts(
             repository_root=repository_root,
             package_directory="packages/react",
             package_name="@fluxfast/react",
+            version=version,
+        )
+    if include_vite:
+        _verify_npm_package(
+            release_dir / "npm" / f"fluxfast-vite-{version}.tgz",
+            repository_root=repository_root,
+            package_directory="packages/vite",
+            package_name="@fluxfast/vite",
             version=version,
         )
     if write_checksums:

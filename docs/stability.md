@@ -40,7 +40,9 @@ APIs, and protocol types.
 The unreleased [Codegen](codegen-api.md) and [React bindings](react-api.md)
 references classify their additive v1.2 surfaces and document examples. The
 React package relocates existing binding contracts without requiring Next
-applications to change their imports; a standalone SSR host is separate work.
+applications to change their imports. The additive [Vite tooling/server APIs](vite-host.md)
+are Advanced Stable upon v1.2 publication; initialization, Python host integration
+and complete conformance remain unreleased work.
 
 For practical selection guidance and working examples, see
 [Stable APIs for application developers](stable-apis.md) and
