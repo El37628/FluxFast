@@ -105,6 +105,20 @@ or runs Vite config. Without `--schema-file`, it reuses an existing
 and compiler errors precede any generated-file write. Check mode reports stale
 files without changing bytes or modification times.
 
+The source-development Python helper can now export the authoritative schema and
+invoke the installed React generator in one command:
+
+```sh
+fluxfast types backend.main:app --frontend frontend --adapter react
+fluxfast types backend.main:app --frontend frontend --adapter react --check
+```
+
+`--adapter react` is optional when `@fluxfast/vite` is declared. Codegen is
+preferred; the installed host generator is the fallback, never Next's CLI.
+See the [Python handoff guide](type-safety.md#adapter-aware-handoff-unreleased-v12)
+for workspace/PnP, diagnostics, drift checking and input/output examples. This
+does not yet add Python development/production supervision of the React host.
+
 After adapting the starter and backend, use the scoped commands:
 
 ```sh

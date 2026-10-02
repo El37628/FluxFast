@@ -61,8 +61,10 @@ The five schema-derived files have the same bytes for Next and React. Only
 `pages.generated.ts` changes its runtime import and client-directive policy.
 Compiling a React registry requires the React bindings in the consumer; running
 the compiler does not. React SSR rendering and hydration are documented in
-[React SSR boundaries](react-ssr.md). The full Vite host and Python React handoff
-are not implemented by this target and remain unreleased work.
+[React SSR boundaries](react-ssr.md). Host initialization and serving belong to
+the separate [Vite integration](vite-host.md), not this compiler target. The
+Python React generation handoff is also unreleased; Python host supervision and
+complete React browser conformance remain separate work.
 
 For a `src/` project with an exported schema whose validators are all supported,
 successful generation prints:
@@ -106,8 +108,8 @@ node /path/to/FluxFast/packages/codegen/bin/fluxfast-codegen.js generate --adapt
 The compiler does not need React or Next.js installed to run. Its generated
 Next registry does need the selected runtime when the application compiles and
 renders. The source-development Python `fluxfast types` command now detects the
-Next adapter and prefers this installed binary, with a legacy fallback for older
-JavaScript packages. See the [adapter-aware handoff](type-safety.md#adapter-aware-handoff-unreleased-v12)
+Next or React/Vite adapter and prefers this installed binary, with target-specific
+installed fallbacks. Next still supports older JavaScript packages. See the [adapter-aware handoff](type-safety.md#adapter-aware-handoff-unreleased-v12)
 for explicit selection and mixed-tooling behavior; published v1.1 Python keeps
 its existing command.
 

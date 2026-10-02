@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add unreleased Python `fluxfast types --adapter react` and detection from
+  `@fluxfast/vite`. Prefer installed Codegen with the explicit target, with a
+  local Vite generator fallback that never selects Next's CLI. Preserve legacy
+  Next handoffs, local package-manager/PnP behavior and read-only artifact checks.
 - Add unreleased installed-only `fluxfast-vite init`, `generate` and structural
   `doctor` commands. Preserve existing SPA entries, source Vite configuration,
   custom scripts and user instructions; add scoped host scripts and generated
