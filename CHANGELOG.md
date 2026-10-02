@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add unreleased React SSR and hydration subentries: lazy-page SSR completion,
+  safe document payloads, exact-envelope hydration, actual 404/auth failures,
+  bounded/cancellable SSR, and Core's same-origin streaming proxy. Vite asset
+  serving, initialization, and Python host integration remain separate work.
 - Extract the unreleased `@fluxfast/react` bindings from Next.js: shared context,
   provider/root, allowlisted component resolver, resource/deferred/live hooks,
   forms, and links. Existing Next root/client imports re-export the same objects

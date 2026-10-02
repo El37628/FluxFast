@@ -27,11 +27,21 @@ test("React owns framework bindings without Next or server/tooling imports", () 
   const manifest = JSON.parse(fs.readFileSync(path.join(repository, "packages/react/package.json"), "utf8"));
   assert.deepEqual(Object.keys(manifest.dependencies), ["@fluxfast/core"]);
   assert.deepEqual(manifest.peerDependencies, { react: ">=19.0.0", "react-dom": ">=19.0.0" });
-  assert.deepEqual(Object.keys(manifest.exports), ["."]);
-  for (const file of fs.readdirSync(path.join(repository, "packages/react/src"))) {
-    const source = fs.readFileSync(path.join(repository, "packages/react/src", file), "utf8");
-    assert.doesNotMatch(source, /(?:from\s+|require\s*\(\s*|import\s*\(\s*)["'](?:next(?:\/|["'])|@fluxfast\/(?:next|codegen|devtools)|@fluxfast\/core\/server|node:)/, file);
+  assert.deepEqual(Object.keys(manifest.exports), [".", "./client", "./server"]);
+  const visited = new Set();
+  function visit(file) {
+    if (visited.has(file)) return;
+    visited.add(file);
+    const source = fs.readFileSync(file, "utf8");
+    for (const match of source.matchAll(/(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g)) {
+      const specifier = match[1];
+      assert.doesNotMatch(specifier, /^(?:next(?:\/|$)|@fluxfast\/(?:next|codegen|devtools)(?:\/|$)|@fluxfast\/core\/server|node:)/, file);
+      if (specifier.startsWith(".")) visit(path.resolve(path.dirname(file), specifier));
+    }
   }
+  visit(path.join(repository, "packages/react/dist/esm/index.js"));
+  visit(path.join(repository, "packages/react/dist/esm/client.js"));
+  assert.ok(visited.size >= 10, "walk actual browser imports, not just entry declarations");
 });
 
 test("React documents an example for every public value and type", () => {
@@ -42,6 +52,18 @@ test("React documents an example for every public value and type", () => {
   const names = [...block.matchAll(/^\| `([A-Za-z_][\w]*)` \|/gm)].map(match => match[1]);
   assert.equal(new Set(names).size, names.length);
   assert.deepEqual(names.sort(), Object.values(entry).flat().sort());
+  assert.match(guide, /unreleased/i);
+});
+
+test("React separately documents every server and hydration integration export", () => {
+  const entries = createPublicApiSnapshot().packages["@fluxfast/react"].entries;
+  const guide = fs.readFileSync(path.join(repository, "docs/react-ssr.md"), "utf8");
+  const block = guide.split("<!-- react-ssr-api-examples:start -->")[1]?.split("<!-- react-ssr-api-examples:end -->")[0];
+  assert.ok(block);
+  const actual = [...block.matchAll(/^\| (server|client) \/ `([A-Za-z_][\w]*)` \|/gm)]
+    .map(match => `./${match[1]} ${match[2]}`).sort();
+  const expected = ["./server", "./client"].flatMap(entry => Object.values(entries[entry]).flat().map(name => `${entry} ${name}`)).sort();
+  assert.deepEqual(actual, expected);
   assert.match(guide, /unreleased/i);
 });
 
@@ -62,7 +84,7 @@ test("packed React and DevTools support SSR, CJS, ESM, and strict types without 
       const [pack] = JSON.parse(success("npm", ["pack", root, "--ignore-scripts", "--offline", "--json", "--pack-destination", temporary], consumer));
       archives.push(path.join(temporary, pack.filename));
       if (pack.name === "@fluxfast/react") {
-        for (const entry of ["README.md", "LICENSE", "dist/index.js", "dist/index.d.ts", "dist/esm/index.js", "dist/esm/package.json"]) {
+        for (const entry of ["README.md", "LICENSE", "dist/index.js", "dist/index.d.ts", "dist/esm/index.js", "dist/esm/package.json", "dist/client.js", "dist/client.d.ts", "dist/esm/client.js", "dist/server/index.js", "dist/server/index.d.ts", "dist/esm/server/index.js"]) {
           assert.ok(pack.files.some(file => file.path === entry), "missing React packed target: " + entry);
         }
       }
@@ -89,6 +111,21 @@ test("packed React and DevTools support SSR, CJS, ESM, and strict types without 
       import * as esm from "@fluxfast/react";
       const require = createRequire(import.meta.url);
       const cjs = require("@fluxfast/react");
+      const serverEsm = await import("@fluxfast/react/server");
+      const serverCjs = require("@fluxfast/react/server");
+      const clientEsm = await import("@fluxfast/react/client");
+      const clientCjs = require("@fluxfast/react/client");
+      assert.equal(typeof clientEsm.hydrateFluxApplication, "function");
+      assert.equal(typeof clientCjs.hydrateFluxApplication, "function");
+      for (const [server, api] of [[serverEsm, esm], [serverCjs, cjs]]) {
+        assert.deepEqual(Object.keys(server).sort(), ["createFluxReactHandler", "renderFluxApplication"]);
+        function Page() { return React.createElement("h1", null, api.useResource("greeting")); }
+        function Application(props) { return React.createElement(api.FluxRoot, {...props, registry:{"home/index":{load:async()=>({default:Page})}}}); }
+        const initialEnvelope = {protocol:"fluxfast/1",page:{component:"home/index",url:"/"},resources:{greeting:{value:"Lazy SSR",version:"v1"}}};
+        assert.ok((await server.renderFluxApplication(Application, {initialEnvelope})).includes("<h1>Lazy SSR</h1>"));
+        assert.equal("createFluxReactHandler" in api, false);
+        assert.equal("renderFluxApplication" in api, false);
+      }
       for (const api of [esm, cjs]) {
         assert.deepEqual(Object.keys(api).sort(), ${JSON.stringify(expected)});
         function Page() {
@@ -106,7 +143,7 @@ test("packed React and DevTools support SSR, CJS, ESM, and strict types without 
       }
       const tools = await import("@fluxfast/devtools");
       assert.equal(typeof tools.FluxDevtools, "function");
-      for (const specifier of ["@fluxfast/react/provider", "@fluxfast/react/dist/index.js", "@fluxfast/react/server"]) {
+      for (const specifier of ["@fluxfast/react/provider", "@fluxfast/react/dist/index.js", "@fluxfast/react/server/render"]) {
         assert.throws(() => require(specifier), {code:"ERR_PACKAGE_PATH_NOT_EXPORTED"});
         await assert.rejects(import(specifier), {code:"ERR_PACKAGE_PATH_NOT_EXPORTED"});
       }
@@ -118,6 +155,8 @@ test("packed React and DevTools support SSR, CJS, ESM, and strict types without 
         useDeferredResource, useLiveStatus, useForm, Link, resolveComponent,
         type FluxApplicationProps, type ComponentRegistry } from "@fluxfast/react";
       import { FluxDevtools } from "@fluxfast/devtools";
+      import { renderFluxApplication, createFluxReactHandler } from "@fluxfast/react/server";
+      import { hydrateFluxApplication } from "@fluxfast/react/client";
       import type { PageEnvelope } from "@fluxfast/core";
       declare const initialEnvelope: PageEnvelope;
       function Page() {
@@ -137,6 +176,15 @@ test("packed React and DevTools support SSR, CJS, ESM, and strict types without 
       const application: FluxApplicationProps = {initialEnvelope};
       React.createElement(FluxRoot, {...application, registry});
       React.createElement(FluxProvider, {initialEnvelope, children:React.createElement(FluxDevtools)});
+      const App = (props: FluxApplicationProps) => React.createElement(FluxRoot, {...props,registry});
+      const rendered: Promise<string> = renderFluxApplication(App, application, {timeoutMs:1000});
+      const handler = createFluxReactHandler({backendUrl:"http://private.example",template:"template",render:(props,options)=>renderFluxApplication(App,props,options)});
+      const response: Promise<Response> = handler(new Request("https://public.example/"));
+      hydrateFluxApplication(App, {onRecoverableError:error=>console.error(error)});
+      // @ts-expect-error SSR rendering requires a complete initial envelope.
+      renderFluxApplication(App, {});
+      // @ts-expect-error Handler configuration cannot omit the trusted backend.
+      createFluxReactHandler({template:"template",render:()=>Promise.resolve("markup")});
       resolveComponent("home/index", registry);
       // @ts-expect-error FluxRoot requires an allowlisted registry.
       React.createElement(FluxRoot, application);

@@ -6,9 +6,12 @@ host. Existing applications keep using `@fluxfast/next`; those exports point to
 the same context, components, hooks, resolver state, and types. Next remains the
 only implemented host until the separate SSR/Vite integration is complete.
 
-There is one official entry point, `@fluxfast/react`, for CommonJS, ESM, and
-TypeScript. It requires React and React DOM 19+. There is no Next dependency,
-backend address, server fetcher, code generator, or document renderer here.
+The bindings entry point, `@fluxfast/react`, supports CommonJS, ESM, and
+TypeScript. It requires React and React DOM 19+. Its browser import graph has
+no Next dependency, backend address, server fetcher, or code generator.
+Separate `@fluxfast/react/client` and Node-only `@fluxfast/react/server` entries
+provide the unreleased [SSR/hydration boundary](react-ssr.md) for host authors;
+they are not re-exported through the bindings root.
 Deep imports into package `src`/`dist` are not supported. Core remains independent
 of React; FastAPI remains authoritative for routes, resources, and mutations.
 

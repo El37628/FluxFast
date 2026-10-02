@@ -12,6 +12,8 @@ const repositoryRoot = path.resolve(
 const PACKAGE_ENTRIES = Object.freeze({
   "@fluxfast/react": Object.freeze({
     ".": "packages/react/dist/index.d.ts",
+    "./client": "packages/react/dist/client.d.ts",
+    "./server": "packages/react/dist/server/index.d.ts",
   }),
   "@fluxfast/codegen": Object.freeze({
     ".": "packages/codegen/dist/index.d.ts",
