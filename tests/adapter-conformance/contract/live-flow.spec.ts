@@ -386,7 +386,7 @@ test("production build synchronizes two clients through one origin", async ({
 }, testInfo) => {
   test.skip(
     process.env.FLUXFAST_E2E_PRODUCTION !== "1",
-    "production-only Next build coverage"
+    "production-only adapter build coverage"
   );
   const run = uniqueRun(testInfo);
   const origins = new Set<string>();
@@ -426,7 +426,7 @@ test("production build exposes minimal health checks through one origin", async 
 }) => {
   test.skip(
     process.env.FLUXFAST_E2E_PRODUCTION !== "1",
-    "production-only Next build coverage"
+    "production-only adapter build coverage"
   );
 
   const health = await request.get("/fluxfast/healthz");

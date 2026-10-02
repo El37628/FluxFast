@@ -10,6 +10,7 @@ import {
 import { Suspense } from "react";
 import { fluxPages } from "@/.fluxfast/pages.generated";
 import { DevelopmentDevtools } from "@/components/DevelopmentDevtools";
+import { ConformanceProbe } from "@/components/ConformanceProbe";
 
 function FixturePage() {
   const page = usePage();
@@ -36,9 +37,12 @@ export function BrowserFixtureApplication({
       development={development}
       registry={fluxPages}
       clientUrl={clientUrl}
-      cache={cache}
+      cache={initialEnvelope?.page.url.startsWith("/contract-resource-cache/")
+        ? { ...cache, maxResources: 2 }
+        : cache}
     >
       <FixturePage />
+      <ConformanceProbe initialEnvelope={initialEnvelope} />
       <DevelopmentDevtools />
     </FluxProvider>
   );

@@ -150,14 +150,16 @@ jobs:
           FLUXFAST_E2E_PYTHON: python
           FLUXFAST_RUN_LIVE: "1"
         run: pnpm test:consumer:init
-      - run: pnpm test:e2e
+      - name: Verify Next adapter conformance in development
+        run: pnpm test:adapter-conformance
         env:
           FLUXFAST_E2E_PYTHON: python
       - name: Verify development DevTools browser flow
         run: pnpm test:e2e:devtools
         env:
           FLUXFAST_E2E_PYTHON: python
-      - run: pnpm test:e2e:production
+      - name: Verify Next adapter conformance in production
+        run: pnpm test:adapter-conformance:production
         env:
           FLUXFAST_E2E_PYTHON: python
       - name: Verify production lifecycle benchmark gates

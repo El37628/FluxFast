@@ -23,10 +23,11 @@ const ignoredTopLevel = new Set([
 ]);
 const productionEnvironment = {
   ...process.env,
-  FLUXFAST_E2E_BACKEND_PORT: "3111",
-  FLUXFAST_E2E_PORT: "3110",
+  FLUXFAST_E2E_BACKEND_PORT: process.env.FLUXFAST_E2E_BACKEND_PORT ?? String(Number(process.env.FLUXFAST_E2E_PORT ?? "3110") + 1),
+  FLUXFAST_E2E_PORT: process.env.FLUXFAST_E2E_PORT ?? "3110",
   FLUXFAST_E2E_PRODUCTION: "1",
   FLUXFAST_PRODUCTION_START: "0",
+  FLUXFAST_CONFORMANCE_SKIP_BUILD: "1",
   NEXT_TELEMETRY_DISABLED: "1",
 };
 delete productionEnvironment.FLUXFAST_BACKEND_URL;
