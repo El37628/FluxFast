@@ -58,6 +58,12 @@ start a server, or convert/remove your SPA. It adds:
 | `src/.fluxfast/agent-knowledge.md` | Refreshable integration guide, with bounded references added to `AGENTS.md` and `CLAUDE.md`. User instructions outside those blocks are preserved. |
 | `fluxfast:dev`, `fluxfast:build`, `fluxfast:start` | Scoped host scripts; your existing `dev`, `build`, `start` and other scripts are never replaced. |
 
+At development/build time the wrapper resolves existing async/nested plugin
+options. If your source configuration already supplies a FluxFast plugin, it
+preserves that plugin and its settings rather than adding a second one. The host
+still requires exactly one FluxFast plugin; an already-ambiguous source config
+must be repaired by its owner.
+
 When `src/` is absent, page and generated directories use the frontend root.
 The initializer may be run from a nested directory and locates the owning
 `package.json`. A repeated initialization leaves already-current files and

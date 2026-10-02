@@ -151,6 +151,12 @@ test("actual packed Vite initializes and builds offline, then boots without Next
       fs.renameSync("node_modules/@fluxfast/codegen","node_modules/@fluxfast/codegen-not-available");
     `);
     run(process.execPath, [binary, "build", "--config", "fluxfast.vite.config.mjs"], consumer);
+    // A manually configured host is also valid. Nested async PluginOptions must
+    // not cause the generated wrapper to install a second fluxfast() plugin.
+    const withExistingHost = 'import {fluxfast} from "@fluxfast/vite";\n' + originalConfig.replace(
+      'plugins:[{name:"original"', 'plugins:[Promise.resolve([fluxfast()]),{name:"original"');
+    fs.writeFileSync(path.join(consumer, "vite.config.mjs"), withExistingHost);
+    run(process.execPath, [binary, "init", "--check"], consumer);
     run(process.execPath, ["probe.mjs"], consumer);
     fs.writeFileSync(path.join(consumer, "production-probe.mjs"), `
       import assert from "node:assert/strict"; import {createServer} from "node:http";
