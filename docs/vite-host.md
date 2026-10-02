@@ -160,6 +160,9 @@ uses automatic JSX and deduplicates React/React DOM. An optional React Vite plug
 may add its usual development transforms; FluxFast applies `transformIndexHtml`
 before inserting SSR markup. Use the FluxFast host commands, not Vite's SPA
 development server or `vite preview`. Unknown CLI flags fail without startup.
+The development host transforms modules on demand rather than starting Vite's
+speculative pre-transforms, so a cold dependency scan cannot leave background
+transforms waiting after shutdown cancels optimization.
 
 ### Server inputs and output
 

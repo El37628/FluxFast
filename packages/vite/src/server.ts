@@ -125,7 +125,12 @@ export async function createFluxViteServer(options: FluxViteServerOptions = {}):
       const { createServer: createViteServer } = await import("vite");
       vite = await createViteServer({
         root, ...(options.configFile === undefined ? {} : { configFile: options.configFile }), appType: "custom",
-        server: { middlewareMode: true, hmr: { server: http }, host, port, strictPort: true },
+        server: {
+          middlewareMode: true, hmr: { server: http }, host, port, strictPort: true,
+          // Transform requested modules normally, without speculative jobs that
+          // can wait on an optimizer batch after its cancellation on shutdown.
+          preTransformRequests: false,
+        },
       });
       configuredFluxOptions(vite.config);
       const renderer = await vite.ssrLoadModule(SERVER_ENTRY);
@@ -161,9 +166,16 @@ export async function createFluxViteServer(options: FluxViteServerOptions = {}):
         stopping = true;
         const closed = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()));
         for (const controller of controllers) controller.abort();
-        await vite?.close();
         for (const socket of sockets) socket.destroy();
-        await closed;
+        try {
+          // A cold virtual-client request starts Vite's static-import crawl.
+          // Closing while its optimizer is held for that crawl can leave
+          // pending transforms waiting on a cancelled optimization batch.
+          // Release the owned network first, then let the crawl settle before
+          // Vite cancels its optimizer and closes the environments/watchers.
+          try { await vite?.waitForRequestsIdle(); }
+          finally { await vite?.close(); }
+        } finally { await closed; }
       })();
     },
   };

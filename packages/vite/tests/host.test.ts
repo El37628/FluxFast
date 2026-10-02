@@ -40,7 +40,7 @@ describe("real Vite development and built production hosts", () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-vite-host-"));
     fs.symlinkSync(path.join(packageRoot, "node_modules"), path.join(root, "node_modules"), process.platform === "win32" ? "junction" : "dir");
     fs.writeFileSync(path.join(root, "package.json"), '{"type":"module","private":true}');
-    fs.writeFileSync(path.join(root, "vite.config.mjs"), `import { fluxfast } from ${JSON.stringify(pluginUrl)}; export default {plugins:[fluxfast({application:"src/application.tsx",forwardHeaders:["x-tenant"], diagnostics:true})],logLevel:"silent"};`);
+    fs.writeFileSync(path.join(root, "vite.config.mjs"), `import { fluxfast } from ${JSON.stringify(pluginUrl)}; export default {cacheDir:".vite-cache",plugins:[fluxfast({application:"src/application.tsx",forwardHeaders:["x-tenant"], diagnostics:true})],logLevel:"silent"};`);
     fs.writeFileSync(path.join(root, "fluxfast.html"), template);
     fs.mkdirSync(path.join(root, "src"));
     fs.writeFileSync(path.join(root, "src/application.tsx"), `
@@ -187,6 +187,16 @@ describe("real Vite development and built production hosts", () => {
       expect(connected).toMatchObject({ type: "connected" });
     } finally { socket.close(); }
   }, 15_000);
+
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])("closes immediately after a cold virtual-client transform (%s)", async () => {
+    service = await createFluxViteServer({ root, backendUrl, port: 0 });
+    await (await fetch(service.url)).text();
+    expect(await (await fetch(service.url + "/@fluxfast/client")).text()).toContain("hydrateFluxApplication");
+    // Each fixture has its own cacheDir; warmed workspace optimizer state must
+    // not hide the cold-crawl cancellation race seen on clean CI runners.
+    await service.close();
+    await expect(fetch(service.url)).rejects.toThrow();
+  }, 5_000);
 
   it("preserves multiple Cookie fields with semicolon rather than comma joining", async () => {
     service = await createFluxViteServer({ root, backendUrl, port: 0 });
