@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add the unreleased `fluxfast-codegen generate --adapter react` target for
+  shared React allowlists, without a Next client directive or config execution.
+  Preserve all six Next artifact bytes and the five shared schema artifact bytes.
+  Vite hosting and the Python React handoff remain separate integration work.
 - Add unreleased React SSR and hydration subentries: lazy-page SSR completion,
   safe document payloads, exact-envelope hydration, actual 404/auth failures,
   bounded/cancellable SSR, and Core's same-origin streaming proxy. Vite asset
@@ -29,7 +33,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   Keep npm, pnpm, Yarn/PnP, and Bun execution local and upgrade errors generic.
 - Add the separate unreleased `fluxfast-codegen` binary with `generate`,
   `--schema-file`, `--check`, and explicit adapter selection through one target
-  registry. The only current target is `next`; its output and drift behavior
+  registry. The default target remains `next`; its output and drift behavior
   match the unchanged Next CLI without a competing `fluxfast` binary.
 - Add an explicit `FluxPageRegistryTarget` and shared read-only page scanner to
   Codegen. Runtime imports, root/props exports, and the client directive are

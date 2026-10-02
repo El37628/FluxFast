@@ -19,7 +19,7 @@ interface GenerateArgs {
 }
 
 const USAGE = `Usage:
-  fluxfast-codegen generate [--adapter next] [--check] [--schema-file PATH]
+  fluxfast-codegen generate [--adapter next|react] [--check] [--schema-file PATH]
   fluxfast-codegen --help
 
 Supported adapters: ${codegenAdapterNames().join(", ")} (default: next)

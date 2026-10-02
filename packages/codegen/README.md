@@ -35,13 +35,20 @@ Next's existing `fluxfast` command:
 ```sh
 fluxfast-codegen generate --adapter next --schema-file backend-schema.json
 fluxfast-codegen generate --adapter next --schema-file backend-schema.json --check
+fluxfast-codegen generate --adapter react --schema-file backend-schema.json
+fluxfast-codegen generate --adapter react --schema-file backend-schema.json --check
 ```
 
-`next` is the default and currently the only CLI target. The command discovers
-the nearest frontend `package.json` and preserves the existing root/src layout.
+`next` remains the default and preserves its existing root/src layout. `react`
+selects `@fluxfast/react` with no Next client directive; it uses `src/flux-pages`
+and `src/.fluxfast` when `src/` exists, or the project-root equivalents otherwise.
+The other five artifacts are identical for the same schema. The command discovers
+the nearest frontend `package.json`, without executing Next/Vite configuration.
 Checks never write files. Exit codes are `0` for generated/current, `1` for
 stale files or generation errors, and `2` for invalid usage or unsupported targets.
 Use a source build until publication; this is not an npm installation instruction.
+The React target generates an allowlist, not a Vite server, application router,
+or backend connection. Complete React SSR/Vite initialization is separate work.
 
 See the [Codegen API guide](https://github.com/El37628/FluxFast/blob/main/docs/codegen-api.md)
 for source-build commands, complete API and CLI examples, diagnostics, and every public export.
