@@ -1,9 +1,9 @@
 # Codegen API
 
-`@fluxfast/codegen` is the Node.js, framework-neutral compiler package being
-introduced in **unreleased v1.2**. It is not part of the published v1.1.0 payload.
-Do not install `@fluxfast/codegen@1.1.0` from npm: the workspace's synchronized
-development version is not a publication claim.
+`@fluxfast/codegen` is the Node.js, framework-neutral compiler package introduced
+in **FluxFast 1.2**. It is not part of the older v1.1.0 payload. See the
+[versioned release notes](releases/v1.2.0.md) for installation and availability;
+a source version change alone is not evidence of registry publication.
 
 Ordinary Next.js projects should continue using `fluxfast generate`,
 `fluxfast types APP`, and the existing `@fluxfast/next/generate` API. Their
@@ -17,7 +17,7 @@ helpers, filesystem helpers, and private deep imports are not public APIs.
 The separate `fluxfast-codegen` binary is documented below; its private CLI
 implementation is not an importable package API.
 
-## Generic Codegen CLI (unreleased)
+## Generic Codegen CLI
 
 The new binary is named `fluxfast-codegen`, not `fluxfast`. It can be installed
 alongside Next's existing `fluxfast` binary without a package-manager name
@@ -62,9 +62,9 @@ The five schema-derived files have the same bytes for Next and React. Only
 Compiling a React registry requires the React bindings in the consumer; running
 the compiler does not. React SSR rendering and hydration are documented in
 [React SSR boundaries](react-ssr.md). Host initialization and serving belong to
-the separate [Vite integration](vite-host.md), not this compiler target. The
-Python React generation and host supervision are also unreleased; complete React
-browser conformance remains separate work.
+the separate [Vite integration](vite-host.md), not this compiler target.
+Python 1.2 also provides React generation and host supervision. Both hosts run
+the same [browser conformance contracts](../tests/adapter-conformance/README.md).
 
 For a `src/` project with an exported schema whose validators are all supported,
 successful generation prints:
@@ -92,8 +92,18 @@ adapter. Unsupported-validator diagnostics remain visible even when generation
 or checking succeeds; they do not weaken backend validation. Compilation errors
 leave existing artifacts unchanged, and check mode is always read-only.
 
-This CLI is not yet on npm. To exercise it from a source checkout, build Core
-and Codegen first, then invoke the local binary **from the frontend project**:
+After version 1.2.0 is available on npm, install matching build-time packages in
+the frontend and use the installed binary:
+
+```sh
+npm install @fluxfast/core@1.2.0
+npm install --save-dev @fluxfast/codegen@1.2.0
+npm exec --no -- fluxfast-codegen generate --adapter next --schema-file backend-schema.json
+npm exec --no -- fluxfast-codegen generate --adapter next --schema-file backend-schema.json --check
+```
+
+For source development before publication, build Core and Codegen first, then
+invoke the local binary **from the frontend project**:
 
 ```sh
 # In the FluxFast source checkout:
@@ -107,7 +117,7 @@ node /path/to/FluxFast/packages/codegen/bin/fluxfast-codegen.js generate --adapt
 
 The compiler does not need React or Next.js installed to run. Its generated
 Next registry does need the selected runtime when the application compiles and
-renders. The source-development Python `fluxfast types` command now detects the
+renders. The Python 1.2 `fluxfast types` command detects the
 Next or React/Vite adapter and prefers this installed binary, with target-specific
 installed fallbacks. Next still supports older JavaScript packages. See the [adapter-aware handoff](type-safety.md#adapter-aware-handoff-unreleased-v12)
 for explicit selection and mixed-tooling behavior; published v1.1 Python keeps
@@ -121,8 +131,8 @@ Export the manifest from the authoritative FastAPI application first:
 fluxfast schema backend:app --output backend-schema.json
 ```
 
-Then a Node.js tool can inspect or compile it. This example requires the local
-v1.2 source build, not the published v1.1 packages:
+Then a Node.js tool can inspect or compile it. This example requires Codegen 1.2+
+(or its source-built candidate), not the older published v1.1 packages:
 
 ```js
 import fs from "node:fs";

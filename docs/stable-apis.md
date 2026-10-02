@@ -6,8 +6,8 @@ navigate, submit forms, and return mutation results.
 
 "Stable" is a compatibility classification, not a claim that every stable
 symbol belongs in every application. Most projects use a small set of Python
-builders and Next.js hooks. The complete package inventories remain available
-when you need a less common stable type.
+builders and React hooks through the Next or React/Vite host. The complete
+package inventories remain available when you need a less common stable type.
 
 If you are implementing a cache backend, transport adapter, protocol client,
 live broker, or code generator, continue with the
@@ -27,6 +27,7 @@ receive the same 1.x compatibility guarantee; they solve lower-level problems.
 | Navigate without a document reload | `Link` or `useRouter()` | Client component |
 | Submit and validate a form | `useForm()` with a generated validator | Client component |
 | Configure the Next.js shell | `withFluxFast()` and `createFluxNextPage()` | Next config and catch-all page |
+| Initialize a React/Vite SSR application (1.2+) | `fluxfast-vite init`, then Python `fluxfast dev/build/start` | Frontend setup and whole-application supervision |
 | Generate or check frontend artifacts | `fluxfast types`, `checkFluxFastProject()`, or `generateFluxFastProject()` | Development and CI |
 | Validate an unknown value outside React | `createValidator()` or a generated validator | Framework-neutral code |
 
@@ -68,7 +69,8 @@ FastAPI-owned contract without duplicating interfaces by hand.
 
 ### Framework-neutral Core APIs
 
-Most React applications receive Core through `@fluxfast/next`. Direct Core use
+Most React applications receive Core through `@fluxfast/next` or
+`@fluxfast/react`. Direct Core use
 is appropriate for framework-neutral validation, tests, or an adapter that
 needs `FluxRouter`, its stores, events, patch helpers, and documented errors.
 
@@ -76,6 +78,17 @@ needs `FluxRouter`, its stores, events, patch helpers, and documented errors.
 the ordinary stable validation surface. Generated validators already implement
 that interface, so application components normally consume a validator rather
 than construct its plan themselves.
+
+### React/Vite applications in 1.2
+
+Import shared hooks, forms and links from `@fluxfast/react` instead of
+`@fluxfast/next`, for example `const greeting = useResource(resourceKeys.greeting)`.
+Their resource, validation and navigation semantics are unchanged. The
+[React binding reference](react-api.md) explains every additional export with
+declaration/use examples; the [complete React/Vite tutorial](react-getting-started.md)
+shows runnable code and its UI/API output. Installed `fluxfast-vite init` owns
+the host scaffold, and Python supervises it; ordinary pages do not implement
+their own SSR fetcher or HTTP server.
 
 ## Every Stable API in one line
 

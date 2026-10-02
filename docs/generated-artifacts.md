@@ -31,23 +31,23 @@ user-owned and preserved.
 
 ## Stable generated API
 
-Under unreleased v1.2 development, the framework-neutral compilers and safe
+In FluxFast 1.2, the framework-neutral compilers and safe
 file-writing/checking infrastructure live in [`@fluxfast/codegen`](codegen-api.md).
 Codegen scans and renders page registries through explicit runtime/export targets;
 Next.js retains its public generator API and automatically supplies its default
 target. This ownership change preserves all six Next artifact bytes;
 it does not change the published v1.1 setup commands or manifest protocol.
-The separate unreleased `fluxfast-codegen generate --adapter next` binary uses
+The separate `fluxfast-codegen generate --adapter next` binary uses
 the same artifact engine without replacing Next's existing `fluxfast generate`
 binary. Its `--schema-file` and read-only `--check` modes preserve the same bytes.
 The additive `--adapter react` target selects the shared React bindings without
 a Next client directive. It uses `src/flux-pages` and `src/.fluxfast` when `src/`
 exists, otherwise the project-root equivalents. For the same schema, the other
 five generated files retain identical bytes. This target does not initialize or
-start a Vite host; see the [Codegen CLI guide](codegen-api.md) for source-build
+start a Vite host; see the [Codegen CLI guide](codegen-api.md) for installation,
 examples and the remaining integration boundaries.
 
-The unreleased [`fluxfast-vite` CLI](vite-host.md) also uses the public Codegen
+The [`fluxfast-vite` CLI](vite-host.md) also uses the public Codegen
 React target for `generate [--schema-file PATH] [--check]`, without evaluating
 Vite configuration. Its `init` creates the registry and integration scaffold;
 an existing or explicitly supplied backend schema adds the other five files.

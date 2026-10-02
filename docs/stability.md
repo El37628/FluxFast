@@ -18,7 +18,7 @@ runtime behavior. The FluxFast 1.x public surface includes:
 - names exported by the top-level Python `fluxfast` package;
 - names and paths exported by `@fluxfast/core`, `@fluxfast/next`, and the
   optional `@fluxfast/devtools` package added in v1.1; the additive Codegen and
-  shared React binding packages under unreleased v1.2 development;
+  shared React binding and Vite host packages introduced in v1.2;
 - CLI commands, meaningful options, documented environment variables, major
   defaults, and success/failure semantics;
 - generated filenames, exported names, and semantic TypeScript contracts;
@@ -37,12 +37,14 @@ it does not mean experimental. Examples include
 `LiveBroker`, `ResourceCacheBackend`, transport interfaces, validation-plan
 APIs, and protocol types.
 
-The unreleased [Codegen](codegen-api.md) and [React bindings](react-api.md)
+The [Codegen](codegen-api.md) and [React bindings](react-api.md)
 references classify their additive v1.2 surfaces and document examples. The
 React package relocates existing binding contracts without requiring Next
 applications to change their imports. The additive [Vite tooling/server APIs](vite-host.md)
-are Advanced Stable upon v1.2 publication; initialization, Python host integration
-and complete conformance remain unreleased work.
+are Advanced Stable from v1.2; initialization, Python host integration and shared
+development/production/distributed browser conformance are included. A source
+checkout or versioned API page is not a publication notice; check the
+[release notes](releases/v1.2.0.md) and actual registries before installing a version.
 
 For practical selection guidance and working examples, see
 [Stable APIs for application developers](stable-apis.md) and
@@ -62,16 +64,18 @@ The following contracts are stable throughout the 1.x release line:
 | Surface | Stable contract |
 | --- | --- |
 | Python package | The documented `fluxfast.__all__` names, call shapes, and behavior. |
-| Core package | The `@fluxfast/core` root path, its declarations, and framework-neutral runtime behavior; the additive `@fluxfast/core/server` integration surface under unreleased v1.2 development. |
+| Core package | The `@fluxfast/core` root path, its declarations, and framework-neutral runtime behavior; the additive `@fluxfast/core/server` integration surface from v1.2. |
 | Next package | The five documented `@fluxfast/next` export-map paths and their per-path declarations. |
-| React bindings | The additive `@fluxfast/react` root under unreleased v1.2 development, plus separate `./client` hydration and Node-only `./server` integration entries. |
+| React bindings | The `@fluxfast/react` root from v1.2, plus separate `./client` hydration and Node-only `./server` integration entries. |
+| Codegen | The `@fluxfast/codegen` root and its separate `fluxfast-codegen` binary from v1.2. |
+| Vite host | The `@fluxfast/vite` plugin/build root, `./server` host API and `fluxfast-vite` CLI from v1.2; React SSR, same-origin development HMR and immutable built production serving. |
 | DevTools package | The `@fluxfast/devtools` root path, `FluxDevtools`, `FluxDevtoolsProps`, and development/production conditional behavior introduced in v1.1. |
 | Browser protocol | `fluxfast/1`, its media type, headers, capabilities, envelopes, events, and patch semantics. |
 | Developer schema | Closed `fluxfast-schema/2` shape and fingerprint rules, plus continued schema/1 reading. |
 | Generated code | Stable filenames, public generated symbols, naming rules, and semantic TypeScript contracts. |
 | CLI and configuration | Documented Python and JavaScript commands, meaningful flags, major defaults, exit semantics, and public environment variables. |
 | Runtime behavior | Documented validation, resource, mutation, cache/scope, deferred, live, one-origin production, health, and lifecycle semantics. |
-| Runtime support | Python 3.11–3.14, Node.js 22 and 24, Next.js `>=16.3.0 <17.0.0`, React 19+, and Redis 6.2–8.10 when Redis features are configured. |
+| Runtime support | Python 3.11–3.14, Node.js 22 and 24, Next.js `>=16.3.0 <17.0.0`, React 19+, and Redis 6.2–8.10 when Redis features are configured. React/Vite additionally requires Node 22.12+ or 24 and Vite `>=7.3.6 <8`. |
 
 ### Machine-checkable reference
 
@@ -146,14 +150,17 @@ Markdown compiler.
       "./server"
     ],
     "@fluxfast/devtools": ["."],
+    "@fluxfast/codegen": ["."],
+    "@fluxfast/vite": [".", "./server"],
     "@fluxfast/react": [".", "./client", "./server"]
   }
 }
 ```
 <!-- stability-facts:end -->
 
-The synchronized `fluxfast`, `@fluxfast/core`, `@fluxfast/next`, and (from
-v1.1) `@fluxfast/devtools` package versions identify a matched release.
+The synchronized Python `fluxfast` and npm Core, Next, DevTools, Codegen, React
+and Vite package versions identify a matched v1.2 release. Install only the host
+you use; React/Vite applications do not need Next.js.
 Supported mixed-version behavior is
 defined by the protocol, schema, generated-code, and adjacent-release consumer
 gates; matching package versions remain the recommended production setup,

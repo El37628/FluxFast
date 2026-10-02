@@ -104,7 +104,8 @@ test("keeps documented runtime support aligned with metadata and CI", () => {
   const devtoolsPackage = JSON.parse(read("packages/devtools/package.json"));
   const reactPackage = JSON.parse(read("packages/react/package.json"));
   assert.deepEqual(facts.packageEntryPoints["@fluxfast/react"], Object.keys(reactPackage.exports));
-  assert.match(read("docs/react-api.md"), /unreleased/i);
+  assert.match(read("docs/react-api.md"), /Introduced in FluxFast \*\*1\.2\*\*/);
+  assert.match(read("docs/react-api.md"), /releases\/v1\.2\.0\.md/);
   const pythonVersions = inlineMatrix(
     read(".github/workflows/python.yml"),
     "python-version"
@@ -133,6 +134,9 @@ test("keeps documented runtime support aligned with metadata and CI", () => {
   assert.equal(nextPackage.peerDependencies.next, facts.runtime.nextPeer);
   assert.equal(nextPackage.peerDependencies.react, facts.runtime.reactPeer);
   assert.equal(nextPackage.peerDependencies["react-dom"], facts.runtime.reactPeer);
+  const vitePackage = JSON.parse(read("packages/vite/package.json"));
+  assert.equal(vitePackage.engines.node, "^22.12.0 || ^24.0.0");
+  assert.equal(vitePackage.peerDependencies.vite, ">=7.3.6 <8.0.0");
 
   const versioning = read("docs/versioning.md");
   assert.ok(
@@ -145,6 +149,9 @@ test("keeps documented runtime support aligned with metadata and CI", () => {
   assert.ok(
     versioning.includes(`| React and React DOM | \`${facts.runtime.reactPeer}\` |`)
   );
+  assert.ok(versioning.includes(
+    `| Vite (React host only) | \`${vitePackage.peerDependencies.vite}\`, with Node 22.12+ or 24 |`
+  ));
 
   const readme = read("README.md");
   assert.match(readme, /Next\.js 16 App Router/);
@@ -245,6 +252,10 @@ test("keeps public package entry points aligned with manifests and API docs", ()
     facts.packageEntryPoints["@fluxfast/devtools"].toSorted(),
     Object.keys(devtoolsPackage.exports).toSorted()
   );
+  for (const name of ["codegen", "react", "vite"]) {
+    const manifest = JSON.parse(read(`packages/${name}/package.json`));
+    assert.deepEqual(facts.packageEntryPoints[manifest.name].toSorted(), Object.keys(manifest.exports).toSorted());
+  }
 
   const coreApi = read("docs/core-api.md");
   assert.match(coreApi, /browser-facing public import\s+path/);
@@ -336,7 +347,8 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   assert.match(artifactGate, /trusted OIDC and provenance/);
   assert.match(security, /Pre-1\.0 releases are\s+unsupported/);
   assert.doesNotMatch(security, /Before 1\.0/);
-  assert.equal(releasing.match(/version=1\.1\.0/g)?.length, 2);
+  const releaseVersion = JSON.parse(read("package.json")).version;
+  assert.equal(releasing.match(new RegExp(`version=${escapeRegExp(releaseVersion)}`, "g"))?.length, 2);
   assert.doesNotMatch(releasing, /version=0\.9\.0/);
 
   assert.match(
@@ -349,6 +361,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
   );
   for (const target of [
     "docs/getting-started.md",
+    "docs/react-getting-started.md",
     "docs/architecture.md",
     "#resources",
     "docs/mutations.md",
@@ -363,6 +376,7 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
     "docs/distributed-cache.md",
     "docs/stability.md",
     "docs/releases/v1.1.0.md",
+    "docs/releases/v1.2.0.md",
     "docs/releases/v1.0.0.md",
     "docs/releases/v1.0-final-candidate-gate.md",
     "docs/releases/v1.0-artifact-verification.md",

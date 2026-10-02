@@ -4,7 +4,8 @@ Framework-neutral browser runtime for the FluxFast protocol. It provides the
 resource store, router, transport, cache, mutation, history, event, and
 prefetch primitives shared by frontend adapters.
 
-Most applications should install an adapter such as `@fluxfast/next`, which
+Most applications should install an adapter such as `@fluxfast/next` or
+`@fluxfast/vite`, which
 installs a compatible version of this package automatically. Install the core
 package directly when building an adapter or using its framework-neutral APIs:
 
@@ -34,7 +35,7 @@ evaluation limits, and synchronous refinements with zero external dependencies.
 supports Node.js 22 and 24, while the browser-facing APIs target modern web
 runtimes.
 
-Unreleased v1.2 foundation work adds server adapter primitives through
+FluxFast 1.2 adds server adapter primitives through
 `@fluxfast/core/server`, separately from this browser-facing root. The initial
 surface provides `fetchFluxInitialPage`, `selectFluxForwardHeaders`, and
 `removeFluxHopByHopHeaders`;

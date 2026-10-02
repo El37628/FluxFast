@@ -1,6 +1,6 @@
 {
   "name": "@fluxfast/devtools",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "description": "Development-only runtime diagnostics UI for FluxFast",
   "repository": {
@@ -48,7 +48,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fluxfast/react": "^1.1.0"
+    "@fluxfast/react": "^1.2.0"
   },
   "peerDependencies": {
     "@fluxfast/core": ">=1.1.0 <2.0.0",
@@ -57,7 +57,9 @@
     "react-dom": ">=19.0.0"
   },
   "peerDependenciesMeta": {
-    "@fluxfast/next": { "optional": true }
+    "@fluxfast/next": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@fluxfast/core": "workspace:*",

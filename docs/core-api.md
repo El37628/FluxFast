@@ -11,7 +11,7 @@ import { FluxRouter, createValidator } from "@fluxfast/core";
 Deep imports into `dist` or source files are internal. The package's ESM and
 CommonJS entry points expose the same named API.
 
-Unreleased v1.2 foundation work adds a separate server integration path,
+FluxFast 1.2 adds a separate server integration path,
 `@fluxfast/core/server`. It is not available in the published v1.1 packages.
 Server helpers are never re-exported from the browser-facing root; existing
 Next.js applications keep their current imports and behavior.
@@ -27,7 +27,8 @@ the authoritative symbol inventory for both classifications.
 
 ## Common API inputs and outputs
 
-Application components normally reach this runtime through `@fluxfast/next`.
+Application components normally reach this runtime through `@fluxfast/next`
+or the shared `@fluxfast/react` bindings.
 The direct API is useful for adapter authors, non-React clients, validation,
 and tests.
 
@@ -423,7 +424,9 @@ No `@fluxfast/core` root export is deprecated in v0.9. Runtime classes,
 interfaces, constants, and helpers listed above remain supported even when
 ordinary Next.js applications normally access them through `@fluxfast/next`.
 
-## Server adapter primitives (unreleased v1.2)
+<a id="server-adapter-primitives-unreleased-v12"></a>
+
+## Server adapter primitives (FluxFast 1.2)
 
 These Advanced Stable APIs are for server-side adapter integrations, not React
 components. They use standard `Headers`, `Request`, `Response`, and `fetch`
@@ -669,7 +672,7 @@ for the host to translate into its own response. `FluxTransportProxyOptions`
 names the backend URL and an optional injected fetch implementation.
 
 These types describe the shared server contract. Initial-page fetching and
-transport proxying are available independently. The unreleased Next.js adapter
+transport proxying are available independently. The Next.js adapter
 delegates both HTTP boundaries and header sanitation to these primitives while
 retaining framework rendering, not-found control flow, route parameters, and
 backend environment policy.

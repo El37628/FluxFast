@@ -2,9 +2,10 @@
 
 Framework-neutral contract and project code generation for FluxFast.
 
-This package is under **unreleased v1.2 development**. The current published
-release is v1.1.0; its Next.js generator already works and does not require this
-new package. The workspace version remains synchronized while Phase A is built.
+Introduced in FluxFast 1.2. Existing Next.js generator APIs and commands remain
+compatible and delegate to this package. Match its version to your FluxFast
+runtime; see the [release notes](https://github.com/El37628/FluxFast/blob/main/docs/releases/v1.2.0.md)
+for installation and availability.
 
 Codegen owns schema parsing, TypeScript contract/route/mutation compilation,
 validation-plan compilation, adapter-targeted page scanning/registry rendering,
@@ -29,7 +30,7 @@ Next.js bytes. Next supplies its default registry target; shared scanning,
 rendering, and safe persistence live in Codegen. Other tooling must explicitly
 select its runtime exports rather than inheriting a hardcoded Next import.
 
-The unreleased package also provides a separate binary, without competing for
+The package also provides a separate binary, without competing for
 Next's existing `fluxfast` command:
 
 ```sh
@@ -46,9 +47,9 @@ The other five artifacts are identical for the same schema. The command discover
 the nearest frontend `package.json`, without executing Next/Vite configuration.
 Checks never write files. Exit codes are `0` for generated/current, `1` for
 stale files or generation errors, and `2` for invalid usage or unsupported targets.
-Use a source build until publication; this is not an npm installation instruction.
 The React target generates an allowlist, not a Vite server, application router,
-or backend connection. Complete React SSR/Vite initialization is separate work.
+or backend connection. Complete React SSR/Vite initialization belongs to the
+[Vite host](https://github.com/El37628/FluxFast/blob/main/docs/vite-host.md) and Python CLI.
 
 See the [Codegen API guide](https://github.com/El37628/FluxFast/blob/main/docs/codegen-api.md)
-for source-build commands, complete API and CLI examples, diagnostics, and every public export.
+for installation, complete API and CLI examples, diagnostics, and every public export.

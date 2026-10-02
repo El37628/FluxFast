@@ -52,7 +52,8 @@ test("React documents an example for every public value and type", () => {
   const names = [...block.matchAll(/^\| `([A-Za-z_][\w]*)` \|/gm)].map(match => match[1]);
   assert.equal(new Set(names).size, names.length);
   assert.deepEqual(names.sort(), Object.values(entry).flat().sort());
-  assert.match(guide, /unreleased/i);
+  assert.match(guide, /Introduced in FluxFast \*\*1\.2\*\*/);
+  assert.match(guide, /releases\/v1\.2\.0\.md/);
 });
 
 test("React separately documents every server and hydration integration export", () => {
@@ -64,7 +65,8 @@ test("React separately documents every server and hydration integration export",
     .map(match => `./${match[1]} ${match[2]}`).sort();
   const expected = ["./server", "./client"].flatMap(entry => Object.values(entries[entry]).flat().map(name => `${entry} ${name}`)).sort();
   assert.deepEqual(actual, expected);
-  assert.match(guide, /unreleased/i);
+  assert.match(guide, /FluxFast \*\*1\.2 or later\*\*/);
+  assert.match(guide, /releases\/v1\.2\.0\.md/);
 });
 
 test("packed React and DevTools support SSR, CJS, ESM, and strict types without installing Next", () => {

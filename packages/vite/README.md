@@ -1,15 +1,16 @@
 # @fluxfast/vite
 
-Same-origin React SSR host and Vite tooling for FluxFast, under **unreleased v1.2
-development**. Published v1.1 applications still use the Next.js adapter.
-The workspace version stays synchronized; this package is not published yet.
+Same-origin React SSR host and Vite tooling introduced in FluxFast 1.2. Match
+Python, Core, Codegen, React and Vite package versions; see the
+[release notes](https://github.com/El37628/FluxFast/blob/main/docs/releases/v1.2.0.md)
+for installation and availability. Existing Next applications keep their adapter.
 
 Vite owns compilation, lazy chunks and development HMR. The host serves actual
 React SSR documents, browser assets and FluxFast protocol traffic on one public
 origin. FastAPI remains private and owns application routes and resources.
 Production imports a built Node renderer without loading Vite or source config.
 
-After installing source-built Core, Codegen, React and Vite tarballs and declaring
+After installing matching Core, Codegen, React and Vite packages and declaring
 the React/React DOM/Vite peers in your frontend, initialize with the local binary:
 
 ```sh
@@ -29,7 +30,7 @@ by setup/check commands. Export your authoritative backend schema, then use
 `generate --check` for read-only drift detection. Codegen is loaded only for
 these tooling commands, not by the production host.
 
-With the matching source-built Python wheel, run the complete initialized app
+With the matching Python package, run the complete initialized app
 from its backend project directory:
 
 ```sh
@@ -44,12 +45,12 @@ Python detects the declared `@fluxfast/vite` host and runs its scoped scripts,
 not your existing SPA scripts. It supervises FastAPI privately and the public
 Node host as one service; do not start a second FastAPI service manually.
 Production consumes `dist/fluxfast/` and never builds/generates at startup.
-Published Python v1.1.0 does not yet select this host.
+Python 1.2+ selects this host; older 1.1 Python does not.
 
 Alternatively configure the host manually:
 
 ```ts
-// vite.config.ts, after installing the source-built packages
+// vite.config.ts, after installing the matching packages
 import { defineConfig } from "vite";
 import { fluxfast } from "@fluxfast/vite";
 
@@ -67,9 +68,9 @@ The framework-neutral runtime does not depend on this host.
 The shared browser gates run the same contracts as Next in development and
 production, plus initialized packed consumers and three-worker Redis tests.
 Cold hydration/navigation and automatic source synchronization use one public
-origin; production also hydrates without source or build tooling. Final release
-gates and registry publication remain pending; this is not a published v1.2 release.
+origin; production also hydrates without source or build tooling. Publication
+gates test the exact archives and then matching registry-only installations.
 
 See the [Vite host guide](https://github.com/El37628/FluxFast/blob/main/docs/vite-host.md)
-for template/configuration examples, source-build usage, server APIs, output
+for template/configuration examples, installation, server APIs, output
 ownership and production limitations.
