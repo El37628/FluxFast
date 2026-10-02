@@ -36,9 +36,29 @@ const NEXT_CODEGEN_TARGET: CodegenCliTarget = Object.freeze({
   },
 });
 
+const REACT_CODEGEN_TARGET: CodegenCliTarget = Object.freeze({
+  registry: Object.freeze({
+    runtimeImport: "@fluxfast/react",
+    rootExport: "FluxRoot",
+    applicationPropsExport: "FluxApplicationProps",
+    clientDirective: false,
+  }),
+  projectPaths(root: string): CodegenProjectPaths {
+    // React/Vite does not use Next's app/pages routing-directory precedence.
+    const sourceRoot = isDirectory(path.join(root, "src")) ? path.join(root, "src") : root;
+    const generatedDir = path.join(sourceRoot, ".fluxfast");
+    return {
+      pagesDir: path.join(sourceRoot, "flux-pages"),
+      generatedDir,
+      registryPath: path.join(generatedDir, "pages.generated.ts"),
+    };
+  },
+});
+
 // Adapter selection belongs here, not in the scanner, compilers, or writer.
 const targets: Readonly<Record<string, CodegenCliTarget>> = Object.freeze({
   next: NEXT_CODEGEN_TARGET,
+  react: REACT_CODEGEN_TARGET,
 });
 
 export function getCodegenTarget(name: string): CodegenCliTarget | undefined {

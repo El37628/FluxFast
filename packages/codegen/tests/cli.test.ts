@@ -45,7 +45,8 @@ describe("framework-neutral Codegen CLI", () => {
 
   it.each([[], ["--help"], ["-h"], ["generate", "--help"]].map(args => ({ args })))("prints help without inspecting or changing a project ($args)", ({ args }) => {
     expect(runCodegenCli(args, io)).toBe(0);
-    expect(stdout.join("\n")).toContain("fluxfast-codegen generate [--adapter next] [--check] [--schema-file PATH]");
+    expect(stdout.join("\n")).toContain("fluxfast-codegen generate [--adapter next|react] [--check] [--schema-file PATH]");
+    expect(stdout.join("\n")).toContain("Supported adapters: next, react");
     expect(stdout.join("\n")).toContain("default: next");
     expect(stderr).toEqual([]);
     expect(fs.readdirSync(root)).toEqual([]);
@@ -71,11 +72,68 @@ describe("framework-neutral Codegen CLI", () => {
     expect(fs.readdirSync(root)).toEqual([]);
   });
 
-  it.each(["react", "__proto__", "constructor", "toString", "NEXT"])("fails closed on unsupported adapter %s", adapter => {
+  it.each(["vite", "__proto__", "constructor", "toString", "NEXT", "React"])("fails closed on unsupported adapter %s", adapter => {
     expect(runCodegenCli(["generate", "--adapter", adapter], io)).toBe(2);
     expect(stderr.join("\n")).toContain("Unsupported adapter:");
     expect(stderr.join("\n")).toContain("Supported adapters: next");
     expect(fs.readdirSync(root)).toEqual([]);
+  });
+
+  it.each(["root", "src"] as const)("generates a React allowlist without Next imports and preserves the other five artifacts in the %s layout", layout => {
+    const output = source(layout);
+    const args = ["generate", "--adapter", "react", "--schema-file", "backend-schema.json"];
+    expect(runCodegenCli([...args, "--check"], io)).toBe(1);
+    expect(fs.existsSync(output)).toBe(false);
+    expect(runCodegenCli(args, io)).toBe(0);
+    const registry = fs.readFileSync(path.join(output, "pages.generated.ts"), "utf8");
+    const nextRegistry = fs.readFileSync(path.join(fixture, "pages.generated.ts"), "utf8");
+    expect(registry).toBe(nextRegistry.replace('"use client";\n', "").replaceAll("@fluxfast/next", "@fluxfast/react"));
+    expect(registry).not.toContain("@fluxfast/next");
+    expect(registry).not.toContain('"use client"');
+    for (const [file, hash] of Object.entries(baseline.artifactDigests)) {
+      if (file === "pages.generated.ts") continue;
+      expect(createHash("sha256").update(fs.readFileSync(path.join(output, file))).digest("hex")).toBe(hash);
+    }
+    const before = generatedBytes(output);
+    expect(runCodegenCli([...args, "--check"], io)).toBe(0);
+    expect(generatedBytes(output)).toEqual(before);
+    fs.writeFileSync(path.join(output, "pages.generated.ts"), "stale React registry\n");
+    const stale = generatedBytes(output);
+    expect(runCodegenCli([...args, "--check"], io)).toBe(1);
+    expect(generatedBytes(output)).toEqual(stale);
+    expect(runCodegenCli(args, io)).toBe(0);
+    expect(generatedBytes(output)).toEqual(before);
+  });
+
+  it.each([
+    [[], "root"], [["src"], "src"], [["app", "src"], "src"],
+    [["pages", "src"], "src"], [["app", "pages"], "root"],
+  ] as const)("uses React source layout without inheriting Next route-directory precedence for %j", (directories, layout) => {
+    fs.writeFileSync(path.join(root, "package.json"), '{"private":true}');
+    for (const directory of directories) fs.mkdirSync(path.join(root, directory), { recursive: true });
+    expect(runCodegenCli(["generate", "--adapter", "react"], io)).toBe(0);
+    const registry = path.join(root, layout === "src" ? "src" : "", ".fluxfast/pages.generated.ts");
+    expect(fs.readFileSync(registry, "utf8")).toContain('from "@fluxfast/react"');
+  });
+
+  it("does not evaluate Vite configuration or install a framework to generate a React registry", () => {
+    const output = source();
+    fs.writeFileSync(path.join(root, "vite.config.ts"), 'throw new Error("Project code was executed");');
+    expect(runCodegenCli(["generate", "--adapter", "react"], io)).toBe(0);
+    expect(fs.existsSync(path.join(output, "pages.generated.ts"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "node_modules"))).toBe(false);
+    expect(stderr).toEqual([]);
+  });
+
+  it("does not write any React artifacts for an invalid authoritative schema", () => {
+    const output = source();
+    const args = ["generate", "--adapter", "react", "--schema-file", "backend-schema.json"];
+    expect(runCodegenCli(args, io)).toBe(0);
+    const before = generatedBytes(output);
+    fs.writeFileSync(path.join(root, "backend-schema.json"), "{}");
+    expect(runCodegenCli(args, io)).toBe(1);
+    expect(runCodegenCli([...args, "--check"], io)).toBe(1);
+    expect(generatedBytes(output)).toEqual(before);
   });
 
   it.each(["root", "src"] as const)("preserves all six published artifact bytes and read-only checks in the %s layout", layout => {

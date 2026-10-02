@@ -40,6 +40,12 @@ it does not change the published v1.1 setup commands or manifest protocol.
 The separate unreleased `fluxfast-codegen generate --adapter next` binary uses
 the same artifact engine without replacing Next's existing `fluxfast generate`
 binary. Its `--schema-file` and read-only `--check` modes preserve the same bytes.
+The additive `--adapter react` target selects the shared React bindings without
+a Next client directive. It uses `src/flux-pages` and `src/.fluxfast` when `src/`
+exists, otherwise the project-root equivalents. For the same schema, the other
+five generated files retain identical bytes. This target does not initialize or
+start a Vite host; see the [Codegen CLI guide](codegen-api.md) for source-build
+examples and the remaining integration boundaries.
 
 Application code may depend on these semantic exports:
 

@@ -157,6 +157,17 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
     for (const filename of Object.keys(baseline.artifactDigests)) {
       assert.deepEqual(fs.readFileSync(path.join(cliProject, "src/.fluxfast", filename)), fs.readFileSync(path.join(fixture, filename)));
     }
+    // Invoke the actual packed binary: the new target must not need either
+    // framework installed, execute Vite config, or change shared schema bytes.
+    fs.writeFileSync(path.join(cliProject, "vite.config.mjs"), 'throw new Error("Configuration must not execute");');
+    run(process.execPath, [cli, "generate", "--adapter", "react", "--schema-file", "backend-schema.json"], cliProject);
+    assert.match(run(process.execPath, [cli, "generate", "--adapter", "react", "--check"], cliProject), /files are current/);
+    const reactRegistry = path.join(cliProject, "src/.fluxfast/pages.generated.ts");
+    assert.equal(fs.readFileSync(reactRegistry, "utf8"), fs.readFileSync(path.join(fixture, "pages.generated.ts"), "utf8")
+      .replace('"use client";\n', "").replaceAll("@fluxfast/next", "@fluxfast/react"));
+    for (const filename of Object.keys(baseline.artifactDigests).filter(file => file !== "pages.generated.ts")) {
+      assert.deepEqual(fs.readFileSync(path.join(cliProject, "src/.fluxfast", filename)), fs.readFileSync(path.join(fixture, filename)));
+    }
     const types = `
       import { compileJsonSchemaToValidationPlan, compileFluxFastValidatorsWithDiagnostics,
         generateFluxFastProject, checkFluxFastProject, validateFluxFastSchemaManifest, createPagesRegistrySnapshot,
@@ -199,11 +210,17 @@ test("isolated Codegen tarball supports ESM, CommonJS, types and six frozen byte
         export interface ApplicationInput {initialEnvelope:{page:{component:string}};registry?:ComponentRegistry}
         export function ApplicationRoot(props:ApplicationInput):unknown;
       }
+      declare module "@fluxfast/react" {
+        export type ComponentRegistry = Record<string, {load:()=>Promise<unknown>}>;
+        export interface FluxApplicationProps {initialEnvelope:{page:{component:string}};registry?:ComponentRegistry}
+        export function FluxRoot(props:FluxApplicationProps):unknown;
+      }
     `);
     run(process.execPath, [path.join(path.dirname(require.resolve("typescript/package.json")), "bin/tsc"),
       "--noEmit", "--strict", "--skipLibCheck", "--module", "ESNext", "--moduleResolution", "Bundler",
       "--target", "ES2022", "--jsx", "preserve", "--allowJs", "host-types.d.ts",
-      "esm/src/.host-registry/pages.generated.ts", "cjs/src/.host-registry/pages.generated.ts"], consumer);
+      "esm/src/.host-registry/pages.generated.ts", "cjs/src/.host-registry/pages.generated.ts",
+      "cli-project/src/.fluxfast/pages.generated.ts"], consumer);
   } finally {
     fs.rmSync(temporary, {recursive:true, force:true});
   }

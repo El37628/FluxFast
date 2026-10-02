@@ -31,11 +31,14 @@ The command and meaningful flags are:
 ```sh
 fluxfast-codegen generate --adapter next --schema-file backend-schema.json
 fluxfast-codegen generate --adapter next --schema-file backend-schema.json --check
+fluxfast-codegen generate --adapter react --schema-file backend-schema.json
+fluxfast-codegen generate --adapter react --schema-file backend-schema.json --check
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--adapter next` | Selects the Next registry target. `next` is the default and the only currently supported choice; other names fail rather than silently selecting it. |
+| `--adapter next` | Selects the existing Next registry target. `next` remains the default. |
+| `--adapter react` | Selects the shared React registry target, without a Next client directive. Other target names fail rather than silently selecting Next. |
 | `--schema-file PATH` | Reads an authoritative exported manifest relative to the directory where the command was invoked, validates it, and includes its exact bytes in generation or drift checking. |
 | `--check` | Compares expected artifacts without creating directories or changing files. |
 
@@ -45,6 +48,21 @@ without evaluating project configuration. The Next target uses the same root or
 `flux-pages` directory and writes to its `.fluxfast` directory.
 Without `--schema-file`, it reads an existing `.fluxfast/schema.generated.json`;
 if neither schema source exists, it generates or checks only the registry.
+
+The React target uses `src/flux-pages` and `src/.fluxfast` when the project has
+a `src/` directory, otherwise `flux-pages` and `.fluxfast` at the project root.
+Next's `app`/`pages` routing-directory precedence does not apply to React. For
+example, `src/flux-pages/home/index.tsx` exports your `Home` component; generation
+adds a lazy `"home/index"` allowlist entry and a `FluxApplication` wrapper using
+`FluxRoot` from `@fluxfast/react`. FastAPI still selects that identifier and owns
+the URL. The registry is not a filesystem-based browser router.
+
+The five schema-derived files have the same bytes for Next and React. Only
+`pages.generated.ts` changes its runtime import and client-directive policy.
+Compiling a React registry requires the React bindings in the consumer; running
+the compiler does not. React SSR rendering and hydration are documented in
+[React SSR boundaries](react-ssr.md). The full Vite host and Python React handoff
+are not implemented by this target and remain unreleased work.
 
 For a `src/` project with an exported schema whose validators are all supported,
 successful generation prints:
