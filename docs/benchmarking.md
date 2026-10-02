@@ -101,6 +101,92 @@ its temporary container and image after the run.
 Pass `--samples N` after `--` to select the measured sample count, for example
 `pnpm benchmark:codegen -- --samples 1` for a quick correctness run.
 
+## Unreleased v1.2 Adapter Foundation Comparison
+
+The adapter extraction has a separate comparison against **actual published
+v1.1.0**, not the older v0.9.0 or v1.0.1 performance baselines:
+
+```bash
+pnpm benchmark:adapter-foundation
+pnpm benchmark:adapter-foundation -- --bundles
+```
+
+This is an internal verification tool for unreleased development, not a v1.2
+release announcement. It needs npm registry access and uses directory symlinks
+for its isolated package wrappers; the reference run below used Linux. It
+downloads Core and Next v1.1.0 archives and verifies their SHA-512 integrity
+against the immutable
+[published baseline](../tests/fixtures/adapter-baseline-v1.1.0/baseline.json).
+The candidate uses separately packed local Core, Codegen, and Next archives.
+Neither side may resolve FluxFast packages from another consumer or silently
+fall back to the workspace as its baseline.
+
+The generation workload creates **10, 100, and 500 actual frontend page
+modules**, independently of the contract-count scenarios below. Both sides
+consume the same captured schema/2 manifest. The timed region includes scanning,
+compilation, and atomic file writes. Outside timing, every iteration verifies
+the page count, all six generated file bytes against the published generator,
+and read-only checks including modification times. Five warm-ups precede 31
+measured samples, in both baseline/candidate and candidate/baseline orders.
+
+The runtime comparison uses the existing inactive-diagnostics harness with
+31 samples of 10,000 uncached FetchTransport/FluxRouter navigations per side
+and order. Every visit must converge, diagnostics must remain inactive, and
+the complete CommonJS and ESM browser Core module graphs must be byte-identical
+to published v1.1.0 and exclude server/framework dependencies. Runtime evaluation
+uses the existing 1% median-absolute-deviation policy without altering the
+independent v1.0.1 CI gate. Small `--samples` or `--iterations` values are useful
+for harness debugging, not evidence of statistical equivalence.
+
+`--bundles` additionally runs twenty clean Next.js production builds: the
+five existing bundle variants for both package sources in both orders. Both
+consumers use exactly the same external dependencies from the isolated release
+consumer fixture. The builds retain the existing raw SSR and exact
+validator-plan/runtime tree-shaking assertions. Bundle byte deltas are
+observations, not a new size threshold or a reason to weaken browser separation.
+
+Full sample arrays, archive identities, candidate commit/worktree, host and
+toolchain, and runtime/bundle logs remain in an owned directory beneath the
+ignored `benchmark-results/adapter-foundation-*`. The tool prints that exact
+directory and writes `summary.json`; preserve it when reporting a comparison.
+
+### Observed Foundation Reference Run
+
+On 2026-10-02, Linux WSL2 x86_64 with an AMD Ryzen 5 3600, 12 logical CPUs,
+and Node 24.19.0 produced these generation medians. Each row contains 31
+measured samples after five warm-ups; differences are candidate versus baseline.
+The [retained reference data](https://github.com/El37628/FluxFast/blob/main/docs/releases/evidence/v1.2-adapter-foundation-comparison.json)
+records every sample, both archive sources, external tooling, and bundle results.
+
+| Pages | Workload order | Published v1.1.0 | Extracted candidate | Difference |
+| ---: | --- | ---: | ---: | ---: |
+| 10 | Baseline → candidate | 12.923 ms | 12.792 ms | -1.012% |
+| 10 | Candidate → baseline | 13.266 ms | 12.695 ms | -4.300% |
+| 100 | Baseline → candidate | 13.774 ms | 13.171 ms | -4.373% |
+| 100 | Candidate → baseline | 12.171 ms | 13.232 ms | +8.726% |
+| 500 | Baseline → candidate | 20.793 ms | 20.857 ms | +0.306% |
+| 500 | Candidate → baseline | 20.107 ms | 20.998 ms | +4.431% |
+
+The runtime medians were 295.447/273.766 ms in baseline-first order and
+282.531/283.346 ms in candidate-first order: -7.339% and +0.289%, with measured
+MAD noise floors of 4.761% and 6.010%. The unchanged evaluation did not detect
+a repeatable noise-adjusted regression. This does **not** establish a speedup.
+The complete browser Core graphs were byte-identical to published v1.1.0.
+
+The twenty builds used Next 16.3.6, React/React DOM 19.2.8, and TypeScript
+5.9.3. Every variant had 47 fewer first-load and aggregate client-chunk bytes
+than its published counterpart, in both orders. All SSR and validator
+tree-shaking assertions passed. This tiny aggregate difference is not a
+meaningful size improvement; the relevant finding is no material bundle growth
+from the server extraction.
+
+All six generation bytes and read-only assertions passed at every project size
+and sample. The tradeoff is preserving path/target validation and atomic,
+synchronous file safety, not removing it for a microbenchmark gain. Generation
+results vary by workload order and storage behavior; the observed +8.726% row
+must not be hidden or described as faster. Reproduce the comparison on the
+target host before making a broader performance claim.
+
 ## Production Lifecycle Scenario
 
 The lifecycle benchmark executes the real `fluxfast start` command and the

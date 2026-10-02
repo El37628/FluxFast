@@ -434,6 +434,7 @@ function runBenchmark() {
     console.log(
       "correctness: PASS — all five production consumers rendered; validator-free Core, Next, and application builds retained neither generated plans nor validation-runtime markers, while the single-validator and realistic application builds retained exactly one and ten plans plus the runtime",
     );
+    console.log(`production-bundle-result: ${JSON.stringify({ next: nextPackage.version, results })}`);
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }

@@ -56,10 +56,14 @@ test("history uses retained page-cache entries and fetches an LRU-evicted entry"
   for (let index = 1; index <= 8; index += 1) await visit(page, `/contract-cache/${index}`, { usePrefetch: false });
   const before = requests;
   await page.evaluate(() => window.history.go(-7));
-  await expect(page.getByTestId("contract-cache-url")).toHaveText("/contract-cache/1");
+  // Hosts may retain hidden page DOM during history restoration. Assert the
+  // accessible page and the active runtime, not an arbitrary retained node.
+  await expect(page.getByRole("heading", { name: "/contract-cache/1", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.fluxAdapterConformance!.page().url)).toBe("/contract-cache/1");
   expect(requests).toBe(before);
   await page.goBack();
-  await expect(page.getByTestId("contract-cache-url")).toHaveText("/contract-cache/0");
+  await expect(page.getByRole("heading", { name: "/contract-cache/0", exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.fluxAdapterConformance!.page().url)).toBe("/contract-cache/0");
   expect(requests).toBe(before + 1);
 });
 

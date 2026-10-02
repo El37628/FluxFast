@@ -2,6 +2,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const core = require("@fluxfast/core");
+const coreServer = require("@fluxfast/core/server");
+const codegen = require("@fluxfast/codegen");
 const nextAdapter = require("@fluxfast/next");
 const nextClient = require("@fluxfast/next/client");
 const nextGenerate = require("@fluxfast/next/generate");
@@ -18,6 +20,9 @@ async function main() {
   assert.equal(coreEntry.startsWith(installedRoot), true);
   assert.equal(nextEntry.startsWith(installedRoot), true);
   assert.equal(devtoolsEntry.startsWith(installedRoot), true);
+  for (const entry of ["@fluxfast/core/server", "@fluxfast/codegen"]) {
+    assert.equal(fs.realpathSync(require.resolve(entry)).startsWith(installedRoot + path.sep), true);
+  }
   assert.equal(typeof core.createFluxRuntime, "function");
   assert.equal(typeof nextAdapter.defineFluxConfig, "function");
   assert.equal(typeof nextClient.useForm, "function");
@@ -28,6 +33,8 @@ async function main() {
   assert.equal(typeof devtools.FluxDevtools, "function");
   const [
     coreEsm,
+    coreServerEsm,
+    codegenEsm,
     nextEsm,
     nextClientEsm,
     nextServerEsm,
@@ -36,6 +43,8 @@ async function main() {
     devtoolsEsm,
   ] = await Promise.all([
     import("@fluxfast/core"),
+    import("@fluxfast/core/server"),
+    import("@fluxfast/codegen"),
     import("@fluxfast/next"),
     import("@fluxfast/next/client"),
     import("@fluxfast/next/server"),
@@ -44,6 +53,14 @@ async function main() {
     import("@fluxfast/devtools"),
   ]);
   assert.equal(typeof coreEsm.createValidator, "function");
+  for (const server of [coreServer, coreServerEsm]) {
+    assert.equal(typeof server.fetchFluxInitialPage, "function");
+    assert.equal(typeof server.createFluxTransportProxy, "function");
+    const forwarded = server.selectFluxForwardHeaders({ cookie: "session=test", host: "private.invalid" });
+    assert.equal(forwarded.get("cookie"), "session=test");
+    assert.equal(forwarded.has("host"), false);
+    assert.equal(server.removeFluxHopByHopHeaders({ connection: "x-private", "x-private": "hidden" }).has("x-private"), false);
+  }
   assert.equal(typeof nextEsm.useForm, "function");
   assert.equal(typeof nextClientEsm.useForm, "function");
   assert.equal(typeof nextClientEsm.useLiveStatus, "function");
@@ -51,7 +68,7 @@ async function main() {
   assert.equal(typeof nextGenerateEsm.generateFluxFastProject, "function");
   assert.equal(typeof nextConfigEsm.withFluxFast, "function");
   assert.equal(typeof devtoolsEsm.FluxDevtools, "function");
-  for (const packageName of ["core", "next", "devtools"]) {
+  for (const packageName of ["core", "codegen", "next", "devtools"]) {
     const packageJson = JSON.parse(fs.readFileSync(
       path.join(installedRoot, "@fluxfast", packageName, "package.json"),
       "utf8"
@@ -67,7 +84,8 @@ async function main() {
     error => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
   );
   assert.equal(fs.existsSync(path.join(installedRoot, ".bin", "fluxfast")), true);
-  for (const packageName of ["core", "next", "devtools"]) {
+  assert.equal(fs.existsSync(path.join(installedRoot, ".bin", "fluxfast-codegen")), true);
+  for (const packageName of ["core", "codegen", "next", "devtools"]) {
     const license = fs.readFileSync(
       path.join(installedRoot, "@fluxfast", packageName, "LICENSE"),
       "utf8"
@@ -97,6 +115,24 @@ async function main() {
   );
   assert.equal(fs.existsSync(generatedRegistry), true);
   assert.match(fs.readFileSync(generatedRegistry, "utf8"), /"health\/index"/);
+  for (const compiler of [codegen, codegenEsm]) {
+    const registry = compiler.createPagesRegistrySnapshot({
+      pagesDir: path.join(process.cwd(), "src", "flux-pages"),
+      outputFile: generatedRegistry,
+      target: {
+        runtimeImport: "@fluxfast/next",
+        rootExport: "FluxRoot",
+        applicationPropsExport: "FluxApplicationProps",
+        clientDirective: true,
+      },
+    });
+    assert.equal(registry.content, fs.readFileSync(generatedRegistry, "utf8"));
+    const before = fs.statSync(generatedRegistry).mtimeMs;
+    assert.equal(compiler.checkFluxFastProject({
+      generatedDir: path.dirname(generatedRegistry), registry, log: false,
+    }).current, true);
+    assert.equal(fs.statSync(generatedRegistry).mtimeMs, before);
+  }
   const preservedSchemaOneTypes = path.join(
     process.cwd(),
     "src",

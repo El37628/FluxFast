@@ -198,14 +198,17 @@ test("runs full production and distributed consumers from one packed v1 candidat
   assert.match(distributedRuntime, /packed distributed process remained on port/);
 });
 
-test("v1.1 compatibility gates exercise both v1.0.1 upgrade orders and rollback", () => {
+test("compatibility gates preserve v1.0.1 and add actual published v1.1 upgrade orders and rollback", () => {
   const branchSmoke = jobBlock(readWorkflow("release-smoke.yml"), "mixed-version-consumers");
-  assert.match(branchSmoke, /name: v1\.0\.1 adjacent upgrade and rollback compatibility/);
+  assert.match(branchSmoke, /name: v\$\{\{ matrix\.previous-version \}\} adjacent upgrade and rollback compatibility/);
+  assert.match(branchSmoke, /fail-fast: false/);
+  assert.match(branchSmoke, /previous-version: \["1\.0\.1", "1\.1\.0"\]/);
   assert.equal(
-    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 1\.0\.1/g)?.length,
+    branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: \$\{\{ matrix\.previous-version \}\}/g)?.length,
     2
   );
   assert.match(branchSmoke, /Verify historical Python candidate with JavaScript 0\.9\.0/);
+  assert.match(branchSmoke, /if: matrix\.previous-version == '1\.0\.1'/);
   assert.equal(
     branchSmoke.match(/FLUXFAST_PREVIOUS_VERSION: 0\.9\.0/g)?.length,
     1
@@ -214,6 +217,10 @@ test("v1.1 compatibility gates exercise both v1.0.1 upgrade orders and rollback"
   assert.equal(branchSmoke.match(/FLUXFAST_CURRENT_PYTHON_SPEC=/g)?.length, 2);
   assert.equal(branchSmoke.match(/FLUXFAST_CURRENT_CORE_SPEC=/g)?.length, 2);
   assert.equal(branchSmoke.match(/FLUXFAST_CURRENT_NEXT_SPEC=/g)?.length, 2);
+  assert.equal(branchSmoke.match(/FLUXFAST_CURRENT_CODEGEN_SPEC=/g)?.length, 2);
+  assert.match(branchSmoke, /FLUXFAST_CORE_SPEC="@fluxfast\/core@\$FLUXFAST_PREVIOUS_VERSION"/);
+  assert.match(branchSmoke, /FLUXFAST_NEXT_SPEC="@fluxfast\/next@\$FLUXFAST_PREVIOUS_VERSION"/);
+  assert.match(branchSmoke, /FLUXFAST_PYTHON_SPEC="fluxfast\[redis\]==\$FLUXFAST_PREVIOUS_VERSION"/);
   assert.doesNotMatch(branchSmoke, /0\.8\.1/);
 
   const publishedSmoke = jobBlock(

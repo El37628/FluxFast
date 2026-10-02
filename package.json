@@ -32,6 +32,7 @@
     "benchmark": "pnpm benchmark:runtime && pnpm benchmark:codegen && pnpm benchmark:validation && pnpm benchmark:memory && pnpm benchmark:bundle && pnpm benchmark:devtools:memory && pnpm benchmark:devtools:bundle && pnpm benchmark:production",
     "benchmark:runtime": "PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_cross_page.py && PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_deferred.py && PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_live.py && PYTHONPATH=python/fluxfast/src:. ./.venv/bin/python benchmarks/scripts/benchmark_redis_cache.py",
     "benchmark:codegen": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/codegen run build && pnpm --filter @fluxfast/next run build && node benchmarks/scripts/benchmark_codegen.mjs",
+    "benchmark:adapter-foundation": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/codegen run build && pnpm --filter @fluxfast/next run build && node benchmarks/scripts/compare_adapter_foundation.mjs",
     "benchmark:validation": "pnpm --filter @fluxfast/core run build && node benchmarks/scripts/benchmark_validation.mjs",
     "benchmark:memory": "pnpm --filter @fluxfast/core run build && node --expose-gc benchmarks/scripts/benchmark_memory.mjs",
     "benchmark:bundle": "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/codegen run build && pnpm --filter @fluxfast/next run build && node benchmarks/scripts/benchmark_bundle.mjs",

@@ -53,6 +53,16 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Fixed
 
+- Complete the unreleased adapter-foundation verification with all seven packed
+  package entry points, actual published v1.1.0 upgrade/rollback pairings, and
+  repeatable page-generation, browser-runtime, and production-bundle comparisons.
+  Preserve the older compatibility and performance gates.
+- Describe the supervised production service in CLI help as FastAPI plus the
+  frontend runtime, without changing the existing Next production behavior.
+- Include the Codegen executable in the container's dependency-install layer
+  so its local command shim is available during production image builds.
+- Check the visible page and active runtime during history conformance, without
+  confusing hidden DOM retained by the frontend host with the restored page.
 - Avoid waiting on host-retained response-stream branches when handling SSR
   redirects or rejecting oversized error bodies. Canonical redirects can
   complete under deduplicating SSR fetch implementations, while external
