@@ -33,6 +33,7 @@ async function boundedExit(exit, milliseconds) {
 export function createProcessHarness({
   name, baseUrl, readyUrl = baseUrl, command, args, cwd, env = process.env,
   additionalPorts = [], readinessTimeout = 120_000, shutdownTimeout = 15_000,
+  requireZeroExit = false,
 }) {
   const url = new URL(baseUrl);
   const ports = [Number(url.port || (url.protocol === "https:" ? 443 : 80)), ...additionalPorts];
@@ -99,7 +100,12 @@ export function createProcessHarness({
           }
           if (result.error) throw result.error;
           // Startup reports a pre-readiness failure; a later host failure still fails teardown.
-          if (record.ready) assert.ok(result.code === 0 || result.signal === "SIGTERM", record.output);
+          if (record.ready) {
+            assert.ok(requireZeroExit
+              ? result.code === 0 && result.signal === null
+              : result.code === 0 || result.signal === "SIGTERM",
+            `Adapter ${name} did not exit cleanly (${result.code ?? result.signal})\n${record.output}`);
+          }
           for (const port of ports) await assertAvailable(port, url.hostname);
         } finally { owned = undefined; }
       })();

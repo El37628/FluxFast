@@ -60,6 +60,24 @@ npm exec --no -- fluxfast-vite init --check
 npm exec --no -- fluxfast-vite doctor
 \`\`\`
 
+With matching Python and JavaScript packages, run the whole application from its
+backend project directory. Python detects \`@fluxfast/vite\` and selects the
+scoped scripts without changing your SPA scripts:
+
+\`\`\`sh
+fluxfast types backend.main:app --frontend frontend
+fluxfast types backend.main:app --frontend frontend --check
+fluxfast dev backend.main:app --frontend frontend
+fluxfast build --app backend.main:app --frontend frontend
+fluxfast doctor --production --app backend.main:app --frontend frontend --strict
+fluxfast start backend.main:app --frontend frontend
+\`\`\`
+
+Development and production supervise FastAPI and the Node host behind one public
+origin. Do not run a second FastAPI service alongside these supervised commands.
+The frontend-only scripts above are for advanced, manually supervised hosts;
+only that mode requires setting the private backend URL yourself.
+
 Use the project's installed npm, pnpm, Yarn or Bun tooling; initialization never
 downloads dependencies. Full-stack generation starts from the authoritative Python
 contracts and the developer schema. Do not patch generated TypeScript to pass a build.

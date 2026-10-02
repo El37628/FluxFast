@@ -111,3 +111,21 @@ test("container runner discovers the existing contract cases after the suite mov
   assert.match(output, /live-flow\.spec\.ts/);
   assert.match(output, /Total: 17 tests in 2 files/);
 });
+
+test("supervisor conformance requires handled SIGTERM and a zero exit", { skip: process.platform === "win32" }, async () => {
+  for (const handler of ["", "process.on('SIGTERM', () => server.close(() => process.exit(7)));", "process.on('SIGTERM', () => server.close(() => process.exit(0)));"]) {
+    const port = await freePort();
+    const harness = fixture(port, `
+      import http from 'node:http';
+      const server = http.createServer((req, res) => res.end('ready'));
+      server.listen(${port}, '127.0.0.1');
+      ${handler}
+    `, { requireZeroExit: true });
+    try {
+      await harness.start();
+      if (handler.includes("exit(0)")) await harness.stop();
+      else await assert.rejects(harness.stop(), /did not exit cleanly/);
+    } finally { await harness.stop(); }
+    await assert.rejects(fetch(harness.baseUrl));
+  }
+});

@@ -63,8 +63,8 @@ Compiling a React registry requires the React bindings in the consumer; running
 the compiler does not. React SSR rendering and hydration are documented in
 [React SSR boundaries](react-ssr.md). Host initialization and serving belong to
 the separate [Vite integration](vite-host.md), not this compiler target. The
-Python React generation handoff is also unreleased; Python host supervision and
-complete React browser conformance remain separate work.
+Python React generation and host supervision are also unreleased; complete React
+browser conformance remains separate work.
 
 For a `src/` project with an exported schema whose validators are all supported,
 successful generation prints:

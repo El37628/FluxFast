@@ -135,6 +135,7 @@ def test_python_cli_v0_9_surface_remains_available() -> None:
 
 
 def test_frontend_command_detects_package_manager(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    (tmp_path / "package.json").write_text("{}", encoding="utf8")
     (tmp_path / "package-lock.json").touch()
     monkeypatch.setattr("fluxfast.cli.shutil.which", lambda name: f"/bin/{name}")
 

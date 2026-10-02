@@ -26,7 +26,7 @@ for mapping that identifier to an allowlisted UI module.
 The [frontend adapter implementation contract](adapter-contract.md) specifies
 document ownership, SSR/hydration, navigation, resource/deferred/mutation/live
 bindings, diagnostics, and production requirements for future hosts. Next.js
-remains the only implemented host; the multi-adapter foundation is unreleased.
+remains the published host; the multi-adapter foundation is unreleased.
 
 Unreleased Phase B places the React context, provider/root, component resolver,
 hooks, forms, and links in `@fluxfast/react`. The Next adapter keeps its public
@@ -35,9 +35,10 @@ context. The bindings depend only on browser Core and React peers, never Next,
 Codegen, server primitives, backend configuration, or a second resource engine.
 Separate React server/client entries now provide the unreleased SSR/hydration
 boundary for host authors. The source-development [Vite host](vite-host.md) adds
-asset serving, client/SSR builds and HTTP lifecycle cleanup. Initialization,
-Python supervision and full browser conformance remain future work; this is
-not a completed or published frontend adapter.
+asset serving, client/SSR builds, initialization and HTTP lifecycle cleanup.
+The source Python CLI now selects this host for generation and the existing
+development/production supervisor. Full browser conformance remains future
+work; this is not a completed or published frontend adapter.
 
 Live Resources add a synchronization path without changing that ownership:
 

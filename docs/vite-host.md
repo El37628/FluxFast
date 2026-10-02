@@ -3,8 +3,9 @@
 `@fluxfast/vite` is source-development tooling, not a published v1.1 package.
 This host implements development compilation/HMR, production client/SSR builds,
 and one public Node HTTP origin, with installed-only initialization and generation.
-Python React adapter selection, full shared browser conformance and registry publication remain
-separate work; this guide does not announce a completed v1.2 release.
+The source Python CLI also selects and supervises this host. Full shared browser
+conformance and registry publication remain separate work; this guide does not
+announce a completed v1.2 release.
 
 ## What each layer does
 
@@ -116,10 +117,73 @@ fluxfast types backend.main:app --frontend frontend --adapter react --check
 `--adapter react` is optional when `@fluxfast/vite` is declared. Codegen is
 preferred; the installed host generator is the fallback, never Next's CLI.
 See the [Python handoff guide](type-safety.md#adapter-aware-handoff-unreleased-v12)
-for workspace/PnP, diagnostics, drift checking and input/output examples. This
-does not yet add Python development/production supervision of the React host.
+for workspace/PnP, diagnostics, drift checking and input/output examples.
 
-After adapting the starter and backend, use the scoped commands:
+### Run the complete application with Python
+
+Install the source-built Python wheel in the backend environment, alongside the
+matching frontend tarballs. Published Python v1.1.0 does not select this host.
+For example, this backend supplies the resource used by the starter:
+
+```python
+# backend/main.py
+from fastapi import FastAPI
+from fluxfast import FluxFast, Page, resource
+
+app = FastAPI()
+flux = FluxFast(app)
+GREETING = flux.define_resource("greeting", str)
+
+@flux.page("/")
+async def home() -> Page:
+    return Page(component="home/index", resources=[
+        resource(GREETING, lambda: "Hello from FastAPI"),
+    ])
+```
+
+From the backend project directory, with the initialized `frontend/` beside it:
+
+```sh
+fluxfast types backend.main:app --frontend frontend
+fluxfast types backend.main:app --frontend frontend --check
+fluxfast dev backend.main:app --frontend frontend
+```
+
+Open `http://127.0.0.1:3000` (the development default). The initial HTML contains
+`<h1>Hello from FastAPI</h1>`; React hydrates that same greeting. Python starts
+FastAPI privately, waits for it, injects its server-only URL, then launches
+`fluxfast:dev`. Documents, assets, navigation and live streams use that public
+origin. You do not start FastAPI separately or configure a browser backend URL.
+
+Production keeps build and startup separate:
+
+```sh
+fluxfast build --app backend.main:app --frontend frontend
+fluxfast doctor --production --app backend.main:app --frontend frontend --strict
+fluxfast start backend.main:app --frontend frontend
+```
+
+`build` checks initialization and schema drift, then runs `fluxfast:build`.
+`start` requires `dist/fluxfast/host.json` and `server/renderer.mjs`; the Node host
+validates the manifest, template and renderer before listening. It never runs
+Vite source configuration, installs dependencies, generates files or builds.
+The same existing two-child supervisor handles private backend readiness,
+worker counts, sibling failures, signal forwarding and bounded shutdown.
+See [production settings](production.md#configuration) for unchanged ports,
+workers and timeouts.
+
+Python selects React from a declared `@fluxfast/vite`, not `react` or `vite` alone.
+Both `@fluxfast/next` and `@fluxfast/vite` are ambiguous for supervision: use
+separate frontend projects. Historical Next applications without a host
+declaration keep their Next defaults. React uses only the scoped host scripts;
+missing `fluxfast:dev/build/start` fails instead of starting an existing SPA.
+Doctor checks Core/React/Vite versions, Node 22.12+ or 24, build markers and
+installed read-only setup/generation checks. Normal version mismatches are
+warnings; strict mode makes them blocking. Configuration is not repaired.
+
+### Frontend-only commands (advanced)
+
+If you deliberately supervise FastAPI yourself, use the scoped commands:
 
 ```sh
 FLUXFAST_BACKEND_URL=http://127.0.0.1:8123 npm run fluxfast:dev -- --port 3000
@@ -128,8 +192,8 @@ FLUXFAST_BACKEND_URL=http://127.0.0.1:8123 npm run fluxfast:start -- --port 3000
 ```
 
 Dev/build pass `--config fluxfast.vite.config.mjs`. Production `start` rejects
-`--config` and reads only built artifacts. These frontend commands do not yet
-supervise FastAPI; Python React supervision is a separate unreleased integration.
+`--config` and reads only built artifacts. These frontend-only commands never
+supervise FastAPI; the Python commands above own the whole application.
 
 ### Manual setup alternative
 
@@ -205,7 +269,9 @@ Use these frontend scripts after installing the source-built host:
 }
 ```
 
-For now, run FastAPI separately on loopback. Then, from the frontend directory:
+This manual configuration is an advanced frontend-only host, not the managed
+initialization scaffold. Run FastAPI separately on loopback, then from the
+frontend directory:
 
 ```sh
 FLUXFAST_BACKEND_URL=http://127.0.0.1:8123 npm run dev -- --port 3000
@@ -218,8 +284,8 @@ to `127.0.0.1`; `--port` defaults to `3000`. `build` needs no running backend.
 Build/start require `NODE_ENV` to be unset or `production`; the CLI sets it before
 loading runtime modules. A development build must not be silently deployed as
 production output.
-The future Python supervisor integration will own both children through one
-command; the current Python CLI still selects only the Next host.
+Use installed initialization and the scoped scripts above when you want Python's
+managed setup/build/doctor workflow rather than this manually configured host.
 
 ## API reference
 

@@ -6,7 +6,7 @@ class ProductionValidationError(RuntimeError):
 
 
 class ProductionBuildMissingError(ProductionValidationError):
-    """Raised when the frontend has no completed Next.js production build."""
+    """Raised when the frontend has no completed production build."""
 
 
 class ProductionBuildError(ProductionValidationError):

@@ -457,8 +457,10 @@ A production-capable integration must also preserve:
   A forged request header cannot enable a production backend trace.
 
 Phase A does **not** add React production detection or a new process abstraction.
-The implemented `fluxfast dev/build/start/doctor` integration still supports
-Next.js. A future host must implement and verify this lifecycle explicitly;
+The subsequent source-development React phase integrates its Vite host with
+the existing `fluxfast dev/build/start/doctor` lifecycle; it does not introduce
+a second supervisor. Its full shared browser conformance and publication are
+still pending. A future host must implement and verify this lifecycle explicitly;
 this document alone does not make it supported. See [production](production.md)
 and [containers](containers.md) for current commands and operational boundaries.
 

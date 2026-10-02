@@ -29,6 +29,23 @@ by setup/check commands. Export your authoritative backend schema, then use
 `generate --check` for read-only drift detection. Codegen is loaded only for
 these tooling commands, not by the production host.
 
+With the matching source-built Python wheel, run the complete initialized app
+from its backend project directory:
+
+```sh
+fluxfast types backend.main:app --frontend frontend
+fluxfast dev backend.main:app --frontend frontend
+fluxfast build --app backend.main:app --frontend frontend
+fluxfast doctor --production --app backend.main:app --frontend frontend --strict
+fluxfast start backend.main:app --frontend frontend
+```
+
+Python detects the declared `@fluxfast/vite` host and runs its scoped scripts,
+not your existing SPA scripts. It supervises FastAPI privately and the public
+Node host as one service; do not start a second FastAPI service manually.
+Production consumes `dist/fluxfast/` and never builds/generates at startup.
+Published Python v1.1.0 does not yet select this host.
+
 Alternatively configure the host manually:
 
 ```ts
@@ -47,8 +64,8 @@ allowlisted client build files and never exposes the SSR template or renderer.
 
 Supported tooling: Node 22.12+ or 24, Vite `>=7.3.6 <8`, React/React DOM 19+.
 The framework-neutral runtime does not depend on this host.
-Python React adapter selection and the complete browser
-conformance gates remain separate unreleased integration work.
+The complete shared browser conformance gates and registry publication remain
+separate unreleased work; this is not a completed v1.2 release.
 
 See the [Vite host guide](https://github.com/El37628/FluxFast/blob/main/docs/vite-host.md)
 for template/configuration examples, source-build usage, server APIs, output

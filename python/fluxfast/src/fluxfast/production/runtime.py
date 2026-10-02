@@ -1,4 +1,4 @@
-"""Concrete FastAPI and Next.js production runtime construction."""
+"""Concrete FastAPI and frontend-host production runtime construction."""
 
 from __future__ import annotations
 
@@ -6,9 +6,14 @@ import os
 import sys
 from pathlib import Path
 
+from .._frontend_adapter import FrontendAdapter
 from .config import ProductionConfig
 from .errors import ProductionBuildMissingError, ProductionValidationError
-from .frontend import production_frontend_command
+from .frontend import (
+    frontend_adapter,
+    frontend_build_exists,
+    production_frontend_command,
+)
 from .process import ManagedProcess
 from .supervisor import (
     ProductionSupervisor,
@@ -23,6 +28,11 @@ def create_production_supervisor(config: ProductionConfig) -> ProductionSupervis
 
     frontend = config.frontend.resolve()
     _validate_frontend(frontend)
+    frontend_name = (
+        "React/Vite"
+        if frontend_adapter(frontend) is FrontendAdapter.REACT
+        else "Next.js"
+    )
 
     backend_connection_host = _connection_host(config.backend_host)
     frontend_connection_host = _connection_host(config.host)
@@ -50,7 +60,7 @@ def create_production_supervisor(config: ProductionConfig) -> ProductionSupervis
     frontend_environment["FLUXFAST_PRODUCTION_START"] = "1"
     frontend_environment.pop("NEXT_PUBLIC_FLUXFAST_BACKEND_URL", None)
     frontend_process = ManagedProcess(
-        "Next.js",
+        frontend_name,
         production_frontend_command(frontend, config.host, config.port),
         cwd=frontend,
         environment=frontend_environment,
@@ -65,7 +75,7 @@ def create_production_supervisor(config: ProductionConfig) -> ProductionSupervis
             http_readiness_probe(f"{backend_url}/_fluxfast/readyz"),
         ),
         frontend_ready=_readiness_log(
-            "Next.js ready",
+            f"{frontend_name} ready",
             tcp_readiness_probe(frontend_connection_host, config.port),
             final_message="application ready",
         ),
@@ -94,9 +104,14 @@ def _validate_frontend(frontend: Path) -> None:
         raise ProductionValidationError(
             f"No package.json found in frontend directory {frontend}"
         )
-    if not (frontend / ".next" / "BUILD_ID").is_file():
+    if not frontend_build_exists(frontend):
+        name = (
+            "React/Vite"
+            if frontend_adapter(frontend) is FrontendAdapter.REACT
+            else "Next.js"
+        )
         raise ProductionBuildMissingError(
-            f"No Next.js production build found in {frontend}. Run: fluxfast build"
+            f"No {name} production build found in {frontend}. Run: fluxfast build"
         )
 
 
