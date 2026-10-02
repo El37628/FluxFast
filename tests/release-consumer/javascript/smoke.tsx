@@ -7,6 +7,17 @@ import {
   type PageEnvelope,
 } from "@fluxfast/core";
 import {
+  fetchFluxInitialPage,
+  createFluxTransportProxy,
+  type FetchFluxInitialPageOptions,
+  type FluxInitialPageResult,
+} from "@fluxfast/core/server";
+import {
+  createPagesRegistrySnapshot,
+  checkFluxFastProject,
+  type FluxPageRegistryTarget,
+} from "@fluxfast/codegen";
+import {
   defineFluxConfig,
   useResource,
   type FluxApplicationProps,
@@ -42,6 +53,15 @@ const envelope: PageEnvelope = {
       value: { ok: true },
     },
   },
+};
+
+const initialOptions: FetchFluxInitialPageOptions = {
+  backendUrl: "http://127.0.0.1:8000", path: "/health",
+};
+const fetchInitial: (options: FetchFluxInitialPageOptions) => Promise<FluxInitialPageResult> = fetchFluxInitialPage;
+const registryTarget: FluxPageRegistryTarget = {
+  runtimeImport: "@fluxfast/next", rootExport: "FluxRoot",
+  applicationPropsExport: "FluxApplicationProps", clientDirective: true,
 };
 
 const Application: React.ComponentType<FluxApplicationProps> = ({
@@ -83,6 +103,12 @@ export function HealthPage() {
 
 void [
   page,
+  initialOptions,
+  fetchInitial,
+  createFluxTransportProxy,
+  createPagesRegistrySnapshot,
+  checkFluxFastProject,
+  registryTarget,
   clientConfig,
   nextConfig,
   runtime,

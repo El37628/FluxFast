@@ -20,6 +20,7 @@ WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/codegen/package.json packages/codegen/package.json
+COPY packages/codegen/bin packages/codegen/bin
 COPY packages/next/package.json packages/next/package.json
 COPY packages/next/bin packages/next/bin
 COPY packages/devtools/package.json packages/devtools/package.json

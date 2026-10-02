@@ -548,7 +548,7 @@ def _parser() -> argparse.ArgumentParser:
 
     start = subparsers.add_parser(
         "start",
-        help="run FastAPI and Next.js as one supervised production service",
+        help="run FastAPI and the frontend runtime as one supervised production service",
     )
     start.add_argument(
         "app",
