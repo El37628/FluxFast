@@ -7,6 +7,11 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Run the unchanged shared adapter browser contracts on unreleased React/Vite
+  in both modes, with real StrictMode, initialized packed consumers, Node 22/24
+  and React 19 peer-floor CI, and three-worker Redis isolation/reconnect tests.
+  Verify cold hydration, first navigation, automatic same-origin source updates
+  and immutable production SSR/hydration without source or build tooling.
 - Add unreleased React/Vite selection for Python development, build, production
   startup and diagnostics. Use initialized scoped host scripts while preserving
   SPA scripts and legacy Next defaults; reuse the existing private-backend,
@@ -24,15 +29,15 @@ Notable user-facing changes are recorded in this file. FluxFast follows
   exact-envelope hydration entries, same-port development HMR, offline client/SSR
   production builds, allowlisted static assets, bounded health probes and streaming
   cancellation. Production uses built artifacts without loading source config or
-  Vite. Python React supervision and full conformance remain work.
+  Vite. Python supervision and shared browser conformance are integrated above.
 - Add the unreleased `fluxfast-codegen generate --adapter react` target for
   shared React allowlists, without a Next client directive or config execution.
   Preserve all six Next artifact bytes and the five shared schema artifact bytes.
-  The Python React handoff remains separate integration work.
+  The Python React handoff is integrated above.
 - Add unreleased React SSR and hydration subentries: lazy-page SSR completion,
   safe document payloads, exact-envelope hydration, actual 404/auth failures,
-  bounded/cancellable SSR, and Core's same-origin streaming proxy. Python host
-  integration remains separate work.
+  bounded/cancellable SSR, and Core's same-origin streaming proxy. The Python
+  host integration is recorded above.
 - Extract the unreleased `@fluxfast/react` bindings from Next.js: shared context,
   provider/root, allowlisted component resolver, resource/deferred/live hooks,
   forms, and links. Existing Next root/client imports re-export the same objects
@@ -40,7 +45,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Document the frontend adapter implementation contract, including ownership,
   same-envelope SSR/hydration, navigation and resource lifecycles, mutations,
   deferred/live authority, diagnostics, and production/conformance requirements.
-  The multi-adapter foundation remains unreleased; Next is the implemented host.
+  The multi-adapter foundation remains unreleased; Next is the published host.
 - Add the shared adapter-conformance suite with Next as its first harness,
   covering SSR/hydration, navigation/cache behavior, real mutation patches,
   deferred/live lifecycles, diagnostics, and production startup/shutdown.
@@ -86,6 +91,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Fixed
 
+- Scan the React application/lazy registry and prebundle its virtual hydration
+  entry in Vite development so first navigation does not trigger an extra
+  document reload. Isolate conformance traces by adapter/mode and packed run.
 - Require component identifiers to be own entries in the shared React registry;
   inherited prototype properties are not allowlisted application components.
 - Complete the unreleased adapter-foundation verification with all seven packed

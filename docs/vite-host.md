@@ -3,9 +3,10 @@
 `@fluxfast/vite` is source-development tooling, not a published v1.1 package.
 This host implements development compilation/HMR, production client/SSR builds,
 and one public Node HTTP origin, with installed-only initialization and generation.
-The source Python CLI also selects and supervises this host. Full shared browser
-conformance and registry publication remain separate work; this guide does not
-announce a completed v1.2 release.
+The source Python CLI also selects and supervises this host. Shared browser
+conformance now covers both modes, initialized packed consumers and three-worker
+Redis behavior. Registry publication and final release gates remain separate;
+this guide does not announce a published v1.2 release.
 
 ## What each layer does
 
@@ -20,6 +21,14 @@ The browser uses only the host origin for documents, navigation, mutations,
 deferred requests and SSE. A server-only backend URL is required; it is not a
 `VITE_*` setting and must not appear in client code. Two internal processes do
 not imply two public browser ports.
+
+Development scans the configured application and its lazy registry pages for
+dependencies before first navigation, and explicitly prebundles the virtual
+hydration entry. This prevents a cold navigation from reloading the document
+just to discover React dependencies. Source edits update the browser and SSR
+through Vite on that same public origin. See the
+[conformance guide](../tests/adapter-conformance/README.md) for repeatable browser,
+peer-floor, production immutability and distributed-worker checks.
 
 ## Source-development setup
 

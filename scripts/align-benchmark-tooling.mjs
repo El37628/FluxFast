@@ -35,6 +35,11 @@ export function baselineComparisonTooling(name, source) {
     assert.equal([...source.matchAll(viteImporter)].length, 1, "one Vite host importer required");
     normalized = normalized.replace(viteImporter, "");
   }
+  if (source.includes("\n  tests/browser/react-frontend:\n")) {
+    const reactFixture = /\n  tests\/browser\/react-frontend:\n[\s\S]*?(?=\n  \S|\npackages:|\nsnapshots:|$)/g;
+    assert.equal([...source.matchAll(reactFixture)].length, 1, "one React browser fixture importer required");
+    normalized = normalized.replace(reactFixture, "");
+  }
   return normalized;
 }
 

@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { createProcessHarness } from "../tests/adapter-conformance/process-harness.mjs";
+import { createHarness } from "../tests/adapter-conformance/harnesses/index.mjs";
+import { prepareReactFixture } from "../tests/adapter-conformance/react-fixture.mjs";
 
 async function freePort() {
   const server = net.createServer();
@@ -128,4 +133,40 @@ test("supervisor conformance requires handled SIGTERM and a zero exit", { skip: 
     } finally { await harness.stop(); }
     await assert.rejects(fetch(harness.baseUrl));
   }
+});
+
+test("adapter registry selects React explicitly without changing the default or accepting unknown names", () => {
+  assert.equal(createHarness("next").name, "next");
+  assert.equal(createHarness("react").name, "react");
+  assert.throws(() => createHarness("typo"), /Unknown adapter/);
+});
+
+test("React fixture changes only adapter imports, checks drift read-only, and preserves current mtimes", () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-react-fixture-"));
+  try {
+    const source = path.join(temporary, "source"), frontend = path.join(temporary, "react");
+    for (const name of ["components", "flux-pages", "lib"]) fs.mkdirSync(path.join(source, "src", name), { recursive: true });
+    const original = 'import { useResource } from "@fluxfast/next";\nexport const Example = () => useResource("greeting");\n';
+    fs.writeFileSync(path.join(source, "src/components/Example.tsx"), original);
+    assert.throws(() => prepareReactFixture({ source, frontend, check: true }), /missing or stale/);
+    assert.equal(fs.existsSync(frontend), false);
+    prepareReactFixture({ source, frontend });
+    const output = path.join(frontend, "src/components/Example.tsx");
+    assert.equal(fs.readFileSync(output, "utf8"), original.replaceAll('"@fluxfast/next"', '"@fluxfast/react"'));
+    const before = fs.statSync(output).mtimeMs;
+    prepareReactFixture({ source, frontend });
+    prepareReactFixture({ source, frontend, check: true });
+    assert.equal(fs.statSync(output).mtimeMs, before);
+    const obsolete = path.join(frontend, "src/components/Removed.tsx");
+    fs.writeFileSync(obsolete, "export default function Removed() {}\n");
+    assert.throws(() => prepareReactFixture({ source, frontend, check: true }), /removed shared UI/);
+    assert.ok(fs.existsSync(obsolete));
+    prepareReactFixture({ source, frontend });
+    assert.equal(fs.existsSync(obsolete), false);
+    fs.writeFileSync(path.join(source, "src/components/Example.tsx"), original + "// changed\n");
+    assert.throws(() => prepareReactFixture({ source, frontend, check: true }), /missing or stale/);
+    assert.equal(fs.statSync(output).mtimeMs, before);
+    fs.writeFileSync(path.join(source, "src/components/Example.tsx"), 'import "next/navigation";\n');
+    assert.throws(() => prepareReactFixture({ source, frontend }), /must not import Next/);
+  } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 });

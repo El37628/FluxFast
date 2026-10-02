@@ -19,8 +19,15 @@ test("historical tooling excludes only new Codegen, React and Vite workspace top
   const lock = fs.readFileSync(path.join(root, "pnpm-lock.yaml"), "utf8");
   const normalized = baselineComparisonTooling("pnpm-lock.yaml", lock);
   assert.doesNotMatch(normalized, /packages\/(codegen|react|vite):|'@fluxfast\/(codegen|react)':/);
+  assert.doesNotMatch(normalized, /tests\/browser\/react-frontend:/);
   assert.match(normalized, /packages\/next:\n    dependencies:\n      '@fluxfast\/core':/);
   assert.equal(normalized.slice(normalized.indexOf("\npackages:")), lock.slice(lock.indexOf("\npackages:")), "all external resolutions remain exact");
+  const fixture = /\n  tests\/browser\/react-frontend:\n[\s\S]*?(?=\n  \S|\npackages:|\nsnapshots:|$)/;
+  assert.equal(baselineComparisonTooling("pnpm-lock.yaml", lock.replace(fixture, "")), normalized,
+    "removing a new private fixture cannot alter historical benchmark inputs");
+  const other = "\n  tests/browser/unrelated-fixture:\n    dependencies:\n      example:\n        specifier: 1.0.0\n        version: 1.0.0\n";
+  assert.ok(baselineComparisonTooling("pnpm-lock.yaml", lock.replace("\npackages:", other + "\npackages:")).includes(other),
+    "only the explicit new React fixture is absent from the historical workspace");
   for (const name of ["package.json", "packages/core/package.json", "tests/browser/frontend/package.json"]) {
     const source = fs.readFileSync(path.join(root, name), "utf8");
     assert.equal(baselineComparisonTooling(name, source), source);

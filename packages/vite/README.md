@@ -64,8 +64,11 @@ allowlisted client build files and never exposes the SSR template or renderer.
 
 Supported tooling: Node 22.12+ or 24, Vite `>=7.3.6 <8`, React/React DOM 19+.
 The framework-neutral runtime does not depend on this host.
-The complete shared browser conformance gates and registry publication remain
-separate unreleased work; this is not a completed v1.2 release.
+The shared browser gates run the same contracts as Next in development and
+production, plus initialized packed consumers and three-worker Redis tests.
+Cold hydration/navigation and automatic source synchronization use one public
+origin; production also hydrates without source or build tooling. Final release
+gates and registry publication remain pending; this is not a published v1.2 release.
 
 See the [Vite host guide](https://github.com/El37628/FluxFast/blob/main/docs/vite-host.md)
 for template/configuration examples, source-build usage, server APIs, output

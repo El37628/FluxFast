@@ -9,7 +9,13 @@ const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const frontendRoot = path.join(repositoryRoot, "tests", "browser", "frontend");
+const adapter = process.env.FLUXFAST_ADAPTER_HARNESS ?? "next";
+if (!["next", "react"].includes(adapter)) throw new Error("Unknown adapter conformance harness: " + adapter);
+const react = adapter === "react";
+const testScript = !react ? "test:e2e:production"
+  : process.env.FLUXFAST_REACT_DISTRIBUTED === "1" ? "test:e2e:distributed:production" : "test:e2e";
+const frontendRelative = `tests/browser/${react ? "react-frontend" : "frontend"}`;
+const frontendRoot = path.join(repositoryRoot, frontendRelative);
 const localPython = path.join(repositoryRoot, ".venv", "bin", "python");
 const python = process.env.FLUXFAST_E2E_PYTHON ?? (
   fs.existsSync(localPython) ? localPython : "python"
@@ -23,8 +29,8 @@ const ignoredTopLevel = new Set([
 ]);
 const productionEnvironment = {
   ...process.env,
-  FLUXFAST_E2E_BACKEND_PORT: process.env.FLUXFAST_E2E_BACKEND_PORT ?? String(Number(process.env.FLUXFAST_E2E_PORT ?? "3110") + 1),
-  FLUXFAST_E2E_PORT: process.env.FLUXFAST_E2E_PORT ?? "3110",
+  FLUXFAST_E2E_BACKEND_PORT: process.env.FLUXFAST_E2E_BACKEND_PORT ?? String(Number(process.env.FLUXFAST_E2E_PORT ?? (react ? "3170" : "3110")) + 1),
+  FLUXFAST_E2E_PORT: process.env.FLUXFAST_E2E_PORT ?? (react ? "3170" : "3110"),
   FLUXFAST_E2E_PRODUCTION: "1",
   FLUXFAST_PRODUCTION_START: "0",
   FLUXFAST_CONFORMANCE_SKIP_BUILD: "1",
@@ -87,6 +93,10 @@ function changedPaths(before, after) {
     .sort();
 }
 
+if (react) {
+  const prepareStatus = execute(process.execPath, [path.join(frontendRoot, "generate-types.mjs")]);
+  if (prepareStatus !== 0) process.exit(prepareStatus);
+}
 const buildStatus = execute(python, [
   "-m",
   "fluxfast.cli",
@@ -94,7 +104,7 @@ const buildStatus = execute(python, [
   "--app",
   "tests.browser.backend:app",
   "--frontend",
-  "tests/browser/frontend",
+  frontendRelative,
 ]);
 if (buildStatus !== 0) process.exit(buildStatus);
 
@@ -103,7 +113,7 @@ const testStatus = execute(pnpm, [
   "--dir",
   frontendRoot,
   "run",
-  "test:e2e:production",
+  testScript,
 ]);
 const afterStart = snapshotFrontend();
 const changed = changedPaths(beforeStart, afterStart);
