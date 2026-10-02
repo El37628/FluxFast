@@ -12,7 +12,7 @@ import React, {
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { useFluxContext } from "@fluxfast/next";
+import { useFluxContext } from "@fluxfast/react";
 import {
   deriveDevtoolsInsights,
   formatAge,

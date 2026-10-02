@@ -3,7 +3,7 @@ import React from "react";
 import { setComponentRegistry, resolveComponent } from "../src/resolver";
 import { ComponentResolutionError } from "@fluxfast/core";
 
-describe("Next Adapter Component Registry", () => {
+describe("React Component Registry", () => {
   it("resolves registered components", () => {
     const DummyComponent = () => React.createElement("div", null, "Hello");
     setComponentRegistry({
@@ -28,5 +28,20 @@ describe("Next Adapter Component Registry", () => {
     const entry = { load: async () => ({ default: () => null }) };
     setComponentRegistry({ "lazy/index": entry });
     expect(resolveComponent("lazy/index")).toBe(resolveComponent("lazy/index"));
+  });
+
+  it.each(["constructor", "toString", "__proto__"])(
+    "does not resolve inherited registry property %s as an allowlisted component",
+    identifier => {
+      expect(() => resolveComponent(identifier, {})).toThrow(ComponentResolutionError);
+    }
+  );
+
+  it("requires an own entry even when an application gives the registry a prototype", () => {
+    const Page = () => null;
+    const registry = Object.create({ "inherited/page": Page });
+    registry["own/page"] = Page;
+    expect(resolveComponent("own/page", registry)).toBe(Page);
+    expect(() => resolveComponent("inherited/page", registry)).toThrow(ComponentResolutionError);
   });
 });

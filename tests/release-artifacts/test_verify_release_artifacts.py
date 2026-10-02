@@ -206,6 +206,7 @@ def _package_manifest(
     next_package: bool,
     devtools_package: bool = False,
     codegen_dependency: bool = False,
+    react_dependency: bool = False,
 ) -> dict:
     manifest = {
         "name": name,
@@ -239,6 +240,8 @@ def _package_manifest(
         manifest["dependencies"] = {"@fluxfast/core": f"^{version}"}
         if codegen_dependency:
             manifest["dependencies"]["@fluxfast/codegen"] = f"^{version}"
+        if react_dependency:
+            manifest["dependencies"]["@fluxfast/react"] = f"^{version}"
         manifest["peerDependencies"] = {
             "next": ">=16.3.0 <17.0.0",
             "react": ">=19.0.0",
@@ -279,6 +282,7 @@ def _build_npm_archive(
     next_package: bool,
     devtools_package: bool = False,
     codegen_dependency: bool = False,
+    react_dependency: bool = False,
     packed_name: str | None = None,
     add_link: bool = False,
 ) -> None:
@@ -296,6 +300,7 @@ def _build_npm_archive(
         next_package=next_package,
         devtools_package=devtools_package,
         codegen_dependency=codegen_dependency,
+        react_dependency=react_dependency,
     )
     _write(package_root / "package.json", json.dumps(manifest))
     _write(package_root / "README.md", f"# {name}\n")
@@ -346,6 +351,7 @@ def _build_release(
     packed_core_name: str | None = None,
     core_link: bool = False,
     include_codegen: bool = False,
+    include_react: bool = False,
 ) -> tuple[Path, Path, str]:
     repository = root / "repository"
     release = root / "release"
@@ -366,6 +372,7 @@ def _build_release(
         package="next",
         next_package=True,
         codegen_dependency=include_codegen,
+        react_dependency=include_react,
     )
     if verifier._includes_devtools_artifact(version):
         _build_npm_archive(
@@ -380,7 +387,50 @@ def _build_release(
         _build_npm_archive(
             repository, release, version, package="codegen", next_package=False
         )
+    if include_react:
+        _build_npm_archive(
+            repository, release, version, package="react", next_package=False
+        )
     return repository, release, version
+
+
+def test_react_source_intent_requires_all_seven_distributions(tmp_path: Path) -> None:
+    repository, release, version = _build_release(
+        tmp_path, version="1.1.0", include_codegen=True, include_react=True
+    )
+    artifacts = verifier.verify_release_artifacts(
+        repository_root=repository, release_dir=release, version=version,
+        write_checksums=True,
+    )
+    assert len(artifacts) == 7
+    assert artifacts[-1].name == "fluxfast-react-1.1.0.tgz"
+    assert len((release / "SHA256SUMS").read_text().splitlines()) == 7
+    assert verifier.verify_release_artifacts(
+        repository_root=repository, release_dir=release, version=version,
+        verify_checksums=True,
+    ) == artifacts
+
+
+@pytest.mark.parametrize("defect", ["missing", "source-drift", "checksum-drift"])
+def test_react_artifact_defects_fail_closed(tmp_path: Path, defect: str) -> None:
+    repository, release, version = _build_release(
+        tmp_path, version="1.1.0", include_codegen=True, include_react=True
+    )
+    verifier.verify_release_artifacts(
+        repository_root=repository, release_dir=release, version=version,
+        write_checksums=True,
+    )
+    if defect == "missing":
+        (release / "npm/fluxfast-react-1.1.0.tgz").unlink()
+    elif defect == "source-drift":
+        _write(repository / "packages/react/dist/index.js", "module.exports = {changed: true};\n")
+    else:
+        _write(release / "SHA256SUMS", "not a verified candidate\n")
+    with pytest.raises(verifier.ArtifactVerificationError):
+        verifier.verify_release_artifacts(
+            repository_root=repository, release_dir=release, version=version,
+            verify_checksums=True,
+        )
 
 
 def test_codegen_source_intent_requires_all_six_distributions(tmp_path: Path) -> None:
@@ -554,6 +604,7 @@ def test_rejects_packed_metadata_drift(tmp_path: Path) -> None:
     [
         ({"version": "9.9.9"}, "packed version does not match"),
         ({"dependencies": {"@fluxfast/core": "^9.9.9"}}, "packed dependencies does not match"),
+        ({"peerDependenciesMeta": {"next": {"optional": True}}}, "packed peerDependenciesMeta does not match"),
         (
             {
                 "peerDependencies": {

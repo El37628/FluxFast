@@ -49,6 +49,7 @@ function sourceDigest(root) {
   }
   for (const owner of ["python/fluxfast/src", "packages/core/src", "packages/next/src"]) visit(path.join(root, owner));
   if (fs.existsSync(path.join(root, "packages/codegen/src"))) visit(path.join(root, "packages/codegen/src"));
+  if (fs.existsSync(path.join(root, "packages/react/src"))) visit(path.join(root, "packages/react/src"));
   return digest(JSON.stringify(entries));
 }
 
@@ -109,7 +110,7 @@ export function runComparison({ baseline, output, python, reverse = false }) {
     ], { cwd: root }));
     summary.sources[label] = { root, runtimeSha256: sourceDigest(root), python: versions, javascript };
     environments.set(label, env);
-    const owners = ["@fluxfast/core", ...(fs.existsSync(path.join(root, "packages/codegen/package.json")) ? ["@fluxfast/codegen"] : []), "@fluxfast/next"];
+    const owners = ["@fluxfast/core", ...(fs.existsSync(path.join(root, "packages/codegen/package.json")) ? ["@fluxfast/codegen"] : []), ...(fs.existsSync(path.join(root, "packages/react/package.json")) ? ["@fluxfast/react"] : []), "@fluxfast/next"];
     for (const owner of owners) {
       console.log("prepare " + label + ": build " + owner);
       const result = invoke(pnpm, ["--filter", owner, "run", "build"], { cwd: root, env });

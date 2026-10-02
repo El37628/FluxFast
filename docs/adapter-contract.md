@@ -13,6 +13,14 @@ does not announce a React or Vite adapter, a React SSR host, or a new release.
 Existing Next.js applications retain their imports, generated filenames, CLI
 entry points, and deployment behavior.
 
+Phase B additionally extracts the existing React subscriptions and rendering
+into the **unreleased** `@fluxfast/react` package. `@fluxfast/next` re-exports
+those same context/components/hooks, and DevTools consumes their shared context.
+This is a bindings package, not a new frontend host: Next remains the only
+implemented SSR host until the separate React SSR/Vite integration is ready.
+See the [React bindings reference](react-api.md) for responsibilities, examples,
+and the complete new package inventory.
+
 “Must” below identifies a required behavior. The [wire protocol](protocol.md)
 remains `fluxfast/1`, and the [developer schema](developer-schema.md) remains
 `fluxfast-schema/2`; neither is versioned by the adapter's package version.

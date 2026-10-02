@@ -47,6 +47,10 @@ importers:
         version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
 
   packages/devtools:
+    dependencies:
+      '@fluxfast/react':
+        specifier: ^1.1.0
+        version: link:../react
     devDependencies:
       '@fluxfast/core':
         specifier: workspace:*
@@ -87,6 +91,9 @@ importers:
       '@fluxfast/core':
         specifier: ^1.1.0
         version: link:../core
+      '@fluxfast/react':
+        specifier: ^1.1.0
+        version: link:../react
     devDependencies:
       '@types/node':
         specifier: 22.20.4
@@ -103,6 +110,40 @@ importers:
       next:
         specifier: ^16.3.6
         version: 16.3.6(@playwright/test@1.63.0)(@types/node@22.20.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.3.0
+        version: 19.3.0(react@19.3.0)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
+
+  packages/react:
+    dependencies:
+      '@fluxfast/core':
+        specifier: ^1.1.0
+        version: link:../core
+    devDependencies:
+      '@fluxfast/codegen':
+        specifier: workspace:*
+        version: link:../codegen
+      '@types/node':
+        specifier: 22.20.4
+        version: 22.20.4
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      happy-dom:
+        specifier: ^20.14.5
+        version: 20.14.5
       react:
         specifier: ^19.3.0
         version: 19.3.0

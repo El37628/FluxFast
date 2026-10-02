@@ -139,7 +139,7 @@ function prepareConsumers(temporary, options, facts) {
     return filename;
   });
   assert.deepEqual(facts.publishedPackages.map(record => record.name).sort(), ["@fluxfast/core", "@fluxfast/next"]);
-  const candidate = ["core", "codegen", "next"].map(name => {
+  const candidate = ["core", "codegen", "react", "next"].map(name => {
     const [packed] = JSON.parse(run("npm", ["pack", `./packages/${name}`, "--ignore-scripts", "--json", "--pack-destination", candidateRoot], repository));
     return path.join(candidateRoot, packed.filename);
   });
@@ -154,7 +154,7 @@ function prepareConsumers(temporary, options, facts) {
     // A real lockfile is also Turbopack's boundary for the generated apps.
     run("npm", ["install", "--legacy-peer-deps", "--ignore-scripts", "--no-audit", "--no-fund", ...tooling, ...archives], root);
     fs.mkdirSync(path.join(root, "packages"));
-    for (const name of label === "baseline" ? ["core", "next"] : ["core", "codegen", "next"]) {
+    for (const name of label === "baseline" ? ["core", "next"] : ["core", "codegen", "react", "next"]) {
       const installed = assertOwnedPackage(root, `@fluxfast/${name}`);
       fs.symlinkSync(installed, path.join(root, "packages", name), "dir");
     }

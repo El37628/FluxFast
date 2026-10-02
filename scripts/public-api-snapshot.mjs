@@ -10,6 +10,9 @@ const repositoryRoot = path.resolve(
 );
 
 const PACKAGE_ENTRIES = Object.freeze({
+  "@fluxfast/react": Object.freeze({
+    ".": "packages/react/dist/index.d.ts",
+  }),
   "@fluxfast/codegen": Object.freeze({
     ".": "packages/codegen/dist/index.d.ts",
   }),
@@ -30,8 +33,8 @@ const PACKAGE_ENTRIES = Object.freeze({
 });
 
 function declarationTarget(entry, specifier) {
-  if (specifier === "@fluxfast/core") {
-    return path.join(repositoryRoot, "packages/core/dist/index.d.ts");
+  if (PACKAGE_ENTRIES[specifier]?.["."]) {
+    return path.join(repositoryRoot, PACKAGE_ENTRIES[specifier]["."]);
   }
   const resolved = path.resolve(path.dirname(entry), specifier);
   return resolved.endsWith(".js")
@@ -242,10 +245,12 @@ export function createPublicApiSnapshot() {
 
   const coreManifest = packageManifest("packages/core");
   const codegenManifest = packageManifest("packages/codegen");
+  const reactManifest = packageManifest("packages/react");
   const devtoolsManifest = packageManifest("packages/devtools");
   const nextManifest = packageManifest("packages/next");
   packages["@fluxfast/core"].exportMap = coreManifest.exports;
   packages["@fluxfast/codegen"].exportMap = codegenManifest.exports;
+  packages["@fluxfast/react"].exportMap = reactManifest.exports;
   packages["@fluxfast/devtools"].exportMap = devtoolsManifest.exports;
   packages["@fluxfast/next"].bin = nextManifest.bin;
   packages["@fluxfast/next"].exportMap = nextManifest.exports;

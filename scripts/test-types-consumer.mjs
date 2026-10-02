@@ -57,7 +57,7 @@ try {
   if (!configuredArtifacts) {
     fs.mkdirSync(path.join(artifacts, "python"), { recursive: true });
     fs.mkdirSync(path.join(artifacts, "npm"));
-    for (const owner of ["core", "codegen", "next"]) {
+    for (const owner of ["core", "codegen", "react", "next"]) {
       success(pnpm, ["--filter", "@fluxfast/" + owner, "run", "build"]);
       success(npm, ["pack", "--ignore-scripts", "--json", "--pack-destination", path.join(artifacts, "npm")], path.join(repository, "packages", owner));
     }
@@ -92,7 +92,7 @@ try {
     fs.mkdirSync(directory);
     fs.writeFileSync(path.join(directory, "package.json"), '{"private":true}');
     const source = mode === "published" ? published : path.join(artifacts, "npm");
-    const owners = mode === "published" ? ["core", "next"] : ["core", "codegen", "next"];
+    const owners = mode === "published" ? ["core", "next"] : ["core", "codegen", "react", "next"];
     success(npm, ["install", ...owners.map(owner => one(source, "fluxfast-" + owner + "-", ".tgz")), "--ignore-scripts", "--legacy-peer-deps", "--no-audit", "--no-fund", "--no-package-lock"], directory);
     installed[mode] = path.join(directory, "node_modules");
   }

@@ -17,7 +17,8 @@ runtime behavior. The FluxFast 1.x public surface includes:
 
 - names exported by the top-level Python `fluxfast` package;
 - names and paths exported by `@fluxfast/core`, `@fluxfast/next`, and the
-  optional `@fluxfast/devtools` package added in v1.1;
+  optional `@fluxfast/devtools` package added in v1.1; the additive Codegen and
+  shared React binding packages under unreleased v1.2 development;
 - CLI commands, meaningful options, documented environment variables, major
   defaults, and success/failure semantics;
 - generated filenames, exported names, and semantic TypeScript contracts;
@@ -35,6 +36,11 @@ adapter, transport, cache, live-resource, protocol, or validation integrations;
 it does not mean experimental. Examples include
 `LiveBroker`, `ResourceCacheBackend`, transport interfaces, validation-plan
 APIs, and protocol types.
+
+The unreleased [Codegen](codegen-api.md) and [React bindings](react-api.md)
+references classify their additive v1.2 surfaces and document examples. The
+React package relocates existing binding contracts without requiring Next
+applications to change their imports; a standalone SSR host is separate work.
 
 For practical selection guidance and working examples, see
 [Stable APIs for application developers](stable-apis.md) and
@@ -56,6 +62,7 @@ The following contracts are stable throughout the 1.x release line:
 | Python package | The documented `fluxfast.__all__` names, call shapes, and behavior. |
 | Core package | The `@fluxfast/core` root path, its declarations, and framework-neutral runtime behavior; the additive `@fluxfast/core/server` integration surface under unreleased v1.2 development. |
 | Next package | The five documented `@fluxfast/next` export-map paths and their per-path declarations. |
+| React bindings | The additive `@fluxfast/react` root path under unreleased v1.2 development; shared React components, hooks, registry, and their types. |
 | DevTools package | The `@fluxfast/devtools` root path, `FluxDevtools`, `FluxDevtoolsProps`, and development/production conditional behavior introduced in v1.1. |
 | Browser protocol | `fluxfast/1`, its media type, headers, capabilities, envelopes, events, and patch semantics. |
 | Developer schema | Closed `fluxfast-schema/2` shape and fingerprint rules, plus continued schema/1 reading. |
@@ -136,7 +143,8 @@ Markdown compiler.
       "./next-config",
       "./server"
     ],
-    "@fluxfast/devtools": ["."]
+    "@fluxfast/devtools": ["."],
+    "@fluxfast/react": ["."]
   }
 }
 ```

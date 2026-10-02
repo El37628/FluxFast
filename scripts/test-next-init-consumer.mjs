@@ -478,6 +478,7 @@ try {
     if (process.env.FLUXFAST_SKIP_BUILD !== "1") {
       run(pnpmCommand, ["--filter", "@fluxfast/core", "build"]);
       run(pnpmCommand, ["--filter", "@fluxfast/codegen", "build"]);
+      run(pnpmCommand, ["--filter", "@fluxfast/react", "build"]);
       run(pnpmCommand, ["--filter", "@fluxfast/next", "build"]);
     }
     fs.mkdirSync(artifactRoot, { recursive: true });
@@ -493,6 +494,7 @@ try {
       "--pack-destination",
       artifactRoot,
     ]);
+    run(npmCommand, ["pack", path.join(repositoryRoot, "packages", "react"), "--pack-destination", artifactRoot]);
     run(npmCommand, [
       "pack",
       path.join(repositoryRoot, "packages", "codegen"),
@@ -533,6 +535,7 @@ try {
         "--no-save",
         findArtifact("core"),
         findArtifact("codegen"),
+        findArtifact("react"),
         findArtifact("next"),
       ],
       consumerRoot

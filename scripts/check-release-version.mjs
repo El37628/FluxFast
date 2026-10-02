@@ -29,7 +29,7 @@ const snapshot = readVersionSnapshot(files);
 const mismatches = [];
 
 for (const [file, version] of Object.entries(snapshot)) {
-  const expected = / @fluxfast\/(?:core|codegen)$/.test(file)
+  const expected = / @fluxfast\/(?:core|codegen|react)$/.test(file)
     ? `^${expectedVersion}`
     : expectedVersion;
   if (version !== expected) mismatches.push(`${file}: ${version ?? "missing"}`);

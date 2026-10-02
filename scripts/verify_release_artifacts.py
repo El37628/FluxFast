@@ -407,6 +407,7 @@ def _verify_npm_package(
         "exports",
         "dependencies",
         "peerDependencies",
+        "peerDependenciesMeta",
     )
     for field in frozen_fields:
         _expect(
@@ -474,7 +475,8 @@ def _includes_devtools_artifact(version: str) -> bool:
 
 
 def _artifact_paths(
-    release_dir: Path, version: str, *, include_codegen: bool = False
+    release_dir: Path, version: str, *, include_codegen: bool = False,
+    include_react: bool = False,
 ) -> tuple[Path, ...]:
     expected_list = [
         release_dir / "python" / f"fluxfast-{version}-py3-none-any.whl",
@@ -488,6 +490,8 @@ def _artifact_paths(
         )
     if include_codegen:
         expected_list.append(release_dir / "npm" / f"fluxfast-codegen-{version}.tgz")
+    if include_react:
+        expected_list.append(release_dir / "npm" / f"fluxfast-react-{version}.tgz")
     expected = tuple(expected_list)
     observed = {
         path
@@ -503,6 +507,8 @@ def _artifact_paths(
     )
     if include_codegen:
         expected_description += ", plus the Codegen tarball"
+    if include_react:
+        expected_description += ", plus the React tarball"
     _expect(
         observed == set(expected),
         f"release directory must contain exactly {expected_description}",
@@ -563,7 +569,11 @@ def verify_release_artifacts(
         (repository_root / "packages/next/package.json").read_text()
     )
     include_codegen = "@fluxfast/codegen" in next_manifest.get("dependencies", {})
-    artifacts = _artifact_paths(release_dir, version, include_codegen=include_codegen)
+    include_react = "@fluxfast/react" in next_manifest.get("dependencies", {})
+    artifacts = _artifact_paths(
+        release_dir, version, include_codegen=include_codegen,
+        include_react=include_react,
+    )
     wheel, sdist, core, next_package = artifacts[:4]
     pyproject = tomllib.loads(
         (repository_root / "python/fluxfast/pyproject.toml").read_text()
@@ -607,10 +617,18 @@ def verify_release_artifacts(
         )
     if include_codegen:
         _verify_npm_package(
-            artifacts[-1],
+            release_dir / "npm" / f"fluxfast-codegen-{version}.tgz",
             repository_root=repository_root,
             package_directory="packages/codegen",
             package_name="@fluxfast/codegen",
+            version=version,
+        )
+    if include_react:
+        _verify_npm_package(
+            release_dir / "npm" / f"fluxfast-react-{version}.tgz",
+            repository_root=repository_root,
+            package_directory="packages/react",
+            package_name="@fluxfast/react",
             version=version,
         )
     if write_checksums:

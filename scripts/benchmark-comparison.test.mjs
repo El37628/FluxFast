@@ -10,14 +10,15 @@ import { baselineComparisonTooling } from "./align-benchmark-tooling.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
-test("historical tooling excludes only the new Codegen workspace topology", () => {
+test("historical tooling excludes only new Codegen and React workspace topology", () => {
   const next = fs.readFileSync(path.join(root, "packages/next/package.json"), "utf8");
   const expected = JSON.parse(next);
   delete expected.dependencies["@fluxfast/codegen"];
+  delete expected.dependencies["@fluxfast/react"];
   assert.deepEqual(JSON.parse(baselineComparisonTooling("packages/next/package.json", next)), expected);
   const lock = fs.readFileSync(path.join(root, "pnpm-lock.yaml"), "utf8");
   const normalized = baselineComparisonTooling("pnpm-lock.yaml", lock);
-  assert.doesNotMatch(normalized, /packages\/codegen:|'@fluxfast\/codegen':/);
+  assert.doesNotMatch(normalized, /packages\/(codegen|react):|'@fluxfast\/(codegen|react)':/);
   assert.match(normalized, /packages\/next:\n    dependencies:\n      '@fluxfast\/core':/);
   assert.equal(normalized.slice(normalized.indexOf("\npackages:")), lock.slice(lock.indexOf("\npackages:")), "all external resolutions remain exact");
   for (const name of ["package.json", "packages/core/package.json", "tests/browser/frontend/package.json"]) {

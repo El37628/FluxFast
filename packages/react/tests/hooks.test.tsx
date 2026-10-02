@@ -286,4 +286,3 @@ describe("resource hooks", () => {
     expect(html).toContain("50000");
   });
 });
-

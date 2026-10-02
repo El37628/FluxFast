@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Extract the unreleased `@fluxfast/react` bindings from Next.js: shared context,
+  provider/root, allowlisted component resolver, resource/deferred/live hooks,
+  forms, and links. Existing Next root/client imports re-export the same objects
+  and types. The standalone React SSR/Vite host is not implemented yet.
 - Document the frontend adapter implementation contract, including ownership,
   same-envelope SSR/hydration, navigation and resource lifecycles, mutations,
   deferred/live authority, diagnostics, and production/conformance requirements.
@@ -45,6 +49,9 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Changed
 
+- Bind DevTools to the shared React context and make its Next peer optional,
+  so React-only integrations do not require Next.js. Build and isolated-consumer
+  gates include the React package without changing older published payloads.
 - Delegate Next.js initial SSR fetching and safe header selection to the shared
   Core server boundary while preserving the public adapter API, application
   bootstrap, authentication, diagnostics policy, and lazy not-found timing guard.
@@ -53,6 +60,8 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Fixed
 
+- Require component identifiers to be own entries in the shared React registry;
+  inherited prototype properties are not allowlisted application components.
 - Complete the unreleased adapter-foundation verification with all seven packed
   package entry points, actual published v1.1.0 upgrade/rollback pairings, and
   repeatable page-generation, browser-runtime, and production-bundle comparisons.

@@ -240,6 +240,7 @@ def prepare_frontend() -> None:
     run_checked([pnpm, "--filter", "@fluxfast/core", "run", "build"])
     if (REPOSITORY_ROOT / "packages/codegen/package.json").is_file():
         run_checked([pnpm, "--filter", "@fluxfast/codegen", "run", "build"])
+    run_checked([pnpm, "--filter", "@fluxfast/react", "run", "build"])
     run_checked([pnpm, "--filter", "@fluxfast/next", "run", "build"])
     run_checked([pnpm, "--dir", str(FRONTEND), "run", "generate"])
     run_checked(

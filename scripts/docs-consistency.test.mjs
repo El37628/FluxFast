@@ -102,6 +102,9 @@ test("keeps documented runtime support aligned with metadata and CI", () => {
   const corePackage = JSON.parse(read("packages/core/package.json"));
   const nextPackage = JSON.parse(read("packages/next/package.json"));
   const devtoolsPackage = JSON.parse(read("packages/devtools/package.json"));
+  const reactPackage = JSON.parse(read("packages/react/package.json"));
+  assert.deepEqual(facts.packageEntryPoints["@fluxfast/react"], Object.keys(reactPackage.exports));
+  assert.match(read("docs/react-api.md"), /unreleased/i);
   const pythonVersions = inlineMatrix(
     read(".github/workflows/python.yml"),
     "python-version"
