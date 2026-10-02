@@ -52,6 +52,14 @@ published v1.1.0 packages, including local generator selection, six artifact
 bytes, and read-only missing/current/stale checks in root/src layouts. The
 release-artifact job runs this gate on its already-verified archives.
 
+`pnpm test:consumer:react` installs the actual wheel and Core/Codegen/React/Vite
+tarballs outside the checkout, initializes an existing SPA without overwriting
+its scripts, and tests Python's development and production supervision. It
+checks SSR, protocol/asset/health/404 HTTP paths, read-only doctor/startup,
+listener cleanup and production boot without source, Vite or Codegen. The
+release-artifact workflow runs it on the same verified candidate. This focused
+runtime check does not replace the full shared browser conformance gate.
+
 Protocol changes must update `docs/protocol.md`; cache changes must include
 isolation tests. Performance claims require repeatable benchmark evidence with
 a baseline, workload, result, tradeoff, and correctness checks; select the

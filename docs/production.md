@@ -40,6 +40,19 @@ backend URL, or requiring CORS would be a breaking production-contract change.
 The [v1.0 production topology gate](releases/v1.0-production-topology.md) records
 repeatable installed-artifact and OCI image checks for this boundary.
 
+### Source-development React/Vite host (unreleased v1.2)
+
+The source Python CLI detects `@fluxfast/vite` in an initialized frontend and
+uses `fluxfast:dev`, `fluxfast:build` and `fluxfast:start`, keeping existing SPA
+scripts intact. The same supervisor starts FastAPI privately, injects its URL,
+waits for readiness and stops both children as one application. Next defaults
+and public Python command names/options remain unchanged. Production consumes
+the prebuilt `dist/fluxfast/` renderer/client outputs, never Vite source config.
+See the [complete React setup and example](vite-host.md#run-the-complete-application-with-python).
+These commands require source-built matching packages, not published v1.1.0;
+full React browser conformance and publication remain pending. The stable Next
+topology and historical evidence below are not claims about an unreleased host.
+
 ## Stable Python CLI contract
 
 These command names, option names, positional inputs, and major default

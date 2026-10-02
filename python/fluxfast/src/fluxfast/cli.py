@@ -45,7 +45,12 @@ from .production import (
     run_frontend_build,
     run_production,
 )
-from .production.frontend import detect_package_manager
+from .production.frontend import (
+    detect_package_manager,
+    frontend_adapter,
+    frontend_script,
+    package_manager_run_command,
+)
 from .production.redaction import safe_production_text
 from .schema_export import build_app_schema_manifest
 from .serialization import canonical_json
@@ -180,10 +185,18 @@ def _frontend_command(frontend: Path, host: str, port: int) -> list[str]:
             f"Could not find '{manager}' on PATH for frontend directory {frontend}"
         )
     separator = ["--"] if manager == "npm" else []
+    try:
+        script = frontend_script(frontend, "dev")
+        if frontend_adapter(frontend) is FrontendAdapter.REACT:
+            return package_manager_run_command(
+                frontend, script, "--hostname", host, "--port", str(port)
+            )
+    except ProductionValidationError as error:
+        raise DevServerError(str(error)) from error
     return [
         manager,
         "run",
-        "dev",
+        script,
         *separator,
         "--hostname",
         host,

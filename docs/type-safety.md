@@ -205,7 +205,8 @@ JavaScript tooling rather than requiring a particular adapter package.
 This addition is **not published in v1.1.0**. Use the built source candidate to
 test `--adapter`; ordinary published applications retain the existing setup
 commands. This generation handoff introduces no new manifest format or runtime
-behavior. Python supervision of the React/Vite host remains separate work.
+behavior. The source Python CLI's separate [React/Vite host integration](vite-host.md)
+now also supervises development and production; publication remains pending.
 
 For example, after [initializing a source-built React/Vite frontend](vite-host.md),
 this backend contract works with either host:

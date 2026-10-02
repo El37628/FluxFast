@@ -6,7 +6,12 @@ import subprocess
 from pathlib import Path
 
 from .errors import ProductionBuildError
-from .frontend import package_manager_exec_command, package_manager_run_command
+from .frontend import (
+    frontend_binary,
+    frontend_script,
+    package_manager_exec_command,
+    package_manager_run_command,
+)
 
 
 def resolve_build_frontend(
@@ -36,15 +41,16 @@ def resolve_build_frontend(
 def check_frontend_command(frontend: Path, command: str) -> None:
     """Run one FluxFast adapter check and fail without modifying source files."""
 
+    binary = frontend_binary(frontend)
     result = subprocess.run(
-        package_manager_exec_command(frontend, "fluxfast", command, "--check"),
+        package_manager_exec_command(frontend, binary, command, "--check"),
         cwd=frontend,
         check=False,
         shell=False,
     )
     if result.returncode != 0:
         raise ProductionBuildError(
-            f"Frontend validation failed: fluxfast {command} --check "
+            f"Frontend validation failed: {binary} {command} --check "
             f"exited with status {result.returncode}"
         )
 
@@ -53,7 +59,7 @@ def run_frontend_build(frontend: Path) -> int:
     """Run the consumer's existing package-manager production build script."""
 
     result = subprocess.run(
-        package_manager_run_command(frontend, "build"),
+        package_manager_run_command(frontend, frontend_script(frontend, "build")),
         cwd=frontend,
         check=False,
         shell=False,

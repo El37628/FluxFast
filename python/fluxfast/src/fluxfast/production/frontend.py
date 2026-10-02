@@ -6,6 +6,11 @@ import json
 import shutil
 from pathlib import Path
 
+from .._frontend_adapter import (
+    FrontendAdapter,
+    FrontendAdapterError,
+    detect_frontend_adapter,
+)
 from .errors import ProductionFrontendError
 
 _PACKAGE_MANAGER_CANDIDATES = (
@@ -43,12 +48,53 @@ def production_frontend_command(
 
     return package_manager_run_command(
         frontend,
-        "start",
+        frontend_script(frontend, "start"),
         "--hostname",
         host,
         "--port",
         str(port),
     )
+
+
+def frontend_adapter(frontend: Path) -> FrontendAdapter:
+    """Select the installed host declaration, retaining legacy Next projects."""
+
+    _load_manifest(frontend)
+    try:
+        return detect_frontend_adapter(frontend, legacy_default=FrontendAdapter.NEXT)
+    except FrontendAdapterError as error:
+        raise ProductionFrontendError(str(error)) from error
+
+
+def frontend_script(frontend: Path, command: str) -> str:
+    """Use initialized React host scripts without replacing a consumer's SPA."""
+
+    return (
+        f"fluxfast:{command}"
+        if frontend_adapter(frontend) is FrontendAdapter.REACT
+        else command
+    )
+
+
+def frontend_binary(frontend: Path) -> str:
+    """Select the adapter CLI, never Next's CLI for a React project."""
+
+    return (
+        "fluxfast-vite"
+        if frontend_adapter(frontend) is FrontendAdapter.REACT
+        else "fluxfast"
+    )
+
+
+def frontend_build_exists(frontend: Path) -> bool:
+    """Check completion markers; the Node host validates its artifact contents."""
+
+    if frontend_adapter(frontend) is FrontendAdapter.NEXT:
+        return (frontend / ".next" / "BUILD_ID").is_file()
+    output = frontend / "dist" / "fluxfast"
+    return (output / "host.json").is_file() and (
+        output / "server" / "renderer.mjs"
+    ).is_file()
 
 
 def package_manager_run_command(

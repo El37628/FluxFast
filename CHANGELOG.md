@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add unreleased React/Vite selection for Python development, build, production
+  startup and diagnostics. Use initialized scoped host scripts while preserving
+  SPA scripts and legacy Next defaults; reuse the existing private-backend,
+  two-child supervisor and immutable production startup boundary.
 - Add unreleased Python `fluxfast types --adapter react` and detection from
   `@fluxfast/vite`. Prefer installed Codegen with the explicit target, with a
   local Vite generator fallback that never selects Next's CLI. Preserve legacy

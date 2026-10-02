@@ -19,11 +19,18 @@ import anyio
 from fastapi import FastAPI
 
 from .. import __version__
+from .._frontend_adapter import FrontendAdapter
 from ..application_import import ApplicationImportError, load_fastapi_application
 from ..cache import MemoryResourceCache
 from ..live import MemoryLiveBroker
 from .config import ProductionConfig
-from .frontend import package_manager_exec_command
+from .errors import ProductionFrontendError
+from .frontend import (
+    frontend_adapter,
+    frontend_binary,
+    frontend_build_exists,
+    package_manager_exec_command,
+)
 from .redaction import safe_production_text
 
 DiagnosticStatus = Literal["pass", "warning", "fail"]
@@ -102,8 +109,19 @@ def diagnose_production(config: ProductionConfig) -> ProductionDiagnosticReport:
 
     frontend = config.frontend.resolve()
     diagnostics: list[ProductionDiagnostic] = []
-    diagnostics.extend(_runtime_diagnostics(frontend))
-    application, application_items = _application_diagnostics(config, frontend)
+    try:
+        adapter = frontend_adapter(frontend)
+    except ProductionFrontendError as error:
+        adapter = None
+        diagnostics.append(
+            ProductionDiagnostic(
+                "Application", "fail", "Frontend adapter could not be selected",
+                detail=str(error),
+                fix="Declare exactly one FluxFast host: @fluxfast/next or @fluxfast/vite.",
+            )
+        )
+    diagnostics.extend(_runtime_diagnostics(frontend, adapter))
+    application, application_items = _application_diagnostics(config, frontend, adapter)
     diagnostics.extend(application_items)
     diagnostics.extend(_network_diagnostics(config))
     diagnostics.append(
@@ -172,7 +190,9 @@ def _safe_display(value: str, *, limit: int = 240) -> str:
     return safe_production_text(value, limit=limit)
 
 
-def _runtime_diagnostics(frontend: Path) -> list[ProductionDiagnostic]:
+def _runtime_diagnostics(
+    frontend: Path, adapter: FrontendAdapter | None
+) -> list[ProductionDiagnostic]:
     diagnostics = [
         ProductionDiagnostic(
             "Runtime",
@@ -188,24 +208,41 @@ def _runtime_diagnostics(frontend: Path) -> list[ProductionDiagnostic]:
                 "Runtime",
                 "fail",
                 "Supported Node.js runtime was not found",
-                fix="Install Node.js 22 or 24 and ensure node is on PATH.",
+                fix=(
+                    "Install Node.js 22.12+ or 24 and ensure node is on PATH."
+                    if adapter is FrontendAdapter.REACT
+                    else "Install Node.js 22 or 24 and ensure node is on PATH."
+                ),
             )
         )
     else:
         major, minor, patch = node
+        supported = major in _SUPPORTED_NODE_MAJORS and not (
+            adapter is FrontendAdapter.REACT and major == 22 and minor < 12
+        )
         diagnostics.append(
             ProductionDiagnostic(
                 "Runtime",
-                "pass" if major in _SUPPORTED_NODE_MAJORS else "fail",
+                "pass" if supported else "fail",
                 f"Node.js {major}.{minor}.{patch}",
-                None if major in _SUPPORTED_NODE_MAJORS else "FluxFast supports Node.js 22 and 24.",
+                None if supported else (
+                    "React/Vite requires Node.js 22.12+ or 24."
+                    if adapter is FrontendAdapter.REACT
+                    else "FluxFast supports Node.js 22 and 24."
+                ),
             )
         )
 
+    if adapter is None:
+        return diagnostics
+    packages = (
+        ("@fluxfast/core", "@fluxfast/react", "@fluxfast/vite")
+        if adapter is FrontendAdapter.REACT
+        else ("@fluxfast/core", "@fluxfast/next")
+    )
     versions = {
         "Python": __version__,
-        "@fluxfast/core": _package_version(frontend, "@fluxfast/core"),
-        "@fluxfast/next": _package_version(frontend, "@fluxfast/next"),
+        **{package: _package_version(frontend, package) for package in packages},
     }
     installed = [version for version in versions.values() if version is not None]
     if len(installed) != len(versions):
@@ -242,6 +279,7 @@ def _runtime_diagnostics(frontend: Path) -> list[ProductionDiagnostic]:
 def _application_diagnostics(
     config: ProductionConfig,
     frontend: Path,
+    adapter: FrontendAdapter | None,
 ) -> tuple[FastAPI | None, list[ProductionDiagnostic]]:
     diagnostics: list[ProductionDiagnostic] = []
     if (frontend / "package.json").is_file():
@@ -254,36 +292,34 @@ def _application_diagnostics(
                 "Application",
                 "fail",
                 "Frontend package is missing",
-                fix="Pass --frontend PATH for the initialized Next.js application.",
+                fix="Pass --frontend PATH for the initialized frontend application.",
             )
         )
 
-    diagnostics.append(
-        ProductionDiagnostic(
-            "Application",
-            "pass" if (frontend / ".next" / "BUILD_ID").is_file() else "fail",
-            "Frontend production build exists"
-            if (frontend / ".next" / "BUILD_ID").is_file()
-            else "Frontend production build is missing",
-            fix=None
-            if (frontend / ".next" / "BUILD_ID").is_file()
-            else "Run fluxfast build before fluxfast start.",
-        )
-    )
-
-    for command, success, failure in (
-        ("init", "Next.js adapter is initialized", "Next.js adapter initialization is incomplete"),
-        ("generate", "Generated FluxFast files are current", "Generated FluxFast files are missing or stale"),
-    ):
-        status = _frontend_check(frontend, command)
+    if adapter is not None:
+        built = frontend_build_exists(frontend)
         diagnostics.append(
             ProductionDiagnostic(
                 "Application",
-                "pass" if status else "fail",
-                success if status else failure,
-                fix=None if status else f"Run fluxfast {command} in the frontend project.",
+                "pass" if built else "fail",
+                "Frontend production build exists" if built else "Frontend production build is missing",
+                fix=None if built else "Run fluxfast build before fluxfast start.",
             )
         )
+        name = "React/Vite" if adapter is FrontendAdapter.REACT else "Next.js"
+        binary = "fluxfast-vite" if adapter is FrontendAdapter.REACT else "fluxfast"
+        for command, success, failure in (
+            ("init", f"{name} adapter is initialized", f"{name} adapter initialization is incomplete"),
+            ("generate", "Generated FluxFast files are current", "Generated FluxFast files are missing or stale"),
+        ):
+            status = _frontend_check(frontend, command)
+            diagnostics.append(
+                ProductionDiagnostic(
+                    "Application", "pass" if status else "fail",
+                    success if status else failure,
+                    fix=None if status else f"Run {binary} {command} in the frontend project.",
+                )
+            )
 
     application = _load_application(config.app)
     if application is None:
@@ -449,19 +485,25 @@ def _node_version() -> tuple[int, int, int] | None:
 
 
 def _package_version(frontend: Path, package: str) -> str | None:
-    segments = package.split("/")
-    candidates = [frontend / "node_modules" / Path(*segments) / "package.json"]
-    if package == "@fluxfast/core":
-        candidates.append(
-            frontend
-            / "node_modules"
-            / "@fluxfast"
-            / "next"
-            / "node_modules"
-            / "@fluxfast"
-            / "core"
-            / "package.json"
-        )
+    relative = Path(*package.split("/")) / "package.json"
+    roots = (frontend, *frontend.parents)
+    candidates: list[Path] = []
+    hosts = (
+        ("vite", "react")
+        if frontend_adapter(frontend) is FrontendAdapter.REACT
+        else ("next",)
+    )
+    # npm's nested dependencies and pnpm's real package siblings need no Node
+    # evaluation. React/Vite hosts must not depend on Next for version discovery.
+    for root in roots:
+        candidates.append(root / "node_modules" / relative)
+        for host in hosts:
+            installed = root / "node_modules" / "@fluxfast" / host
+            if installed.is_dir():
+                candidates.extend((
+                    installed / "node_modules" / relative,
+                    installed.resolve().parent.parent / relative,
+                ))
     for candidate in candidates:
         try:
             value = json.loads(candidate.read_text(encoding="utf8"))
@@ -476,7 +518,7 @@ def _frontend_check(frontend: Path, command: str) -> bool:
     try:
         arguments = package_manager_exec_command(
             frontend,
-            "fluxfast",
+            frontend_binary(frontend),
             command,
             "--check",
         )
