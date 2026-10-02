@@ -41,3 +41,9 @@ deferred authority, mutation patches, and live synchronization.
 
 See the [adapter contract](../../docs/adapter-contract.md) for the host lifecycle
 and [React API reference](../../docs/react-api.md) for the complete binding API.
+
+Separate, unreleased `@fluxfast/react/server` and `@fluxfast/react/client` entries
+provide safe document SSR and exact-envelope hydration for host authors. They
+do not export a Vite plugin, asset server, process supervisor, or completed host.
+See the [SSR integration reference](../../docs/react-ssr.md); never import the
+Node server entry into browser application code.

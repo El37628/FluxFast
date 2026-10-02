@@ -23,6 +23,18 @@
       "import": "./dist/esm/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/esm/client.js",
+      "require": "./dist/client.js",
+      "default": "./dist/client.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/esm/server/index.js",
+      "require": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
     }
   },
   "scripts": {

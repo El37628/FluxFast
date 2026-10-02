@@ -33,7 +33,9 @@ hooks, forms, and links in `@fluxfast/react`. The Next adapter keeps its public
 imports through compatibility re-exports; DevTools subscribes to the same React
 context. The bindings depend only on browser Core and React peers, never Next,
 Codegen, server primitives, backend configuration, or a second resource engine.
-The separate React SSR/Vite host is still future work, not a published feature.
+Separate React server/client entries now provide the unreleased SSR/hydration
+boundary for host authors. Vite asset/build serving and Python host integration
+are still future work; this is not a completed or published frontend host.
 
 Live Resources add a synchronization path without changing that ownership:
 

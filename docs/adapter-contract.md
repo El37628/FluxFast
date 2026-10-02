@@ -16,8 +16,10 @@ entry points, and deployment behavior.
 Phase B additionally extracts the existing React subscriptions and rendering
 into the **unreleased** `@fluxfast/react` package. `@fluxfast/next` re-exports
 those same context/components/hooks, and DevTools consumes their shared context.
-This is a bindings package, not a new frontend host: Next remains the only
-implemented SSR host until the separate React SSR/Vite integration is ready.
+The separate [React SSR/hydration boundary](react-ssr.md) provides a Node server
+entry and browser hydration entry without widening the bindings browser graph.
+It is not a completed frontend host: Next remains the only implemented host
+until Vite assets/build, initialization, Python integration and conformance are ready.
 See the [React bindings reference](react-api.md) for responsibilities, examples,
 and the complete new package inventory.
 

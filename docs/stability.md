@@ -62,7 +62,7 @@ The following contracts are stable throughout the 1.x release line:
 | Python package | The documented `fluxfast.__all__` names, call shapes, and behavior. |
 | Core package | The `@fluxfast/core` root path, its declarations, and framework-neutral runtime behavior; the additive `@fluxfast/core/server` integration surface under unreleased v1.2 development. |
 | Next package | The five documented `@fluxfast/next` export-map paths and their per-path declarations. |
-| React bindings | The additive `@fluxfast/react` root path under unreleased v1.2 development; shared React components, hooks, registry, and their types. |
+| React bindings | The additive `@fluxfast/react` root under unreleased v1.2 development, plus separate `./client` hydration and Node-only `./server` integration entries. |
 | DevTools package | The `@fluxfast/devtools` root path, `FluxDevtools`, `FluxDevtoolsProps`, and development/production conditional behavior introduced in v1.1. |
 | Browser protocol | `fluxfast/1`, its media type, headers, capabilities, envelopes, events, and patch semantics. |
 | Developer schema | Closed `fluxfast-schema/2` shape and fingerprint rules, plus continued schema/1 reading. |
@@ -144,7 +144,7 @@ Markdown compiler.
       "./server"
     ],
     "@fluxfast/devtools": ["."],
-    "@fluxfast/react": ["."]
+    "@fluxfast/react": [".", "./client", "./server"]
   }
 }
 ```
