@@ -3,7 +3,7 @@ import test from "node:test";
 import { REACT_RELEASE_PACKAGES, resolveReactPublishedConfig, waitForReactPublication } from "./react-published-config.mjs";
 
 const config = resolveReactPublishedConfig({ version: "v1.2.0", attempts: "2" });
-const ready = url => Response.json(url.includes("pypi.org") ? { info: { version: "1.2.0" } } : { version: "1.2.0" });
+const ready = url => Response.json(new URL(url).hostname === "pypi.org" ? { info: { version: "1.2.0" } } : { version: "1.2.0" });
 
 test("registry mode requests exactly the matching Python and React-host packages, never Next", () => {
   assert.deepEqual(config, { version: "1.2.0", pythonSpec: "fluxfast==1.2.0", attempts: 2,
