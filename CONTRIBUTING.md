@@ -4,6 +4,10 @@ Follow [AGENTS.md](AGENTS.md) for repository invariants and Git handoff. Start i
 the owning package and nearby tests; consult architecture records when their
 boundary is affected. Prefer existing patterns and keep changes scoped.
 
+Adapter changes must follow the [implementation contract](docs/adapter-contract.md)
+and the [shared conformance suite](tests/adapter-conformance/README.md). The
+contract defines observable behavior and ownership, not Next.js private APIs.
+
 ## Setup and verification
 
 Use the Node and pnpm versions declared in `package.json` and Python requirements

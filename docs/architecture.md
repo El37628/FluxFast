@@ -23,6 +23,11 @@ FastAPI is authoritative for URLs, authentication, authorization, validation,
 mutations, and the component identifier. The frontend registry is authoritative
 for mapping that identifier to an allowlisted UI module.
 
+The [frontend adapter implementation contract](adapter-contract.md) specifies
+document ownership, SSR/hydration, navigation, resource/deferred/mutation/live
+bindings, diagnostics, and production requirements for future hosts. Next.js
+remains the only implemented host; the multi-adapter foundation is unreleased.
+
 Live Resources add a synchronization path without changing that ownership:
 
 ```text

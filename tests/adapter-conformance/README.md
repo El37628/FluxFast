@@ -4,6 +4,10 @@ This suite defines FluxFast's observable adapter behavior once. Next.js is the
 only implemented harness in Phase A; other adapters can reuse the expectations
 without duplicating or weakening them. This does not implement a React/Vite host.
 
+The [adapter implementation contract](../../docs/adapter-contract.md) is the
+specification for these lifecycle expectations, including document ownership,
+same-envelope hydration, resource authority, and production requirements.
+
 ## Run locally
 
 From the repository root, install the declared pnpm and Python development
