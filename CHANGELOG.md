@@ -5,117 +5,56 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-02
+
 ### Added
 
-- Bind React/Vite browser release checks to the exact checksum-verified candidate,
-  and verify matching npm/PyPI installations in both development and production
-  before creating the GitHub release. Registry upgrade/rollback checks cover both
-  published 1.0.1 and 1.1.0 baselines in both upgrade orders. Mixed tooling checks
-  validate the installed producer version while retaining byte-identical generated
-  contracts and fingerprints apart from that intentional metadata change.
-- Run the unchanged shared adapter browser contracts on unreleased React/Vite
-  in both modes, with real StrictMode, initialized packed consumers, Node 22/24
-  and React 19 peer-floor CI, and three-worker Redis isolation/reconnect tests.
-  Verify cold hydration, first navigation, automatic same-origin source updates
-  and immutable production SSR/hydration without source or build tooling.
-- Add unreleased React/Vite selection for Python development, build, production
-  startup and diagnostics. Use initialized scoped host scripts while preserving
-  SPA scripts and legacy Next defaults; reuse the existing private-backend,
-  two-child supervisor and immutable production startup boundary.
-- Add unreleased Python `fluxfast types --adapter react` and detection from
-  `@fluxfast/vite`. Prefer installed Codegen with the explicit target, with a
-  local Vite generator fallback that never selects Next's CLI. Preserve legacy
-  Next handoffs, local package-manager/PnP behavior and read-only artifact checks.
-- Add unreleased installed-only `fluxfast-vite init`, `generate` and structural
-  `doctor` commands. Preserve existing SPA entries, source Vite configuration,
-  custom scripts and user instructions; add scoped host scripts and generated
-  agent knowledge. Share Codegen's React artifacts and read-only drift checks,
-  reject output symlinks, and restore owned changes on initialization failure.
-- Add the unreleased `@fluxfast/vite` plugin and Node host: meaningful React SSR,
-  exact-envelope hydration entries, same-port development HMR, offline client/SSR
-  production builds, allowlisted static assets, bounded health probes and streaming
-  cancellation. Production uses built artifacts without loading source config or
-  Vite. Python supervision and shared browser conformance are integrated above.
-- Add the unreleased `fluxfast-codegen generate --adapter react` target for
-  shared React allowlists, without a Next client directive or config execution.
-  Preserve all six Next artifact bytes and the five shared schema artifact bytes.
-  The Python React handoff is integrated above.
-- Add unreleased React SSR and hydration subentries: lazy-page SSR completion,
-  safe document payloads, exact-envelope hydration, actual 404/auth failures,
-  bounded/cancellable SSR, and Core's same-origin streaming proxy. The Python
-  host integration is recorded above.
-- Extract the unreleased `@fluxfast/react` bindings from Next.js: shared context,
-  provider/root, allowlisted component resolver, resource/deferred/live hooks,
-  forms, and links. Existing Next root/client imports re-export the same objects
-  and types. Standalone React SSR/Vite integration is recorded separately above.
-- Document the frontend adapter implementation contract, including ownership,
-  same-envelope SSR/hydration, navigation and resource lifecycles, mutations,
-  deferred/live authority, diagnostics, and production/conformance requirements.
-  The multi-adapter foundation remains unreleased; Next is the published host.
-- Add the shared adapter-conformance suite with Next as its first harness,
-  covering SSR/hydration, navigation/cache behavior, real mutation patches,
-  deferred/live lifecycles, diagnostics, and production startup/shutdown.
-  Existing browser commands remain aliases; both modes run in the same CI gate.
-- Make the unreleased Python `fluxfast types` handoff adapter-aware, with
-  dependency-based Next detection, `--adapter next`, installed-only Codegen
-  selection, and the existing generator fallback for published v1.1 tooling.
-  Keep npm, pnpm, Yarn/PnP, and Bun execution local and upgrade errors generic.
-- Add the separate unreleased `fluxfast-codegen` binary with `generate`,
-  `--schema-file`, `--check`, and explicit adapter selection through one target
-  registry. The default target remains `next`; its output and drift behavior
-  match the unchanged Next CLI without a competing `fluxfast` binary.
-- Add an explicit `FluxPageRegistryTarget` and shared read-only page scanner to
-  Codegen. Runtime imports, root/props exports, and the client directive are
-  configurable; Next automatically selects its existing defaults without
-  changing any of its six generated artifact bytes or public signatures.
-- Add the unreleased `@fluxfast/codegen` package for framework-neutral manifest,
-  type, validator, route, and mutation compilation plus safe generation and
-  read-only drift checks. The existing Next generator delegates shared work
-  while preserving its public signatures, CLI, and all six artifact bytes.
-- Begin the unreleased v1.2 adapter foundation with a separate
-  `@fluxfast/core/server` entry point, framework-neutral header sanitation and
-  SSR allowlist helpers, internal same-origin redirect validation, and server
-  contract types. Existing Core root exports and Next.js behavior are unchanged.
-- Add independently tested `fetchFluxInitialPage` with explicit fetch/diagnostic
-  configuration, authoritative protocol headers, safe redirect following, 404
-  classification, envelope validation, bounded error bodies, and separate safe
-  SSR trace metadata for adapter-owned rendering and hydration.
-- Add framework-neutral `createFluxTransportProxy` with protocol gating, safe
-  target construction, exact query/method/body forwarding, shared bidirectional
-  header sanitation, manual redirects, cancellation, and unbuffered live streams.
+- Add a complete React SSR/Vite host alongside Next.js: meaningful initial
+  HTML, same-envelope hydration, one-origin development HMR, production
+  client/SSR builds and immutable startup without source or compiler tooling.
+- Add `@fluxfast/react` with shared hooks, forms, links and provider/root,
+  plus explicit client/server hydration entries. Existing Next imports keep
+  working and share the same context and objects.
+- Add installed-only `fluxfast-vite init`, `generate` and `doctor` commands.
+  Initialization preserves existing SPA entries, scripts, configuration and
+  user instructions while installing scoped host scripts and agent knowledge.
+- Teach Python `fluxfast dev/build/start/doctor` to select and supervise the
+  React/Vite host. `fluxfast types --adapter react` generates authoritative
+  contracts with installed tooling; host declaration also enables detection.
+- Add framework-neutral `@fluxfast/codegen` with Next/React registry targets,
+  safe generation, read-only drift checks and the `fluxfast-codegen` binary.
+- Add server-only `@fluxfast/core/server` APIs for safe initial-page fetching,
+  headers/redirects and cancellable, streaming same-origin transport proxies.
+- Add complete React/Vite setup, API examples, host/reference documentation
+  and versioned upgrade instructions.
+- Run shared browser contracts on both hosts, Node 22/24 and React 19 peers.
+  Verify exact candidate archives and registry-only consumers, including
+  SSR/hydration, first navigation, HMR, mutations, deferred/live behavior,
+  three-worker Redis, graceful shutdown and source-free production startup.
+  Check actual published 1.0.1/1.1.0 upgrade and rollback in both orders.
 
 ### Changed
 
-- Bind DevTools to the shared React context and make its Next peer optional,
-  so React-only integrations do not require Next.js. Build and isolated-consumer
-  gates include the React package without changing older published payloads.
-- Delegate Next.js initial SSR fetching and safe header selection to the shared
-  Core server boundary while preserving the public adapter API, application
-  bootstrap, authentication, diagnostics policy, and lazy not-found timing guard.
-- Delegate the Next.js production transport handler to Core while retaining
-  catch-all segment encoding and per-request supervisor backend resolution.
+- Delegate Next's shared rendering bindings, generation and server transport
+  to their owning React, Codegen and Core layers without changing existing
+  Next application imports, scaffold or the six generated-file contract.
+- Bind optional DevTools to the shared React context without requiring Next.
+- Publish one synchronized version across Python and all six npm packages,
+  with eight checksum-bound distribution archives. Keep historical release
+  snapshots, `fluxfast/1` and `fluxfast-schema/2` unchanged.
+- Validate generated producer metadata against the installed Python version
+  while comparing the same-schema contract and fingerprint without drift.
 
 ### Fixed
 
-- Scan the React application/lazy registry and prebundle its virtual hydration
-  entry in Vite development so first navigation does not trigger an extra
-  document reload. Isolate conformance traces by adapter/mode and packed run.
-- Require component identifiers to be own entries in the shared React registry;
-  inherited prototype properties are not allowlisted application components.
-- Complete the unreleased adapter-foundation verification with all seven packed
-  package entry points, actual published v1.1.0 upgrade/rollback pairings, and
-  repeatable page-generation, browser-runtime, and production-bundle comparisons.
-  Preserve the older compatibility and performance gates.
-- Describe the supervised production service in CLI help as FastAPI plus the
-  frontend runtime, without changing the existing Next production behavior.
-- Include the Codegen executable in the container's dependency-install layer
-  so its local command shim is available during production image builds.
-- Check the visible page and active runtime during history conformance, without
-  confusing hidden DOM retained by the frontend host with the restored page.
-- Avoid waiting on host-retained response-stream branches when handling SSR
-  redirects or rejecting oversized error bodies. Canonical redirects can
-  complete under deduplicating SSR fetch implementations, while external
-  redirects, redirect limits, and the one-MiB error bound remain fail-closed.
+- Prebundle React hydration and scan lazy registry pages during Vite
+  development so cold first navigation does not trigger a document reload.
+- Reject inherited prototype properties as registry component identifiers.
+- Complete SSR redirects without waiting for retained response-stream branches,
+  while keeping redirect limits, external destinations and error-body bounds
+  fail-closed.
+- Preserve local package-manager/PnP execution and legacy Next generation
+  fallback behavior; keep the Codegen executable available in container builds.
 
 ## [1.1.0] - 2026-09-30
 
@@ -683,7 +622,7 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 - Successful mutation responses omit unset optional wire fields instead of
   serializing them as incompatible `null` values.
 
-[Unreleased]: https://github.com/El37628/FluxFast/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/El37628/FluxFast/compare/v1.2.0...HEAD
 [0.1.0]: https://github.com/El37628/FluxFast/releases/tag/v0.1.0
 [0.2.0]: https://github.com/El37628/FluxFast/releases/tag/v0.2.0
 [0.3.0]: https://github.com/El37628/FluxFast/releases/tag/v0.3.0
@@ -700,3 +639,4 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 [1.0.0]: https://github.com/El37628/FluxFast/releases/tag/v1.0.0
 [1.0.1]: https://github.com/El37628/FluxFast/releases/tag/v1.0.1
 [1.1.0]: https://github.com/El37628/FluxFast/releases/tag/v1.1.0
+[1.2.0]: https://github.com/El37628/FluxFast/releases/tag/v1.2.0

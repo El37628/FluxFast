@@ -1,12 +1,14 @@
-# React SSR with Vite (unreleased v1.2)
+# React SSR with Vite
 
-`@fluxfast/vite` is source-development tooling, not a published v1.1 package.
+`@fluxfast/vite` is the complete React SSR host introduced in **FluxFast 1.2**.
 This host implements development compilation/HMR, production client/SSR builds,
 and one public Node HTTP origin, with installed-only initialization and generation.
-The source Python CLI also selects and supervises this host. Shared browser
+The Python CLI also selects and supervises this host. Shared browser
 conformance now covers both modes, initialized packed consumers and three-worker
-Redis behavior. Registry publication and final release gates remain separate;
-this guide does not announce a published v1.2 release.
+Redis behavior. Start with the [React/Vite tutorial](react-getting-started.md)
+for a complete application. The [versioned release notes](releases/v1.2.0.md)
+explain installation and how to confirm publication; a source checkout alone
+is not evidence that a package version exists in a registry.
 
 ## What each layer does
 
@@ -30,11 +32,22 @@ through Vite on that same public origin. See the
 [conformance guide](../tests/adapter-conformance/README.md) for repeatable browser,
 peer-floor, production immutability and distributed-worker checks.
 
-## Source-development setup
+## Installation and setup
 
-Use source-built Core, Codegen, React and Vite package tarballs together, plus React,
-React DOM 19+ and Vite `>=7.3.6 <8`. Node must be 22.12+ or 24. Build the source
-checkout's packages first; the new packages are not available on npm yet:
+Use matching Python, Core, Codegen, React and Vite package versions, plus React,
+React DOM 19+ and Vite `>=7.3.6 <8`. Node must be 22.12+ or 24. After 1.2.0 is
+published, install from your backend project and then the frontend:
+
+```sh
+python -m pip install "fluxfast==1.2.0"
+cd frontend
+npm install @fluxfast/core@1.2.0 @fluxfast/react@1.2.0 react@19 react-dom@19
+npm install --save-dev @fluxfast/codegen@1.2.0 @fluxfast/vite@1.2.0 vite@7.3.6
+```
+
+For source development before publication, build these packages and install
+their tarballs in the consuming frontend together with the source-built Python
+wheel. Do not mix them with published Python 1.1, which does not select this host:
 
 ```sh
 pnpm --filter @fluxfast/core build
@@ -45,7 +58,7 @@ pnpm --filter @fluxfast/vite build
 
 ### Initialize an existing React/Vite frontend
 
-Install those four source-built tarballs in the consuming frontend alongside
+Install those four matching packages in the consuming frontend alongside
 React, React DOM and Vite. Declare the peers in its `package.json`. From that
 frontend, run the locally installed binary; `npm exec --no` prevents downloading
 a missing command:
@@ -115,8 +128,8 @@ or runs Vite config. Without `--schema-file`, it reuses an existing
 and compiler errors precede any generated-file write. Check mode reports stale
 files without changing bytes or modification times.
 
-The source-development Python helper can now export the authoritative schema and
-invoke the installed React generator in one command:
+The Python 1.2 helper exports the authoritative schema and
+invokes the installed React generator in one command:
 
 ```sh
 fluxfast types backend.main:app --frontend frontend --adapter react
@@ -130,8 +143,8 @@ for workspace/PnP, diagnostics, drift checking and input/output examples.
 
 ### Run the complete application with Python
 
-Install the source-built Python wheel in the backend environment, alongside the
-matching frontend tarballs. Published Python v1.1.0 does not select this host.
+Install matching Python and frontend packages. Python v1.1.0 does not select
+this host; upgrading only the JavaScript side is not a managed React/Vite setup.
 For example, this backend supplies the resource used by the starter:
 
 ```python
@@ -219,11 +232,11 @@ export default function Home() {
 ```
 
 FastAPI's `/` route should select `home/index` and return the `greeting` resource.
-Generate the allowlist from the frontend directory using the built Codegen binary:
+Generate the allowlist from the frontend directory using its installed Codegen binary:
 
 ```sh
-node /path/to/FluxFast/packages/codegen/bin/fluxfast-codegen.js generate --adapter react
-node /path/to/FluxFast/packages/codegen/bin/fluxfast-codegen.js generate --adapter react --check
+npm exec --no -- fluxfast-codegen generate --adapter react
+npm exec --no -- fluxfast-codegen generate --adapter react --check
 ```
 
 For all six typed artifacts, first export the authoritative backend schema and
@@ -266,7 +279,7 @@ hydrates `FluxApplication`; it does not fetch a new initial envelope or mount an
 empty SPA. Application CSS should be imported from your application/page modules
 or linked in this trusted template. Vite transforms those assets normally.
 
-Use these frontend scripts after installing the source-built host:
+Use these frontend scripts after installing the host:
 
 ```json
 {

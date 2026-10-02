@@ -46,7 +46,8 @@ test("Codegen has one explicit documented Advanced Stable surface, with an examp
   assert.deepEqual(manifest.dependencies, { "@fluxfast/core": `^${manifest.version}` });
   assert.equal(manifest.peerDependencies, undefined);
   const guide = fs.readFileSync(path.join(repository, "docs/codegen-api.md"), "utf8");
-  assert.match(guide, /unreleased v1\.2/);
+  assert.match(guide, /introduced\s+in \*\*FluxFast 1\.2\*\*/);
+  assert.match(guide, /releases\/v1\.2\.0\.md/);
   assert.match(guide, /Advanced Stable upon v1\.2 publication/);
   const block = guide.split("<!-- codegen-api-examples:start -->")[1]?.split("<!-- codegen-api-examples:end -->")[0];
   assert.ok(block);

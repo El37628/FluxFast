@@ -1,10 +1,11 @@
-# React SSR and hydration boundary (unreleased v1.2)
+# React SSR and hydration boundary
 
-This reference is for host authors. These APIs are **unreleased** and are not a
-completed Vite adapter, an npm installation guide, or a new production service.
-Next.js remains the implemented frontend host. The separate Vite asset/build
-server, initialization, Python CLI selection, and full conformance run are still
-required before v1.2.0 can ship.
+This reference is for host authors using FluxFast **1.2 or later**. Ordinary
+applications should use the complete [React/Vite tutorial](react-getting-started.md)
+and [Vite host](vite-host.md), which supply asset builds, initialization, same-origin
+serving and Python supervision. The APIs here are lower-level rendering and
+hydration boundaries, not an HTTP server or a replacement application router.
+See the [versioned release notes](releases/v1.2.0.md) for availability.
 
 React bindings live in `@fluxfast/react`. Host integrations have two separate
 entry points, both supporting ESM, CommonJS, and TypeScript:

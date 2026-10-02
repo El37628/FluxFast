@@ -1,16 +1,17 @@
-# React bindings API (unreleased v1.2)
+# React bindings API
 
-`@fluxfast/react` contains the React bindings shared by frontend hosts. It is
-**unreleased development**, not yet an npm release or a complete React SSR/Vite
-host. Existing applications keep using `@fluxfast/next`; those exports point to
-the same context, components, hooks, resolver state, and types. Next remains the
-only implemented host until the separate SSR/Vite integration is complete.
+Introduced in FluxFast **1.2**, `@fluxfast/react` contains the React bindings
+shared by the Next.js and React/Vite hosts. Existing Next applications keep
+using `@fluxfast/next`; those exports point to the same context, components,
+hooks, resolver state, and types. New React/Vite applications should start with
+the [complete tutorial](react-getting-started.md), not build an HTTP host themselves.
+See the [versioned release notes](releases/v1.2.0.md) for installation and availability.
 
 The bindings entry point, `@fluxfast/react`, supports CommonJS, ESM, and
 TypeScript. It requires React and React DOM 19+. Its browser import graph has
 no Next dependency, backend address, server fetcher, or code generator.
 Separate `@fluxfast/react/client` and Node-only `@fluxfast/react/server` entries
-provide the unreleased [SSR/hydration boundary](react-ssr.md) for host authors;
+provide the [SSR/hydration boundary](react-ssr.md) for host authors;
 they are not re-exported through the bindings root.
 Deep imports into package `src`/`dist` are not supported. Core remains independent
 of React; FastAPI remains authoritative for routes, resources, and mutations.

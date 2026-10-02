@@ -1,8 +1,8 @@
 # @fluxfast/react
 
-Host-independent React bindings for FluxFast. This package is **unreleased
-v1.2 development**, not yet an installable registry release or a standalone
-SSR host. Existing Next.js applications continue importing `@fluxfast/next`;
+Host-independent React bindings introduced in FluxFast 1.2. These bindings are
+shared by the Next.js and React/Vite hosts, not a standalone HTTP server.
+Existing Next.js applications continue importing `@fluxfast/next`;
 that adapter re-exports the same context, components, hooks, and types.
 
 FastAPI owns application URLs, authentication, resource loading, validation,
@@ -39,11 +39,14 @@ wraps children that use these hooks. `FluxContext` and `useFluxContext` expose
 the shared runtime to integration authors. Core owns navigation, caching,
 deferred authority, mutation patches, and live synchronization.
 
-See the [adapter contract](../../docs/adapter-contract.md) for the host lifecycle
-and [React API reference](../../docs/react-api.md) for the complete binding API.
+See the [adapter contract](https://github.com/El37628/FluxFast/blob/main/docs/adapter-contract.md)
+for the host lifecycle and [React API reference](https://github.com/El37628/FluxFast/blob/main/docs/react-api.md)
+for the complete binding API. Application developers can use the
+[React/Vite tutorial](https://github.com/El37628/FluxFast/blob/main/docs/react-getting-started.md).
 
-Separate, unreleased `@fluxfast/react/server` and `@fluxfast/react/client` entries
+Separate `@fluxfast/react/server` and `@fluxfast/react/client` entries
 provide safe document SSR and exact-envelope hydration for host authors. They
-do not export a Vite plugin, asset server, process supervisor, or completed host.
-See the [SSR integration reference](../../docs/react-ssr.md); never import the
+do not export a Vite plugin, asset server, or process supervisor; those belong
+to the complete `@fluxfast/vite` host and Python CLI.
+See the [SSR integration reference](https://github.com/El37628/FluxFast/blob/main/docs/react-ssr.md); never import the
 Node server entry into browser application code.

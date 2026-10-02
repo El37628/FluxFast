@@ -1,6 +1,6 @@
 {
   "name": "@fluxfast/react",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "description": "Host-independent React bindings for FluxFast",
   "repository": {
@@ -9,14 +9,23 @@
     "directory": "packages/react"
   },
   "homepage": "https://github.com/El37628/FluxFast#readme",
-  "bugs": { "url": "https://github.com/El37628/FluxFast/issues" },
-  "engines": { "node": "^22.0.0 || ^24.0.0" },
-  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
+  "bugs": {
+    "url": "https://github.com/El37628/FluxFast/issues"
+  },
+  "engines": {
+    "node": "^22.0.0 || ^24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/index.d.ts",
   "sideEffects": false,
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -42,8 +51,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": { "@fluxfast/core": "^1.1.0" },
-  "peerDependencies": { "react": ">=19.0.0", "react-dom": ">=19.0.0" },
+  "dependencies": {
+    "@fluxfast/core": "^1.2.0"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0",
+    "react-dom": ">=19.0.0"
+  },
   "devDependencies": {
     "@fluxfast/codegen": "workspace:*",
     "@types/node": "^22.20.4",

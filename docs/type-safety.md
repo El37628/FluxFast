@@ -156,9 +156,11 @@ resource loaders, FastAPI dependencies, authentication, or mutation handlers.
 Generation validates the complete manifest and compiles every output before it
 updates generated files.
 
-### Adapter-aware handoff (unreleased v1.2)
+<a id="adapter-aware-handoff-unreleased-v12"></a>
 
-The source-development Python command adds an optional explicit target while
+### Adapter-aware handoff (FluxFast 1.2)
+
+The Python 1.2 command adds an optional explicit target while
 retaining the existing command above:
 
 ```bash
@@ -202,13 +204,13 @@ Unsupported client validators still do not weaken authoritative FastAPI
 validation. The schema/2 upgrade guidance now names the installed FluxFast
 JavaScript tooling rather than requiring a particular adapter package.
 
-This addition is **not published in v1.1.0**. Use the built source candidate to
-test `--adapter`; ordinary published applications retain the existing setup
-commands. This generation handoff introduces no new manifest format or runtime
-behavior. The source Python CLI's separate [React/Vite host integration](vite-host.md)
-now also supervises development and production; publication remains pending.
+This addition is **not present in v1.1.0**. Use Python 1.2+ for `--adapter`;
+Next applications retain their existing setup commands. This generation handoff
+introduces no new manifest format or runtime behavior. The separate
+[React/Vite host integration](vite-host.md) also supervises development and
+production. See the [release notes](releases/v1.2.0.md) for package availability.
 
-For example, after [initializing a source-built React/Vite frontend](vite-host.md),
+For example, after [initializing a React/Vite frontend](react-getting-started.md),
 this backend contract works with either host:
 
 ```python

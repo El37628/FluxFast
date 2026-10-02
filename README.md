@@ -8,13 +8,19 @@ Inertia synchronizes pages and props. FluxFast treats application data as
 independently versioned, cached, progressively loaded, and live resources.
 Shared resources can be reused across pages, cached with explicit security
 scopes, resolved concurrently, and selectively invalidated after mutations.
-The frontend adapter targets the Next.js 16 App Router.
+Frontend hosts support the Next.js 16 App Router and, from FluxFast 1.2,
+server-rendered React with Vite. Both use the same resource runtime and React
+bindings; FastAPI still owns the application routes.
 
 ## Quickstart
 
-For a complete empty-directory walkthrough covering a shared typed resource,
-generated validator and mutation helper, production build, and one-origin
-startup, follow [Getting Started](docs/getting-started.md).
+Choose the [Next.js walkthrough](docs/getting-started.md) or the
+[React/Vite walkthrough](docs/react-getting-started.md). Both start from an empty
+directory and cover typed resources, expected output, production build and
+one-origin startup. The Next example also demonstrates generated validation and
+mutations. See the [1.2 release notes](docs/releases/v1.2.0.md) for package
+availability, matching installation versions and existing-application upgrades.
+The short example below uses Next.js.
 
 Create a Python environment and install the backend package:
 
@@ -70,10 +76,12 @@ validators with one command:
 fluxfast types backend.main:app --frontend frontend
 ```
 
-The command uses the frontend's installed `@fluxfast/next` CLI, detects its
-layout, and updates the manifest, resource types, general application types,
+The command uses installed Codegen (or the selected host's local generator),
+detects its layout, and updates the manifest, resource types, general application types,
 native runtime validators, route builders, mutation helpers, and page registry
-together. Their filenames, public symbols, naming rules, and per-file
+together. React/Vite selection follows the declared `@fluxfast/vite` host, or an
+explicit `--adapter react`; existing Next projects keep their defaults.
+Their filenames, public symbols, naming rules, and per-file
 replacement guarantees are documented in the [generated artifact
 contract](docs/generated-artifacts.md). Use the read-only form in CI:
 
@@ -351,9 +359,14 @@ guidance.
   and mutation helpers.
 - `packages/core`: framework-neutral browser runtime with no React or Next.js
   imports, providing the resource store, router, and dependency-free native
-  validation engine.
-- `packages/next`: Next.js 16 App Router adapter, onboarding CLI, form hooks,
-  and contract/registry generator.
+  validation engine, plus an explicit server-only adapter entry.
+- `packages/codegen`: shared schema/type/validator/route/mutation compiler,
+  explicit Next/React registries, and read-only generation checks.
+- `packages/react`: shared React bindings and explicit SSR/hydration boundaries.
+- `packages/vite`: complete React SSR host with initialization, one-origin HMR,
+  client/SSR production build and artifact-only startup.
+- `packages/next`: Next.js 16 App Router adapter and onboarding CLI, reusing
+  shared React bindings and Codegen while retaining existing application imports.
 - `packages/devtools`: optional development-only Debugbar and bounded runtime
   inspector for resources, timelines, caches, mutations, live state, and
   protocol metadata.
@@ -361,6 +374,7 @@ guidance.
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
+- [Getting Started with React/Vite](docs/react-getting-started.md)
 - [Architecture](docs/architecture.md)
 - [Frontend Adapter Contract](docs/adapter-contract.md)
 - [Resources](#resources)
@@ -371,10 +385,14 @@ guidance.
 - [Generated Contracts](docs/type-safety.md)
 - [Validation](docs/validation.md)
 - [Next.js Adapter](docs/nextjs-adapter.md)
+- [React API](docs/react-api.md)
+- [React/Vite SSR Host](docs/vite-host.md)
+- [Shared Codegen API](docs/codegen-api.md)
 - [DevTools](docs/devtools.md)
 - [Production](docs/production.md)
 - [Distributed Redis](docs/distributed-cache.md)
 - [Stability / Versioning](docs/stability.md)
+- [FluxFast 1.2 Release Notes](docs/releases/v1.2.0.md)
 - [FluxFast 1.1 Release Notes](docs/releases/v1.1.0.md)
 - [FluxFast 1.0 Release Notes](docs/releases/v1.0.0.md)
 - [FluxFast 1.0 Final Candidate Gate](docs/releases/v1.0-final-candidate-gate.md)

@@ -68,6 +68,22 @@ must otherwise reproduce.
 | Destination resolution | `buildFluxPath`, `resolveInternalDestination` | Server tooling reconstructs a safe backend path or private rewrite destination. |
 | Client context | `FluxContext`, `FluxContextValue` | A framework wrapper must bridge the provider context directly. Components should use hooks. |
 
+### Shared adapter and generation integration in 1.2
+
+The [Core server reference](core-api.md#server-adapter-primitives-fluxfast-12)
+documents `fetchFluxInitialPage`, safe headers/redirects and streaming proxy
+primitives. Use them only when implementing a host boundary; ordinary Next or
+React/Vite applications already have that boundary. The
+[React SSR reference](react-ssr.md) explains same-envelope rendering/hydration
+with executable API examples and the [adapter contract](adapter-contract.md)
+defines ownership, lifecycle and conformance obligations.
+
+For custom build tooling, [Codegen](codegen-api.md) documents shared compiler,
+registry and read-only generation APIs with explicit Next/React targets. The
+[Vite reference](vite-host.md#api-reference) covers plugin and server inputs,
+results and their actual uses. Prefer the [application tutorial](react-getting-started.md)
+when your goal is to build an application rather than another adapter.
+
 ## Every Advanced Stable API in one line
 
 These are minimal declaration-and-use fragments, not standalone programs. They

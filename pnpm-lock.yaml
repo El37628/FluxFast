@@ -24,7 +24,7 @@ importers:
   packages/codegen:
     dependencies:
       '@fluxfast/core':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../core
     devDependencies:
       '@types/node':
@@ -49,7 +49,7 @@ importers:
   packages/devtools:
     dependencies:
       '@fluxfast/react':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../react
     devDependencies:
       '@fluxfast/core':
@@ -86,13 +86,13 @@ importers:
   packages/next:
     dependencies:
       '@fluxfast/codegen':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../codegen
       '@fluxfast/core':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../core
       '@fluxfast/react':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../react
     devDependencies:
       '@types/node':
@@ -126,7 +126,7 @@ importers:
   packages/react:
     dependencies:
       '@fluxfast/core':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../core
     devDependencies:
       '@fluxfast/codegen':
@@ -160,13 +160,13 @@ importers:
   packages/vite:
     dependencies:
       '@fluxfast/codegen':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../codegen
       '@fluxfast/core':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../core
       '@fluxfast/react':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: link:../react
     devDependencies:
       '@types/node':

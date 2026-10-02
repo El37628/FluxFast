@@ -214,7 +214,7 @@ The helper reconstructs the path and repeated search parameters, forwards only
 cookie, authorization, accept-language, user-agent, and explicitly configured
 safe headers, and never forwards hop-by-hop headers.
 
-In unreleased v1.2 development, the adapter delegates initial fetching and
+From FluxFast 1.2, the adapter delegates initial fetching and
 header selection to `@fluxfast/core/server`. Existing consumer imports and
 generated catch-all files stay unchanged; Next.js still owns request context,
 environment policy, rendering, and its not-found timing boundary.

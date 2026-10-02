@@ -101,7 +101,9 @@ its temporary container and image after the run.
 Pass `--samples N` after `--` to select the measured sample count, for example
 `pnpm benchmark:codegen -- --samples 1` for a quick correctness run.
 
-## Unreleased v1.2 Adapter Foundation Comparison
+<a id="unreleased-v12-adapter-foundation-comparison"></a>
+
+## v1.2 Adapter Foundation Comparison
 
 The adapter extraction has a separate comparison against **actual published
 v1.1.0**, not the older v0.9.0 or v1.0.1 performance baselines:
@@ -111,7 +113,7 @@ pnpm benchmark:adapter-foundation
 pnpm benchmark:adapter-foundation -- --bundles
 ```
 
-This is an internal verification tool for unreleased development, not a v1.2
+This is an internal verification tool for release candidates, not a v1.2
 release announcement. It needs npm registry access and uses directory symlinks
 for its isolated package wrappers; the reference run below used Linux. It
 downloads Core and Next v1.1.0 archives and verifies their SHA-512 integrity

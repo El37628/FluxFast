@@ -1,8 +1,10 @@
 # Versioning and compatibility
 
 FluxFast uses one synchronized [Semantic Version](https://semver.org/) for the
-`fluxfast`, `@fluxfast/core`, `@fluxfast/next`, and `@fluxfast/devtools`
-packages. DevTools joins this synchronized set in v1.1. The wire protocol is
+`fluxfast` Python distribution and all six npm packages: `@fluxfast/core`,
+`@fluxfast/next`, `@fluxfast/devtools`, `@fluxfast/codegen`, `@fluxfast/react`,
+and `@fluxfast/vite`. DevTools joins this synchronized set in v1.1; Codegen,
+React and Vite join in v1.2. The wire protocol is
 versioned independently; package version `1.x` does not imply protocol version
 1, and a breaking wire change requires the protocol process in
 [`protocol.md`](protocol.md). The central [stability contract](stability.md)
@@ -21,6 +23,7 @@ requires it.
 | Node.js | 22 and 24 |
 | Next.js | `>=16.3.0 <17.0.0` |
 | React and React DOM | `>=19.0.0` |
+| Vite (React host only) | `>=7.3.6 <8.0.0`, with Node 22.12+ or 24 |
 | Redis Open Source server | 6.2 through 8.10 when Redis features are configured |
 
 The CI matrices are the authoritative compatibility gate. Python tests run on
@@ -28,7 +31,10 @@ every minor from 3.11 through 3.14, and JavaScript tests run on Node 22 and 24.
 Packed release consumers test the minimum Next.js 16.3.0 with React 19.0.0 on
 Node 22 and resolve the latest compatible Next.js 16 and React 19 releases on
 Node 24. This prevents the monorepo's installed dependency versions from being
-the only compatibility evidence.
+the only compatibility evidence. React/Vite consumers separately test both
+Node lines and React 19.0.0 at the peer floor, with real development and
+production SSR/hydration. The Vite host's Node 22.12 minimum does not raise the
+existing Next adapter's Node 22 contract.
 
 FluxFast 1.x supports this matrix. A line may be removed in a compatible release
 only when an upstream dependency makes continued support impractical; such an
@@ -67,6 +73,12 @@ symbols and five public package paths are recorded in the
 [`@fluxfast/next` API contract](next-api.md). The optional DevTools package has
 one public root entry exposing `FluxDevtools` and `FluxDevtoolsProps`; its
 internal store and projections are not public API.
+
+From 1.2, the [React API](react-api.md), [SSR/hydration boundary](react-ssr.md),
+[Vite host](vite-host.md), [Codegen API](codegen-api.md), and
+[Core server entry](core-api.md#server-adapter-primitives-fluxfast-12) document
+the additional public surfaces. Follow the [1.2 release notes](releases/v1.2.0.md)
+to distinguish versioned capabilities from actual registry publication.
 
 ## Capability negotiation
 
@@ -136,7 +148,8 @@ Compatibility remains directional and additive:
   not. The complete boundary is defined by the [generated artifact
   contract](generated-artifacts.md).
 
-Stable releases from v1.1 continue synchronizing all four package versions.
+Stable releases synchronize the complete package set available in their minor
+line: four package versions in v1.1 and seven in v1.2.
 The 0.9
 release gates start a real consumer with Python and JavaScript packages at
 0.8.1, upgrade Python first and JavaScript first in separate runs, and verify
@@ -164,6 +177,12 @@ optional new v1.1 artifact and has no v1.0 counterpart; mixed application
 compatibility continues to exercise the Python, Core, and Next packages. The
 independent `fluxfast-devtools/1` diagnostic channel adds no fields to
 `fluxfast/1`, and a production consumer does not require the DevTools package.
+
+The 1.2 gates retain both published 1.0.1 and 1.1.0 Next application baselines,
+exercise both upgrade/rollback orders, and check matched React/Vite packages in
+clean candidate-archive and registry-only consumers. The new React host requires
+matching 1.2 Python and JavaScript packages; older Python supervision cannot
+select it. See the [release guide](releasing.md).
 
 ## Production runtime compatibility
 
