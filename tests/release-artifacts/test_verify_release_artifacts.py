@@ -411,6 +411,47 @@ def test_react_source_intent_requires_all_seven_distributions(tmp_path: Path) ->
     ) == artifacts
 
 
+def test_vite_source_intent_requires_all_eight_distributions(tmp_path: Path) -> None:
+    repository, release, version = _build_release(
+        tmp_path, version="1.1.0", include_codegen=True, include_react=True
+    )
+    _build_npm_archive(repository, release, version, package="vite", next_package=False)
+    artifacts = verifier.verify_release_artifacts(
+        repository_root=repository, release_dir=release, version=version,
+        write_checksums=True,
+    )
+    assert len(artifacts) == 8
+    assert artifacts[-1].name == "fluxfast-vite-1.1.0.tgz"
+    assert len((release / "SHA256SUMS").read_text().splitlines()) == 8
+    assert verifier.verify_release_artifacts(
+        repository_root=repository, release_dir=release, version=version,
+        verify_checksums=True,
+    ) == artifacts
+
+
+@pytest.mark.parametrize("defect", ["missing", "source-drift", "checksum-drift"])
+def test_vite_artifact_defects_fail_closed(tmp_path: Path, defect: str) -> None:
+    repository, release, version = _build_release(
+        tmp_path, version="1.1.0", include_codegen=True, include_react=True
+    )
+    _build_npm_archive(repository, release, version, package="vite", next_package=False)
+    verifier.verify_release_artifacts(
+        repository_root=repository, release_dir=release, version=version,
+        write_checksums=True,
+    )
+    if defect == "missing":
+        (release / "npm/fluxfast-vite-1.1.0.tgz").unlink()
+    elif defect == "source-drift":
+        _write(repository / "packages/vite/dist/index.js", "module.exports = {changed: true};\n")
+    else:
+        (release / "SHA256SUMS").write_text("tampered\n")
+    with pytest.raises(verifier.ArtifactVerificationError):
+        verifier.verify_release_artifacts(
+            repository_root=repository, release_dir=release, version=version,
+            verify_checksums=defect == "checksum-drift",
+        )
+
+
 @pytest.mark.parametrize("defect", ["missing", "source-drift", "checksum-drift"])
 def test_react_artifact_defects_fail_closed(tmp_path: Path, defect: str) -> None:
     repository, release, version = _build_release(

@@ -34,8 +34,10 @@ imports through compatibility re-exports; DevTools subscribes to the same React
 context. The bindings depend only on browser Core and React peers, never Next,
 Codegen, server primitives, backend configuration, or a second resource engine.
 Separate React server/client entries now provide the unreleased SSR/hydration
-boundary for host authors. Vite asset/build serving and Python host integration
-are still future work; this is not a completed or published frontend host.
+boundary for host authors. The source-development [Vite host](vite-host.md) adds
+asset serving, client/SSR builds and HTTP lifecycle cleanup. Initialization,
+Python supervision and full browser conformance remain future work; this is
+not a completed or published frontend adapter.
 
 Live Resources add a synchronization path without changing that ownership:
 

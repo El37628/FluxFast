@@ -31,6 +31,7 @@ jobs:
           pnpm --filter @fluxfast/core run build
           pnpm --filter @fluxfast/codegen run build
           pnpm --filter @fluxfast/react run build
+          pnpm --filter @fluxfast/vite run build
           pnpm --filter @fluxfast/next run build
           pnpm --filter @fluxfast/devtools run build
           python -m pip install build
@@ -44,6 +45,8 @@ jobs:
           npm pack ./packages/codegen \
             --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
           npm pack ./packages/react \
+            --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
+          npm pack ./packages/vite \
             --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
           npm pack ./packages/next \
             --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"

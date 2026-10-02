@@ -35,7 +35,7 @@ test("React owns framework bindings without Next or server/tooling imports", () 
     const source = fs.readFileSync(file, "utf8");
     for (const match of source.matchAll(/(?:from\s+|import\s*\(\s*)["']([^"']+)["']/g)) {
       const specifier = match[1];
-      assert.doesNotMatch(specifier, /^(?:next(?:\/|$)|@fluxfast\/(?:next|codegen|devtools)(?:\/|$)|@fluxfast\/core\/server|node:)/, file);
+      assert.doesNotMatch(specifier, /^(?:next(?:\/|$)|@fluxfast\/(?:next|vite|codegen|devtools)(?:\/|$)|@fluxfast\/core\/server|node:)/, file);
       if (specifier.startsWith(".")) visit(path.resolve(path.dirname(file), specifier));
     }
   }

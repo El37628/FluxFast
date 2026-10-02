@@ -7,6 +7,11 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add the unreleased `@fluxfast/vite` plugin and Node host: meaningful React SSR,
+  exact-envelope hydration entries, same-port development HMR, offline client/SSR
+  production builds, allowlisted static assets, bounded health probes and streaming
+  cancellation. Production uses built artifacts without loading source config or
+  Vite. Initialization, Python React supervision and full conformance remain work.
 - Add the unreleased `fluxfast-codegen generate --adapter react` target for
   shared React allowlists, without a Next client directive or config execution.
   Preserve all six Next artifact bytes and the five shared schema artifact bytes.

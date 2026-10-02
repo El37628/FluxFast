@@ -10,6 +10,10 @@ const repositoryRoot = path.resolve(
 );
 
 const PACKAGE_ENTRIES = Object.freeze({
+  "@fluxfast/vite": Object.freeze({
+    ".": "packages/vite/dist/index.d.ts",
+    "./server": "packages/vite/dist/server.d.ts",
+  }),
   "@fluxfast/react": Object.freeze({
     ".": "packages/react/dist/index.d.ts",
     "./client": "packages/react/dist/client.d.ts",
@@ -248,11 +252,13 @@ export function createPublicApiSnapshot() {
   const coreManifest = packageManifest("packages/core");
   const codegenManifest = packageManifest("packages/codegen");
   const reactManifest = packageManifest("packages/react");
+  const viteManifest = packageManifest("packages/vite");
   const devtoolsManifest = packageManifest("packages/devtools");
   const nextManifest = packageManifest("packages/next");
   packages["@fluxfast/core"].exportMap = coreManifest.exports;
   packages["@fluxfast/codegen"].exportMap = codegenManifest.exports;
   packages["@fluxfast/react"].exportMap = reactManifest.exports;
+  packages["@fluxfast/vite"].exportMap = viteManifest.exports;
   packages["@fluxfast/devtools"].exportMap = devtoolsManifest.exports;
   packages["@fluxfast/next"].bin = nextManifest.bin;
   packages["@fluxfast/next"].exportMap = nextManifest.exports;
