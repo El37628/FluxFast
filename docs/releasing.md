@@ -112,6 +112,15 @@ proof is recorded in the
 The protected check context retains the historical name
 `Four-distribution contract` for branch-rule continuity, but its v1.1 run uses
 the version-aware five-distribution verifier described above.
+
+Unreleased v1.2 development additionally requires Codegen and React tarballs
+when the source Next manifest declares those dependencies. The verifier then
+checks seven distributions against source intent, including dependency/optional
+peer metadata and all packed output. Historical v1.0/v1.1 payloads are unchanged.
+Do not publish this extraction alone: React SSR/Vite host conformance must pass
+before v1.2.0. New npm package names also need their own trusted-publisher setup
+before the tag workflow can publish them; existing publishers do not grant
+publication rights to newly introduced packages automatically.
 After downloading the six v1.1 release assets into one directory, verify them
 with:
 

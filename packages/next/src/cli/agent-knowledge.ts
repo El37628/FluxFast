@@ -137,7 +137,7 @@ export function renderAgentKnowledge(project: FluxProjectInfo): string {
     "- FastAPI owns application URLs, authentication, authorization, input validation, resource declarations, mutations, redirects, and the selected component identifier.",
     "- The frontend registry maps the server-selected component identifier to an allowlisted module under the application-components directory.",
     "- `@fluxfast/core` is framework-neutral. Never introduce React, Next.js, Vue, Svelte, Solid, or browser-framework dependencies into Core code.",
-    "- `@fluxfast/next` owns React hooks, the Next.js shell, server handlers, the component registry, and same-origin transport integration.",
+    "- `@fluxfast/next` owns the Next.js shell, server handlers, and same-origin transport integration. Its React hooks, provider/root, and component resolver delegate to `@fluxfast/react`; existing Next imports remain supported.",
     "- The browser protocol, developer schema, Python package version, and JavaScript package versions are separate contracts. Do not infer one version from another.",
     "",
     "The normal data flow is:",

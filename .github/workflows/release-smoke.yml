@@ -30,6 +30,7 @@ jobs:
         run: |
           pnpm --filter @fluxfast/core run build
           pnpm --filter @fluxfast/codegen run build
+          pnpm --filter @fluxfast/react run build
           pnpm --filter @fluxfast/next run build
           pnpm --filter @fluxfast/devtools run build
           python -m pip install build
@@ -41,6 +42,8 @@ jobs:
           npm pack ./packages/core \
             --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
           npm pack ./packages/codegen \
+            --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
+          npm pack ./packages/react \
             --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
           npm pack ./packages/next \
             --pack-destination "$RUNNER_TEMP/fluxfast-release-contract/npm"
@@ -120,6 +123,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/fluxfast-release/artifacts"
           npm pack ./packages/core --pack-destination "$RUNNER_TEMP/fluxfast-release/artifacts"
           npm pack ./packages/codegen --pack-destination "$RUNNER_TEMP/fluxfast-release/artifacts"
+          npm pack ./packages/react --pack-destination "$RUNNER_TEMP/fluxfast-release/artifacts"
           npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-release/artifacts"
           npm pack ./packages/devtools --pack-destination "$RUNNER_TEMP/fluxfast-release/artifacts"
       - name: Install artifacts in an isolated consumer
@@ -135,6 +139,7 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/fluxfast-release/javascript" --package-lock=false --no-save \
             "$RUNNER_TEMP"/fluxfast-release/artifacts/fluxfast-core-*.tgz \
             "$RUNNER_TEMP"/fluxfast-release/artifacts/fluxfast-codegen-*.tgz \
+            "$RUNNER_TEMP"/fluxfast-release/artifacts/fluxfast-react-*.tgz \
             "$RUNNER_TEMP"/fluxfast-release/artifacts/fluxfast-next-*.tgz \
             "$RUNNER_TEMP"/fluxfast-release/artifacts/fluxfast-devtools-*.tgz
       - name: Verify npm artifacts
@@ -198,6 +203,7 @@ jobs:
           python -m build --outdir "$RUNNER_TEMP/fluxfast-clean-live/artifacts" python/fluxfast
           npm pack ./packages/core --pack-destination "$RUNNER_TEMP/fluxfast-clean-live/artifacts"
           npm pack ./packages/codegen --pack-destination "$RUNNER_TEMP/fluxfast-clean-live/artifacts"
+          npm pack ./packages/react --pack-destination "$RUNNER_TEMP/fluxfast-clean-live/artifacts"
           npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-clean-live/artifacts"
       - name: Install Chromium
         run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
@@ -253,6 +259,7 @@ jobs:
             "$candidate/fluxfast-${version}-py3-none-any.whl" \
             "$candidate/fluxfast-core-${version}.tgz" \
             "$candidate/fluxfast-codegen-${version}.tgz" \
+            "$candidate/fluxfast-react-${version}.tgz" \
             "$candidate/fluxfast-next-${version}.tgz" \
             "$RUNNER_TEMP/fluxfast-clean-distributed/artifacts/"
       - name: Install Chromium
@@ -303,6 +310,7 @@ jobs:
             "$candidate/fluxfast-${version}-py3-none-any.whl" \
             "$candidate/fluxfast-core-${version}.tgz" \
             "$candidate/fluxfast-codegen-${version}.tgz" \
+            "$candidate/fluxfast-react-${version}.tgz" \
             "$candidate/fluxfast-next-${version}.tgz" \
             "$RUNNER_TEMP/fluxfast-clean-production/artifacts/"
       - name: Install Chromium
@@ -352,6 +360,7 @@ jobs:
           python -m build --outdir "$RUNNER_TEMP/fluxfast-mixed/artifacts" python/fluxfast
           npm pack ./packages/core --pack-destination "$RUNNER_TEMP/fluxfast-mixed/artifacts"
           npm pack ./packages/codegen --pack-destination "$RUNNER_TEMP/fluxfast-mixed/artifacts"
+          npm pack ./packages/react --pack-destination "$RUNNER_TEMP/fluxfast-mixed/artifacts"
           npm pack ./packages/next --pack-destination "$RUNNER_TEMP/fluxfast-mixed/artifacts"
       - name: Install Chromium
         run: pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium
@@ -368,6 +377,7 @@ jobs:
           core_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-core-*.tgz)"
           next_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-next-*.tgz)"
           codegen_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-codegen-*.tgz)"
+          react_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-react-*.tgz)"
           FLUXFAST_RELEASE_VERSION="$release_version" \
           FLUXFAST_PYTHON_SPEC="fluxfast[redis] @ file://$python_wheel" \
           FLUXFAST_CORE_SPEC="@fluxfast/core@$FLUXFAST_PREVIOUS_VERSION" \
@@ -376,6 +386,7 @@ jobs:
           FLUXFAST_CURRENT_CORE_SPEC="$core_tarball" \
           FLUXFAST_CURRENT_NEXT_SPEC="$next_tarball" \
           FLUXFAST_CURRENT_CODEGEN_SPEC="$codegen_tarball" \
+          FLUXFAST_CURRENT_REACT_SPEC="$react_tarball" \
             node scripts/test-published-mixed-consumer.mjs
       - name: Verify candidate JavaScript with published Python ${{ matrix.previous-version }}
         env:
@@ -390,15 +401,18 @@ jobs:
           core_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-core-*.tgz)"
           next_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-next-*.tgz)"
           codegen_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-codegen-*.tgz)"
+          react_tarball="$(realpath "$RUNNER_TEMP"/fluxfast-mixed/artifacts/fluxfast-react-*.tgz)"
           FLUXFAST_RELEASE_VERSION="$release_version" \
           FLUXFAST_PYTHON_SPEC="fluxfast[redis]==$FLUXFAST_PREVIOUS_VERSION" \
           FLUXFAST_CORE_SPEC="$core_tarball" \
           FLUXFAST_NEXT_SPEC="$next_tarball" \
           FLUXFAST_CODEGEN_SPEC="$codegen_tarball" \
+          FLUXFAST_REACT_SPEC="$react_tarball" \
           FLUXFAST_CURRENT_PYTHON_SPEC="fluxfast[redis] @ file://$python_wheel" \
           FLUXFAST_CURRENT_CORE_SPEC="$core_tarball" \
           FLUXFAST_CURRENT_NEXT_SPEC="$next_tarball" \
           FLUXFAST_CURRENT_CODEGEN_SPEC="$codegen_tarball" \
+          FLUXFAST_CURRENT_REACT_SPEC="$react_tarball" \
             node scripts/test-published-mixed-consumer.mjs
       - name: Verify historical Python candidate with JavaScript 0.9.0
         if: matrix.previous-version == '1.0.1'

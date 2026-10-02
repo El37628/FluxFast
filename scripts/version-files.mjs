@@ -4,6 +4,7 @@ export const VERSION_FILES = [
   "package.json",
   "packages/core/package.json",
   "packages/codegen/package.json",
+  "packages/react/package.json",
   "packages/next/package.json",
   "packages/devtools/package.json",
   "pnpm-lock.yaml",
@@ -17,6 +18,9 @@ const JSON_MANIFESTS = VERSION_FILES.filter(file => file.endsWith("package.json"
 const WORKSPACE_DEPENDENCIES = [
   ["packages/next", "@fluxfast/core", "pnpm-lock.yaml @fluxfast/core"],
   ["packages/next", "@fluxfast/codegen", "pnpm-lock.yaml @fluxfast/codegen"],
+  ["packages/next", "@fluxfast/react", "pnpm-lock.yaml @fluxfast/react"],
+  ["packages/react", "@fluxfast/core", "pnpm-lock.yaml packages/react @fluxfast/core"],
+  ["packages/devtools", "@fluxfast/react", "pnpm-lock.yaml packages/devtools @fluxfast/react"],
   ["packages/codegen", "@fluxfast/core", "pnpm-lock.yaml packages/codegen @fluxfast/core"],
 ];
 
@@ -63,11 +67,15 @@ export function rewriteVersionFiles(files, version) {
   for (const file of JSON_MANIFESTS) {
     const manifest = JSON.parse(files[file]);
     manifest.version = version;
-    if (file === "packages/next/package.json" || file === "packages/codegen/package.json") {
+    if (["packages/next/package.json", "packages/codegen/package.json", "packages/react/package.json"].includes(file)) {
       manifest.dependencies["@fluxfast/core"] = `^${version}`;
     }
     if (file === "packages/next/package.json") {
       manifest.dependencies["@fluxfast/codegen"] = `^${version}`;
+      manifest.dependencies["@fluxfast/react"] = `^${version}`;
+    }
+    if (file === "packages/devtools/package.json") {
+      manifest.dependencies["@fluxfast/react"] = `^${version}`;
     }
     rewritten[file] = `${JSON.stringify(manifest, null, 2)}\n`;
   }
@@ -151,6 +159,11 @@ export function readVersionSnapshot(files) {
   snapshot["packages/codegen/package.json @fluxfast/core"] = JSON.parse(
     files["packages/codegen/package.json"]
   ).dependencies?.["@fluxfast/core"];
+  for (const [owner, dependency] of [["next", "react"], ["react", "core"], ["devtools", "react"]]) {
+    snapshot[`packages/${owner}/package.json @fluxfast/${dependency}`] = JSON.parse(
+      files[`packages/${owner}/package.json`]
+    ).dependencies?.[`@fluxfast/${dependency}`];
+  }
   return snapshot;
 }
 

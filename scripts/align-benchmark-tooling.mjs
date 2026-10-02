@@ -10,8 +10,9 @@ const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 export function baselineComparisonTooling(name, source) {
   if (name === "packages/next/package.json") {
     const manifest = JSON.parse(source);
-    if (!manifest.dependencies?.["@fluxfast/codegen"]) return source;
+    if (!manifest.dependencies?.["@fluxfast/codegen"] && !manifest.dependencies?.["@fluxfast/react"]) return source;
     delete manifest.dependencies["@fluxfast/codegen"];
+    delete manifest.dependencies["@fluxfast/react"];
     return JSON.stringify(manifest, null, 2) + "\n";
   }
   if (name !== "pnpm-lock.yaml" || !source.includes("\n  packages/codegen:\n")) return source;
@@ -20,10 +21,16 @@ export function baselineComparisonTooling(name, source) {
   const next = /\n  packages\/next:\n[\s\S]*?(?=\n  \S|\npackages:|\nsnapshots:|$)/g;
   assert.equal([...source.matchAll(next)].length, 1, "one Next importer required");
   const dependency = /      '@fluxfast\/codegen':\n        specifier: [^\n]+\n        version: link:\.\.\/codegen\n/g;
-  return source.replace(importer, "").replace(next, block => {
+  let normalized = source.replace(importer, "").replace(next, block => {
     assert.equal([...block.matchAll(dependency)].length, 1, "one linked Next/Codegen dependency required");
     return block.replace(dependency, "");
   });
+  if (source.includes("\n  packages/react:\n")) {
+    const reactImporter = /\n  packages\/react:\n[\s\S]*?(?=\n  \S|\npackages:|\nsnapshots:|$)/g;
+    assert.equal([...source.matchAll(reactImporter)].length, 1, "one React importer required");
+    normalized = normalized.replace(reactImporter, "").replace(/      '@fluxfast\/react':\n        specifier: [^\n]+\n        version: link:\.\.\/react\n/g, "");
+  }
+  return normalized;
 }
 
 function main(baseline) {

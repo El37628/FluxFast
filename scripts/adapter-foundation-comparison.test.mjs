@@ -104,5 +104,5 @@ test("foundation comparison remains separate from immutable historical performan
   assert.match(bundle, /production-bundle-result: /);
   const scripts = JSON.parse(fs.readFileSync(new URL("package.json", root), "utf8")).scripts;
   assert.equal(scripts["benchmark:adapter-foundation"],
-    "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/codegen run build && pnpm --filter @fluxfast/next run build && node benchmarks/scripts/compare_adapter_foundation.mjs");
+    "pnpm --filter @fluxfast/core run build && pnpm --filter @fluxfast/codegen run build && pnpm --filter @fluxfast/react run build && pnpm --filter @fluxfast/next run build && node benchmarks/scripts/compare_adapter_foundation.mjs");
 });

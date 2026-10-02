@@ -95,8 +95,9 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   const artifactContract = jobBlock(smoke, "artifact-contract");
   assert.match(artifactContract, /name: Four-distribution contract/);
   assert.match(artifactContract, /python -m build/);
-  assert.equal(artifactContract.match(/npm pack \.\/packages\//g)?.length, 4);
+  assert.equal(artifactContract.match(/npm pack \.\/packages\//g)?.length, 5);
   assert.match(artifactContract, /npm pack \.\/packages\/codegen/);
+  assert.match(artifactContract, /npm pack \.\/packages\/react/);
   assert.match(artifactContract, /npm pack \.\/packages\/devtools/);
   assert.match(artifactContract, /scripts\/verify_release_artifacts\.py/);
   assert.match(artifactContract, /--write-checksums/);
@@ -120,6 +121,7 @@ test("freezes release artifact metadata, contents, digests, and provenance", () 
   assert.match(npm, /npm publish "\$tarball"[\s\S]*--provenance/);
   assert.match(npm, /publish_package "@fluxfast\/devtools"/);
   assert.match(npm, /publish_package "@fluxfast\/codegen"/);
+  assert.match(npm, /publish_package "@fluxfast\/react"/);
 
   const githubRelease = jobBlock(release, "github-release");
   assert.match(githubRelease, /name: release-checksums/);

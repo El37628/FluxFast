@@ -47,11 +47,17 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@fluxfast/react": "^1.1.0"
+  },
   "peerDependencies": {
     "@fluxfast/core": ">=1.1.0 <2.0.0",
     "@fluxfast/next": ">=1.1.0 <2.0.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@fluxfast/next": { "optional": true }
   },
   "devDependencies": {
     "@fluxfast/core": "workspace:*",

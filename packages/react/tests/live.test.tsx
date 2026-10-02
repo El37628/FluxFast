@@ -126,7 +126,7 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-describe("Next live integration", () => {
+describe("React live integration", () => {
   it("does not open a stream during SSR and renders an idle server status", () => {
     const liveTransport = new ControlledLiveTransport();
     const router = createLiveRouter(liveTransport);

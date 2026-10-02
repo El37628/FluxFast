@@ -191,6 +191,7 @@ test("keeps the v0.9 JavaScript contract with reviewed v1.1 and server additions
     const currentFiles = current.packages["@fluxfast/next"]
       .declarations[entry].files;
     const movedFiles = new Set(["schema-compiler.d.ts", "schema-manifest.d.ts", "validator-compiler.d.ts"]);
+    const reactFiles = new Set(["provider.d.ts", "root.d.ts", "hooks.d.ts", "live.d.ts", "form.d.ts", "link.d.ts", "resolver.d.ts"]);
     if (declaration.files["generate.d.ts"]) {
       // Only the diagnostic type's owner changed. Check every old declaration,
       // not a freshly blessed signature hash or a reduced graph assertion.
@@ -210,6 +211,22 @@ test("keeps the v0.9 JavaScript contract with reviewed v1.1 and server additions
     }
     for (const [file, fingerprint] of Object.entries(declaration.files)) {
       if (declaration.files["generate.d.ts"] && (file === "generate.d.ts" || movedFiles.has(file))) continue;
+      if (reactFiles.has(file)) {
+        const moved = fs.readFileSync(path.join(repositoryRoot, "packages/react/dist", file), "utf8");
+        assert.equal(declarationFingerprint(moved), v11NextDeclarationChanges[entry]?.[file] ?? fingerprint, `moved React ${file} changed`);
+        assert.match(fs.readFileSync(path.join(repositoryRoot, "packages/next/dist", file), "utf8"), /from "@fluxfast\/react"/);
+        continue;
+      }
+      if (file === "config.d.ts") {
+        // Reconstruct the unchanged public shape across its new owners. Old
+        // fixtures remain immutable; relocation must not bless signature drift.
+        const common = fs.readFileSync(path.join(repositoryRoot, "packages/react/dist/config.d.ts"), "utf8");
+        const next = fs.readFileSync(path.join(repositoryRoot, "packages/next/dist/config.d.ts"), "utf8")
+          .replace(/^import type \{[^\n]+\} from "@fluxfast\/react";\r?\n/m, common + "\n")
+          .replace(/^export type \{[^\n]+\} from "@fluxfast\/react";\r?\n/m, "");
+        assert.equal(declarationFingerprint(next), v11NextDeclarationChanges[entry]?.[file] ?? fingerprint, "relocated config signature changed");
+        continue;
+      }
       assert.equal(
         currentFiles[file],
         v11NextDeclarationChanges[entry]?.[file] ?? fingerprint,

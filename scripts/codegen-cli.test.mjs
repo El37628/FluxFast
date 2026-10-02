@@ -40,7 +40,7 @@ test("installed generic and Next binaries coexist and preserve identical generat
     fs.mkdirSync(installed);
     fs.writeFileSync(path.join(installed, "package.json"), '{"private":true}');
     const archives = [];
-    for (const owner of ["core", "codegen", "next"]) {
+    for (const owner of ["core", "codegen", "react", "next"]) {
       const [pack] = JSON.parse(success("npm", ["pack", "--ignore-scripts", "--offline", "--json", "--pack-destination", temporary], path.join(repository, "packages", owner)));
       archives.push(path.join(temporary, pack.filename));
     }

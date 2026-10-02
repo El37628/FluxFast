@@ -28,6 +28,13 @@ document ownership, SSR/hydration, navigation, resource/deferred/mutation/live
 bindings, diagnostics, and production requirements for future hosts. Next.js
 remains the only implemented host; the multi-adapter foundation is unreleased.
 
+Unreleased Phase B places the React context, provider/root, component resolver,
+hooks, forms, and links in `@fluxfast/react`. The Next adapter keeps its public
+imports through compatibility re-exports; DevTools subscribes to the same React
+context. The bindings depend only on browser Core and React peers, never Next,
+Codegen, server primitives, backend configuration, or a second resource engine.
+The separate React SSR/Vite host is still future work, not a published feature.
+
 Live Resources add a synchronization path without changing that ownership:
 
 ```text
