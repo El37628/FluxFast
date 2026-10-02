@@ -47,6 +47,14 @@ five generated files retain identical bytes. This target does not initialize or
 start a Vite host; see the [Codegen CLI guide](codegen-api.md) for source-build
 examples and the remaining integration boundaries.
 
+The unreleased [`fluxfast-vite` CLI](vite-host.md) also uses the public Codegen
+React target for `generate [--schema-file PATH] [--check]`, without evaluating
+Vite configuration. Its `init` creates the registry and integration scaffold;
+an existing or explicitly supplied backend schema adds the other five files.
+It preserves SPA entries, custom scripts and user agent instructions, installing
+no dependencies. Next's existing setup and generated artifact behavior remain
+unchanged.
+
 Application code may depend on these semantic exports:
 
 | Artifact | Public generated concepts |

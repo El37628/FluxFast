@@ -63,7 +63,7 @@ test("Vite exposes only documented Node tooling/server exports and never depends
     "./server": { typeOnly: ["FluxViteServer", "FluxViteServerOptions"], valueOnly: ["createFluxViteServer"] },
   });
   const manifest = JSON.parse(fs.readFileSync(path.join(repository, "packages/vite/package.json"), "utf8"));
-  assert.deepEqual(manifest.dependencies, { "@fluxfast/core": `^${manifest.version}`, "@fluxfast/react": `^${manifest.version}` });
+  assert.deepEqual(manifest.dependencies, { "@fluxfast/codegen": `^${manifest.version}`, "@fluxfast/core": `^${manifest.version}`, "@fluxfast/react": `^${manifest.version}` });
   assert.deepEqual(manifest.bin, { "fluxfast-vite": "bin/fluxfast-vite.js" });
   assert.equal(manifest.peerDependencies.next, undefined);
   const guide = fs.readFileSync(path.join(repository, "docs/vite-host.md"), "utf8");
@@ -74,14 +74,14 @@ test("Vite exposes only documented Node tooling/server exports and never depends
   assert.ok(rows.every(row => row[2].trim() && row[3].trim()));
 });
 
-test("actual packed Vite host builds and boots offline without Next, source config, or Vite in production", () => {
+test("actual packed Vite initializes and builds offline, then boots without Next, source, Vite or Codegen", () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fluxfast-vite-packed-"));
   try {
     const consumer = path.join(temporary, "consumer");
     fs.mkdirSync(consumer);
     fs.writeFileSync(path.join(consumer, "package.json"), '{"private":true,"type":"module"}');
     const archives = [];
-    for (const owner of ["core", "react", "vite"]) {
+    for (const owner of ["core", "codegen", "react", "vite"]) {
       const [pack] = JSON.parse(run("npm", ["pack", "--ignore-scripts", "--offline", "--json", "--pack-destination", temporary], path.join(repository, "packages", owner)));
       archives.push(path.join(temporary, pack.filename));
       assert.ok(pack.files.some(file => file.path === "LICENSE"));
@@ -89,11 +89,35 @@ test("actual packed Vite host builds and boots offline without Next, source conf
     }
     run("npm", ["install", ...archives, "--legacy-peer-deps", "--ignore-scripts", "--offline", "--no-audit", "--no-fund", "--no-package-lock"], consumer);
     copyExternalGraph(consumer);
-    for (const name of ["next", "@fluxfast/next", "@fluxfast/codegen", "@fluxfast/devtools"]) assert.equal(fs.existsSync(path.join(consumer, "node_modules", name)), false, name);
-    fs.writeFileSync(path.join(consumer, "vite.config.mjs"), 'import {fluxfast} from "@fluxfast/vite"; export default {plugins:[fluxfast({application:"src/application.tsx"})],logLevel:"silent"};');
-    fs.writeFileSync(path.join(consumer, "fluxfast.html"), '<!doctype html><html><body><div id="fluxfast-root"><!--fluxfast:ssr--></div><!--fluxfast:payload--><script type="module" src="/@fluxfast/client"></script></body></html>');
+    for (const name of ["next", "@fluxfast/next", "@fluxfast/devtools"]) assert.equal(fs.existsSync(path.join(consumer, "node_modules", name)), false, name);
+    const manifestFile = path.join(consumer, "package.json");
+    const installed = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+    installed.dependencies = { ...installed.dependencies, react: ">=19", "react-dom": ">=19", vite: ">=7.3.6 <8" };
+    installed.scripts = { dev: "vite", build: "original-spa-build", start: "original-spa-start" };
+    fs.writeFileSync(manifestFile, JSON.stringify(installed));
+    const originalConfig = 'export default async context => ({logLevel:"silent",define:{__ORIGINAL_CONFIG__:JSON.stringify(context.command)},plugins:[{name:"original",config(){return {define:{__ORIGINAL_PLUGIN__:JSON.stringify("retained")}}}}]});';
+    fs.writeFileSync(path.join(consumer, "vite.config.mjs"), originalConfig);
+    fs.writeFileSync(path.join(consumer, "index.html"), "Original SPA document");
     fs.mkdirSync(path.join(consumer, "src"));
-    fs.writeFileSync(path.join(consumer, "src/application.tsx"), 'import {FluxRoot,useResource} from "@fluxfast/react"; const registry={"home/index":{load:async()=>({default:()=> <h1>{useResource("greeting")}</h1>})}}; export function FluxApplication(props) {return <FluxRoot {...props} registry={registry}/>;}');
+    fs.writeFileSync(path.join(consumer, "src/main.tsx"), "// Original SPA entry\n");
+    fs.writeFileSync(path.join(consumer, "tsconfig.json"), '{"compilerOptions":{"jsx":"react-jsx"}}');
+    const binary = "node_modules/@fluxfast/vite/bin/fluxfast-vite.js";
+    assert.match(run(process.execPath, [binary, "init", "--dry-run"], consumer), /No files were changed/);
+    assert.equal(fs.existsSync(path.join(consumer, "fluxfast.html")), false);
+    run(process.execPath, [binary, "init", "--yes"], consumer);
+    assert.equal(fs.readFileSync(path.join(consumer, "vite.config.mjs"), "utf8"), originalConfig);
+    assert.equal(fs.readFileSync(path.join(consumer, "index.html"), "utf8"), "Original SPA document");
+    assert.equal(fs.readFileSync(path.join(consumer, "src/main.tsx"), "utf8"), "// Original SPA entry\n");
+    const scripts = JSON.parse(fs.readFileSync(manifestFile, "utf8")).scripts;
+    assert.equal(scripts.dev, "vite"); assert.equal(scripts.build, "original-spa-build"); assert.equal(scripts.start, "original-spa-start");
+    assert.equal(scripts["fluxfast:build"], "fluxfast-vite build --config fluxfast.vite.config.mjs");
+    run(process.execPath, [binary, "init", "--check"], consumer);
+    fs.writeFileSync(path.join(consumer, "src/flux-pages/home/index.tsx"), 'import {useResource} from "@fluxfast/react"; export default function Home(){return <main><h1>{useResource<string>("greeting")}</h1><p>{__ORIGINAL_CONFIG__}:{__ORIGINAL_PLUGIN__}</p></main>;}');
+    fs.copyFileSync(path.join(repository, "tests/fixtures/adapter-baseline-v1.1.0/schema.generated.json"), path.join(consumer, "backend-schema.json"));
+    run(process.execPath, [binary, "generate", "--schema-file", "backend-schema.json"], consumer);
+    for (const name of ["pages", "types", "validators", "routes", "mutations"]) assert.ok(fs.existsSync(path.join(consumer, "src/.fluxfast", name + ".generated.ts")));
+    run(process.execPath, [binary, "generate", "--check"], consumer);
+    run(process.execPath, [binary, "doctor"], consumer);
     const types = `
       import {fluxfast,buildFluxViteApp,type FluxViteOptions,type FluxViteBuildOptions} from "@fluxfast/vite";
       import {createFluxViteServer,type FluxViteServer,type FluxViteServerOptions} from "@fluxfast/vite/server";
@@ -110,7 +134,7 @@ test("actual packed Vite host builds and boots offline without Next, source conf
       fluxfast({applicationExport:42});
     `;
     for (const extension of ["cts", "mts"]) fs.writeFileSync(path.join(consumer, "consumer." + extension), types);
-    run(process.execPath, [path.join(path.dirname(resolver.resolve("typescript/package.json")), "bin/tsc"), "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", "--lib", "ES2022,DOM,DOM.Iterable", "consumer.cts", "consumer.mts"], consumer);
+    run(process.execPath, [path.join(path.dirname(resolver.resolve("typescript/package.json")), "bin/tsc"), "--ignoreConfig", "--noEmit", "--strict", "--skipLibCheck", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022", "--lib", "ES2022,DOM,DOM.Iterable", "consumer.cts", "consumer.mts"], consumer);
     fs.writeFileSync(path.join(consumer, "probe.mjs"), `
       import assert from "node:assert/strict"; import fs from "node:fs"; import {createServer} from "node:http"; import {createRequire} from "node:module";
       import * as esm from "@fluxfast/vite"; import {createFluxViteServer} from "@fluxfast/vite/server";
@@ -119,17 +143,27 @@ test("actual packed Vite host builds and boots offline without Next, source conf
       assert.deepEqual(Object.keys(cjs).sort(),["buildFluxViteApp","fluxfast"]);
       assert.equal(typeof require("@fluxfast/vite/server").createFluxViteServer,"function");
       for(const specifier of ["@fluxfast/vite/plugin","@fluxfast/vite/cli","@fluxfast/vite/dist/server.js"])assert.throws(()=>require(specifier),{code:"ERR_PACKAGE_PATH_NOT_EXPORTED"});
-      await esm.buildFluxViteApp();
+      await esm.buildFluxViteApp({configFile:"fluxfast.vite.config.mjs"});
       fs.rmSync("src",{recursive:true});fs.rmSync("fluxfast.html");
+      fs.writeFileSync("fluxfast.vite.config.mjs",'throw new Error("Production evaluated host config");');
       fs.writeFileSync("vite.config.mjs",'throw new Error("Production evaluated source config");');
       fs.renameSync("node_modules/vite","node_modules/vite-not-available");
+      fs.renameSync("node_modules/@fluxfast/codegen","node_modules/@fluxfast/codegen-not-available");
+    `);
+    run(process.execPath, [binary, "build", "--config", "fluxfast.vite.config.mjs"], consumer);
+    run(process.execPath, ["probe.mjs"], consumer);
+    fs.writeFileSync(path.join(consumer, "production-probe.mjs"), `
+      import assert from "node:assert/strict"; import {createServer} from "node:http";
+      import {createFluxViteServer} from "@fluxfast/vite/server";
       const backend=createServer((request,response)=>{response.writeHead(200,{"content-type":"application/json"});response.end(JSON.stringify({protocol:"fluxfast/1",page:{component:"home/index",url:request.url},resourceKeys:["greeting"],resources:{greeting:{value:"Actual packed SSR",version:"opaque-v1"}}}));});
       await new Promise(resolve=>backend.listen(0,"127.0.0.1",resolve));
       const host=await createFluxViteServer({mode:"production",backendUrl:"http://127.0.0.1:"+backend.address().port,port:0});
-      try{const response=await fetch(host.url);assert.equal(response.status,200);assert.ok((await response.text()).includes("<h1>Actual packed SSR</h1>"));}
+      try{const response=await fetch(host.url);assert.equal(response.status,200);const html=await response.text();assert.ok(html.includes("<h1>Actual packed SSR</h1>"));assert.ok(html.includes("build<!-- -->:<!-- -->retained"),html);}
       finally{await host.close();await new Promise(resolve=>{backend.close(resolve);backend.closeAllConnections();});}
     `);
-    run(process.execPath, ["probe.mjs"], consumer);
-    assert.match(run(process.execPath, ["node_modules/@fluxfast/vite/bin/fluxfast-vite.js", "--help"], consumer), /dev\|build\|start/);
+    // A fresh process prevents development imports from hiding a production
+    // dependency on Vite, Codegen, source files or executable source config.
+    run(process.execPath, ["production-probe.mjs"], consumer);
+    assert.match(run(process.execPath, [binary, "--help"], consumer), /fluxfast-vite init/);
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 });

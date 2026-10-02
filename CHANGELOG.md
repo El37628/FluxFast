@@ -7,23 +7,28 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add unreleased installed-only `fluxfast-vite init`, `generate` and structural
+  `doctor` commands. Preserve existing SPA entries, source Vite configuration,
+  custom scripts and user instructions; add scoped host scripts and generated
+  agent knowledge. Share Codegen's React artifacts and read-only drift checks,
+  reject output symlinks, and restore owned changes on initialization failure.
 - Add the unreleased `@fluxfast/vite` plugin and Node host: meaningful React SSR,
   exact-envelope hydration entries, same-port development HMR, offline client/SSR
   production builds, allowlisted static assets, bounded health probes and streaming
   cancellation. Production uses built artifacts without loading source config or
-  Vite. Initialization, Python React supervision and full conformance remain work.
+  Vite. Python React supervision and full conformance remain work.
 - Add the unreleased `fluxfast-codegen generate --adapter react` target for
   shared React allowlists, without a Next client directive or config execution.
   Preserve all six Next artifact bytes and the five shared schema artifact bytes.
-  Vite hosting and the Python React handoff remain separate integration work.
+  The Python React handoff remains separate integration work.
 - Add unreleased React SSR and hydration subentries: lazy-page SSR completion,
   safe document payloads, exact-envelope hydration, actual 404/auth failures,
-  bounded/cancellable SSR, and Core's same-origin streaming proxy. Vite asset
-  serving, initialization, and Python host integration remain separate work.
+  bounded/cancellable SSR, and Core's same-origin streaming proxy. Python host
+  integration remains separate work.
 - Extract the unreleased `@fluxfast/react` bindings from Next.js: shared context,
   provider/root, allowlisted component resolver, resource/deferred/live hooks,
   forms, and links. Existing Next root/client imports re-export the same objects
-  and types. The standalone React SSR/Vite host is not implemented yet.
+  and types. Standalone React SSR/Vite integration is recorded separately above.
 - Document the frontend adapter implementation contract, including ownership,
   same-envelope SSR/hydration, navigation and resource lifecycles, mutations,
   deferred/live authority, diagnostics, and production/conformance requirements.
