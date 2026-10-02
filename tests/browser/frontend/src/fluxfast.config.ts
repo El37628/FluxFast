@@ -4,5 +4,6 @@ import type {} from "@/.fluxfast/types.generated";
 
 export const fluxConfig = defineFluxConfig({
   application: BrowserFixtureApplication,
+  forwardHeaders: ["authorization"],
   cache: { maxResources: 32, maxPages: 8 },
 });

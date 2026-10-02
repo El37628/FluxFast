@@ -17,8 +17,11 @@ from fluxfast import (
 )
 from pydantic import BaseModel, Field, field_validator
 
+from tests.browser.conformance import register as register_conformance
+
 app = FastAPI()
 flux = FluxFast(app, debug=os.environ.get("FLUXFAST_E2E_DEVTOOLS") == "1")
+register_conformance(app, flux)
 
 rooms = [{"id": 1, "name": "Garden Suite"}]
 activity_attempts = 0

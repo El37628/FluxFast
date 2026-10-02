@@ -7,6 +7,10 @@ Notable user-facing changes are recorded in this file. FluxFast follows
 
 ### Added
 
+- Add the shared adapter-conformance suite with Next as its first harness,
+  covering SSR/hydration, navigation/cache behavior, real mutation patches,
+  deferred/live lifecycles, diagnostics, and production startup/shutdown.
+  Existing browser commands remain aliases; both modes run in the same CI gate.
 - Make the unreleased Python `fluxfast types` handoff adapter-aware, with
   dependency-based Next detection, `--adapter next`, installed-only Codegen
   selection, and the existing generator fallback for published v1.1 tooling.

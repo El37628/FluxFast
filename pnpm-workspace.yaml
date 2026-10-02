@@ -3,3 +3,4 @@ linkWorkspacePackages: true
 packages:
   - "packages/*"
   - "tests/browser/frontend"
+  - "tests/adapter-conformance"

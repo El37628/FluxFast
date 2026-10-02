@@ -23,13 +23,19 @@ the source of truth for required matrices and integration gates.
 | Next adapter or codegen | Build core first with `pnpm --filter @fluxfast/core run build`, then `pnpm --filter @fluxfast/next exec vitest run tests/<test_file>.test.ts` and `pnpm --filter @fluxfast/next run typecheck` |
 | Release tooling | `node --test scripts/<test_file>.test.mjs` |
 | Schema compatibility | `pnpm test:schema-compatibility` |
-| Browser behavior | Build core and next, then `pnpm --dir tests/browser/frontend run test:e2e --grep '<scenario>'` |
+| Adapter behavior | `pnpm test:adapter-conformance --grep '<scenario>'`; see [the conformance suite](tests/adapter-conformance/README.md) |
 
 For browser tests, install Chromium once with
 `pnpm --dir tests/browser/frontend exec playwright install --with-deps chromium`.
 The fixture's scripts handle schema checks and generation. Its local
 `AGENTS.md`/`CLAUDE.md` are maintained by Next.js and ignored by Git; consult
 installed Next.js guides when changing framework-specific behavior.
+
+`pnpm test:adapter-conformance` runs the shared HTTP/browser contract against the
+Next harness. `pnpm test:adapter-conformance:production` also builds the fixture
+and checks that production startup and test execution do not modify its inputs.
+The existing `test:e2e` and `test:e2e:production` commands remain aliases. DevTools
+UI and distributed-worker suites keep their separate commands and CI coverage.
 
 Broader checks are `pnpm test:python`, `pnpm typecheck`, `pnpm test`, `pnpm build`,
 and `pnpm test:e2e`. Root TypeScript scripts build workspace dependencies before

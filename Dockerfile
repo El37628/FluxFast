@@ -24,6 +24,7 @@ COPY packages/next/package.json packages/next/package.json
 COPY packages/next/bin packages/next/bin
 COPY packages/devtools/package.json packages/devtools/package.json
 COPY tests/browser/frontend/package.json tests/browser/frontend/package.json
+COPY tests/adapter-conformance/package.json tests/adapter-conformance/package.json
 
 RUN pnpm install --frozen-lockfile
 
@@ -31,8 +32,10 @@ COPY packages packages
 COPY scripts/write-esm-package.mjs scripts/write-esm-package.mjs
 COPY python/fluxfast python/fluxfast
 COPY tests/browser/backend.py tests/browser/backend.py
+COPY tests/browser/conformance.py tests/browser/conformance.py
 COPY tests/browser/distributed_backend.py tests/browser/distributed_backend.py
 COPY tests/browser/frontend tests/browser/frontend
+COPY tests/adapter-conformance tests/adapter-conformance
 
 RUN python3 -m venv /opt/fluxfast \
     && /opt/fluxfast/bin/python -m pip install './python/fluxfast[redis]' \
@@ -66,6 +69,7 @@ COPY --from=builder /workspace/tests/browser/frontend/.next/standalone/ ./
 COPY --from=builder /workspace/tests/browser/frontend/.next/static/ \
     ./tests/browser/frontend/.next/static/
 COPY --from=builder /workspace/tests/browser/backend.py ./tests/browser/backend.py
+COPY --from=builder /workspace/tests/browser/conformance.py ./tests/browser/conformance.py
 COPY --from=builder /workspace/tests/browser/distributed_backend.py \
     ./tests/browser/distributed_backend.py
 COPY tests/container/frontend.package.json ./tests/browser/frontend/package.json
