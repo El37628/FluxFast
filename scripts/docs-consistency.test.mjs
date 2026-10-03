@@ -359,29 +359,45 @@ test("documents the stable 1.x contract and complete v1 upgrade path", () => {
     readme,
     /Inertia synchronizes pages and props\. FluxFast treats application data as\s+independently versioned, cached, progressively loaded, and live resources\./
   );
-  for (const target of [
-    "docs/getting-started.md",
-    "docs/react-getting-started.md",
-    "docs/architecture.md",
-    "#resources",
-    "docs/mutations.md",
-    "docs/caching.md",
-    "docs/deferred-resources.md",
-    "docs/live-resources.md",
-    "docs/type-safety.md",
-    "docs/validation.md",
-    "docs/nextjs-adapter.md",
-    "docs/devtools.md",
-    "docs/production.md",
-    "docs/distributed-cache.md",
-    "docs/stability.md",
-    "docs/releases/v1.1.0.md",
-    "docs/releases/v1.2.0.md",
-    "docs/releases/v1.0.0.md",
-    "docs/releases/v1.0-final-candidate-gate.md",
-    "docs/releases/v1.0-artifact-verification.md",
-    "docs/upgrade-v1.md",
+  const documentationBase = "https://el37628.github.io/FluxFast-Docs/";
+  assert.ok(readme.includes(`](${documentationBase})`), "missing documentation website entry point");
+  assert.doesNotMatch(readme, /\]\((?:\.\/)?docs\//, "README documentation links must not target source Markdown");
+  for (const slug of [
+    "getting-started",
+    "react-getting-started",
+    "architecture",
+    "api-walkthrough",
+    "mutations",
+    "caching",
+    "deferred-resources",
+    "live-resources",
+    "type-safety",
+    "validation",
+    "nextjs-adapter",
+    "stable-apis",
+    "advanced-stable-apis",
+    "advanced-api-walkthrough",
+    "python-api",
+    "core-api",
+    "next-api",
+    "react-api",
+    "codegen-api",
+    "codegen-api-walkthrough",
+    "server-api-walkthrough",
+    "devtools",
+    "production",
+    "distributed-cache",
+    "stability",
+    "version-guide",
+    "versioning",
+    "releases/v1-1-0",
+    "releases/v1-2-0",
+    "releases/v1-0-0",
+    "releases/v1-0-final-candidate-gate",
+    "releases/v1-0-artifact-verification",
+    "upgrade-v1",
   ]) {
-    assert.ok(readme.includes(`](${target})`), `missing README documentation path: ${target}`);
+    const target = `${documentationBase}${slug}/`;
+    assert.ok(readme.includes(`](${target})`), `missing README documentation URL: ${target}`);
   }
 });
