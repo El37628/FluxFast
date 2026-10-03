@@ -57,7 +57,7 @@ test("fresh-consumer source markers cannot escape the temporary project", () => 
 });
 
 test("the fresh public guide is discoverable and continuously exercised", () => {
-  assert.match(read("README.md"), /\[Getting Started\]\(docs\/getting-started\.md\)/);
+  assert.match(read("README.md"), /\[Getting Started\]\(https:\/\/el37628\.github\.io\/FluxFast-Docs\/getting-started\/\)/);
   const manifest = JSON.parse(read("package.json"));
   assert.equal(
     manifest.scripts["test:consumer:stranger"],

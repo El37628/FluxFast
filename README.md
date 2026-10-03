@@ -4,6 +4,10 @@ FluxFast is a server-driven application runtime for FastAPI with reactive
 resource synchronization. FastAPI owns routing, validation, authentication,
 authorization, and data loading; frontend adapters render the interface.
 
+Read the [FluxFast documentation](https://el37628.github.io/FluxFast-Docs/) for
+step-by-step tutorials, detailed API explanations, runnable examples, and
+deployment guides.
+
 Inertia synchronizes pages and props. FluxFast treats application data as
 independently versioned, cached, progressively loaded, and live resources.
 Shared resources can be reused across pages, cached with explicit security
@@ -14,11 +18,11 @@ bindings; FastAPI still owns the application routes.
 
 ## Quickstart
 
-Choose the [Next.js walkthrough](docs/getting-started.md) or the
-[React/Vite walkthrough](docs/react-getting-started.md). Both start from an empty
+Choose the [Next.js walkthrough](https://el37628.github.io/FluxFast-Docs/getting-started/) or the
+[React/Vite walkthrough](https://el37628.github.io/FluxFast-Docs/react-getting-started/). Both start from an empty
 directory and cover typed resources, expected output, production build and
 one-origin startup. The Next example also demonstrates generated validation and
-mutations. See the [1.2 release notes](docs/releases/v1.2.0.md) for package
+mutations. See the [1.2 release notes](https://el37628.github.io/FluxFast-Docs/releases/v1-2-0/) for package
 availability, matching installation versions and existing-application upgrades.
 The short example below uses Next.js.
 
@@ -83,7 +87,7 @@ together. React/Vite selection follows the declared `@fluxfast/vite` host, or an
 explicit `--adapter react`; existing Next projects keep their defaults.
 Their filenames, public symbols, naming rules, and per-file
 replacement guarantees are documented in the [generated artifact
-contract](docs/generated-artifacts.md). Use the read-only form in CI:
+contract](https://el37628.github.io/FluxFast-Docs/generated-artifacts/). Use the read-only form in CI:
 
 ```bash
 fluxfast types backend.main:app --frontend frontend --check
@@ -145,7 +149,7 @@ export function RegisterPage() {
 
 Pre-submit validation runs synchronously, preventing invalid submissions before
 any network request is dispatched. See [General Application
-Contracts](docs/contracts.md) and [Native Client Validation](docs/validation.md).
+Contracts](https://el37628.github.io/FluxFast-Docs/contracts/) and [Native Client Validation](https://el37628.github.io/FluxFast-Docs/validation/).
 
 Generated TypeScript contracts and generated runtime validators are separate
 capabilities. A contract can still produce its TypeScript type when a
@@ -170,9 +174,9 @@ supervisor, so the browser does not need a backend URL and local development
 does not require CORS configuration.
 
 Run `npx fluxfast doctor` inside the frontend directory whenever you want to
-verify the setup. See the [Next.js adapter guide](docs/nextjs-adapter.md) for
+verify the setup. See the [Next.js adapter guide](https://el37628.github.io/FluxFast-Docs/nextjs-adapter/) for
 automatic setup options, diagnostics, and troubleshooting. Advanced projects
-can use the [manual setup guide](docs/nextjs-manual-setup.md).
+can use the [manual setup guide](https://el37628.github.io/FluxFast-Docs/nextjs-manual-setup/).
 
 ## Production
 
@@ -189,9 +193,9 @@ fluxfast start backend.main:app \
 FluxFast starts FastAPI privately and exposes the Next.js application as the
 single public service. The browser stays on that origin and does not need a
 backend port or CORS configuration. See the [production deployment
-guide](docs/production.md) for workers, health checks, shutdown, process
+guide](https://el37628.github.io/FluxFast-Docs/production/) for workers, health checks, shutdown, process
 managers, proxies, and troubleshooting, or [container
-deployment](docs/containers.md) for Docker, rootless Podman, and Compose.
+deployment](https://el37628.github.io/FluxFast-Docs/containers/) for Docker, rootless Podman, and Compose.
 
 ## Resources
 
@@ -249,7 +253,7 @@ export default function RoomsPage() {
 The Pydantic contract validates the loader's serialized wire value and
 generates the `Room[]` hook type. String-key resources and explicit frontend
 generics remain supported for incremental migration. See [typed resource
-contracts and code generation](docs/type-safety.md) for serialization rules,
+contracts and code generation](https://el37628.github.io/FluxFast-Docs/type-safety/) for serialization rules,
 generated routes and mutations, and CI drift checks.
 
 Secondary resources can load after the page shell:
@@ -274,7 +278,7 @@ return <AnalyticsChart value={analytics.data} />;
 ```
 
 Deferred cache misses are fetched after hydration without changing the page or
-browser history. See the [deferred resources guide](docs/deferred-resources.md)
+browser history. See the [deferred resources guide](https://el37628.github.io/FluxFast-Docs/deferred-resources/)
 for loading/error/retry states, caching, SSR, prefetch, mutations, and guidance
 on which data must remain blocking.
 
@@ -294,7 +298,7 @@ resource(
 When another request invalidates this scoped resource, connected clients
 automatically refresh it from the canonical loader. The frontend continues to
 use the ordinary `useResource("notifications")` hook. See [Live
-Resources](docs/live-resources.md) for mutations, patches, reconnect, Redis,
+Resources](https://el37628.github.io/FluxFast-Docs/live-resources/) for mutations, patches, reconnect, Redis,
 security, and deployment requirements.
 
 ## DevTools
@@ -316,7 +320,7 @@ import { FluxDevtools } from "@fluxfast/devtools";
 Mount it inside the FluxFast provider and enable `FluxFast(app, debug=True)`
 only in the development backend to receive safe server timings. Production
 builds resolve an inert package entry and emit no diagnostic request or trace.
-See the [DevTools guide](docs/devtools.md) for every panel, security exclusions,
+See the [DevTools guide](https://el37628.github.io/FluxFast-Docs/devtools/) for every panel, security exclusions,
 SSR behavior, performance bounds, and troubleshooting.
 
 ## Multiple workers
@@ -348,56 +352,85 @@ flux = FluxFast(app, cache=cache, broker=broker)
 invalidation. `RedisLiveBroker` independently carries ephemeral live signals;
 configure both for positive-TTL `live=True` resources across workers. FluxFast
 supports Redis Open Source 6.2 through 8.10 and tests both ends of that range.
-See [distributed resource coherence](docs/distributed-cache.md) for namespace,
+See [distributed resource coherence](https://el37628.github.io/FluxFast-Docs/distributed-cache/) for namespace,
 failure, serialization, metrics, lifecycle, security, and background-publisher
 guidance.
 
 ## Packages
 
-- `python/fluxfast`: FastAPI routes, resource engine, type and resource contract
+- [`fluxfast` (Python)](https://el37628.github.io/FluxFast-Docs/python-api/) (`python/fluxfast`): FastAPI routes, resource engine, type and resource contract
   registries, process-local and Redis scoped server caches, live coordination,
   and mutation helpers.
-- `packages/core`: framework-neutral browser runtime with no React or Next.js
+- [`@fluxfast/core`](https://el37628.github.io/FluxFast-Docs/core-api/) (`packages/core`): framework-neutral browser runtime with no React or Next.js
   imports, providing the resource store, router, and dependency-free native
   validation engine, plus an explicit server-only adapter entry.
-- `packages/codegen`: shared schema/type/validator/route/mutation compiler,
+- [`@fluxfast/codegen`](https://el37628.github.io/FluxFast-Docs/codegen-api/) (`packages/codegen`): shared schema/type/validator/route/mutation compiler,
   explicit Next/React registries, and read-only generation checks.
-- `packages/react`: shared React bindings and explicit SSR/hydration boundaries.
-- `packages/vite`: complete React SSR host with initialization, one-origin HMR,
+- [`@fluxfast/react`](https://el37628.github.io/FluxFast-Docs/react-api/) (`packages/react`): shared React bindings and explicit SSR/hydration boundaries.
+- [`@fluxfast/vite`](https://el37628.github.io/FluxFast-Docs/vite-host/) (`packages/vite`): complete React SSR host with initialization, one-origin HMR,
   client/SSR production build and artifact-only startup.
-- `packages/next`: Next.js 16 App Router adapter and onboarding CLI, reusing
+- [`@fluxfast/next`](https://el37628.github.io/FluxFast-Docs/next-api/) (`packages/next`): Next.js 16 App Router adapter and onboarding CLI, reusing
   shared React bindings and Codegen while retaining existing application imports.
-- `packages/devtools`: optional development-only Debugbar and bounded runtime
+- [`@fluxfast/devtools`](https://el37628.github.io/FluxFast-Docs/devtools/) (`packages/devtools`): optional development-only Debugbar and bounded runtime
   inspector for resources, timelines, caches, mutations, live state, and
   protocol metadata.
 
 ## Documentation
 
-- [Getting Started](docs/getting-started.md)
-- [Getting Started with React/Vite](docs/react-getting-started.md)
-- [Architecture](docs/architecture.md)
-- [Frontend Adapter Contract](docs/adapter-contract.md)
-- [Resources](#resources)
-- [Mutations](docs/mutations.md)
-- [Caching](docs/caching.md)
-- [Deferred Resources](docs/deferred-resources.md)
-- [Live Resources](docs/live-resources.md)
-- [Generated Contracts](docs/type-safety.md)
-- [Validation](docs/validation.md)
-- [Next.js Adapter](docs/nextjs-adapter.md)
-- [React API](docs/react-api.md)
-- [React/Vite SSR Host](docs/vite-host.md)
-- [Shared Codegen API](docs/codegen-api.md)
-- [DevTools](docs/devtools.md)
-- [Production](docs/production.md)
-- [Distributed Redis](docs/distributed-cache.md)
-- [Stability / Versioning](docs/stability.md)
-- [FluxFast 1.2 Release Notes](docs/releases/v1.2.0.md)
-- [FluxFast 1.1 Release Notes](docs/releases/v1.1.0.md)
-- [FluxFast 1.0 Release Notes](docs/releases/v1.0.0.md)
-- [FluxFast 1.0 Final Candidate Gate](docs/releases/v1.0-final-candidate-gate.md)
-- [FluxFast 1.0 Artifact Verification](docs/releases/v1.0-artifact-verification.md)
-- [v0.9 → v1.0 Upgrade Guide](docs/upgrade-v1.md)
+The [documentation website](https://el37628.github.io/FluxFast-Docs/) includes
+complete examples, expected API outputs, and searchable reference pages.
+
+### Learn and build
+
+- [Introduction](https://el37628.github.io/FluxFast-Docs/introduction/)
+- [Getting Started](https://el37628.github.io/FluxFast-Docs/getting-started/)
+- [Getting Started with React/Vite](https://el37628.github.io/FluxFast-Docs/react-getting-started/)
+- [Architecture](https://el37628.github.io/FluxFast-Docs/architecture/)
+- [Resources and Mutations: API Walkthrough](https://el37628.github.io/FluxFast-Docs/api-walkthrough/)
+- [Mutations](https://el37628.github.io/FluxFast-Docs/mutations/)
+- [Caching](https://el37628.github.io/FluxFast-Docs/caching/)
+- [Deferred Resources](https://el37628.github.io/FluxFast-Docs/deferred-resources/)
+- [Live Resources](https://el37628.github.io/FluxFast-Docs/live-resources/)
+- [General Application Contracts](https://el37628.github.io/FluxFast-Docs/contracts/)
+- [Generated Contracts](https://el37628.github.io/FluxFast-Docs/type-safety/)
+- [Generated Artifact Contract](https://el37628.github.io/FluxFast-Docs/generated-artifacts/)
+- [Validation](https://el37628.github.io/FluxFast-Docs/validation/)
+
+### APIs and frontend integration
+
+- [Stable APIs](https://el37628.github.io/FluxFast-Docs/stable-apis/)
+- [Advanced Stable APIs](https://el37628.github.io/FluxFast-Docs/advanced-stable-apis/)
+- [Advanced API Walkthrough](https://el37628.github.io/FluxFast-Docs/advanced-api-walkthrough/)
+- [Python API](https://el37628.github.io/FluxFast-Docs/python-api/)
+- [Core API](https://el37628.github.io/FluxFast-Docs/core-api/)
+- [Next.js API](https://el37628.github.io/FluxFast-Docs/next-api/)
+- [Next.js Adapter](https://el37628.github.io/FluxFast-Docs/nextjs-adapter/)
+- [Manual Next.js Setup](https://el37628.github.io/FluxFast-Docs/nextjs-manual-setup/)
+- [React API](https://el37628.github.io/FluxFast-Docs/react-api/)
+- [React SSR](https://el37628.github.io/FluxFast-Docs/react-ssr/)
+- [React/Vite SSR Host](https://el37628.github.io/FluxFast-Docs/vite-host/)
+- [Frontend Adapter Contract](https://el37628.github.io/FluxFast-Docs/adapter-contract/)
+- [Server Adapter API Walkthrough](https://el37628.github.io/FluxFast-Docs/server-api-walkthrough/)
+- [Shared Codegen API](https://el37628.github.io/FluxFast-Docs/codegen-api/)
+- [Codegen API Walkthrough](https://el37628.github.io/FluxFast-Docs/codegen-api-walkthrough/)
+- [DevTools](https://el37628.github.io/FluxFast-Docs/devtools/)
+
+### Deploy and upgrade
+
+- [Production](https://el37628.github.io/FluxFast-Docs/production/)
+- [Containers](https://el37628.github.io/FluxFast-Docs/containers/)
+- [Distributed Redis](https://el37628.github.io/FluxFast-Docs/distributed-cache/)
+- [Live Deployment](https://el37628.github.io/FluxFast-Docs/live-deployment/)
+- [Versions and Upgrading](https://el37628.github.io/FluxFast-Docs/version-guide/)
+- [Stability Guarantees](https://el37628.github.io/FluxFast-Docs/stability/)
+- [Versioning Policy](https://el37628.github.io/FluxFast-Docs/versioning/)
+- [Migration Guide](https://el37628.github.io/FluxFast-Docs/migration/)
+- [FluxFast 1.2 Release Notes](https://el37628.github.io/FluxFast-Docs/releases/v1-2-0/)
+- [FluxFast 1.1 Release Notes](https://el37628.github.io/FluxFast-Docs/releases/v1-1-0/)
+- [FluxFast 1.0 Release Notes](https://el37628.github.io/FluxFast-Docs/releases/v1-0-0/)
+- [FluxFast 1.0 Final Candidate Gate](https://el37628.github.io/FluxFast-Docs/releases/v1-0-final-candidate-gate/)
+- [FluxFast 1.0 Artifact Verification](https://el37628.github.io/FluxFast-Docs/releases/v1-0-artifact-verification/)
+- [v0.9 → v1.0 Upgrade Guide](https://el37628.github.io/FluxFast-Docs/upgrade-v1/)
 
 ## Development
 
@@ -411,28 +444,28 @@ pnpm build
 pnpm benchmark
 ```
 
-Read [architecture](docs/architecture.md), [protocol](docs/protocol.md),
-[stability contract](docs/stability.md),
-[developer schema](docs/developer-schema.md),
-[caching](docs/caching.md), [distributed resource
-coherence](docs/distributed-cache.md), [deferred
-resources](docs/deferred-resources.md), [Live Resources](docs/live-resources.md),
-[typed contracts](docs/type-safety.md), [general application
-contracts](docs/contracts.md), [native client validation](docs/validation.md),
-[migration guide](docs/migration.md),
-[Next.js integration](docs/nextjs-adapter.md), [production
-deployment](docs/production.md), [containers](docs/containers.md), and
-[mutations](docs/mutations.md) before extending a wire, schema, cache, or
+Read [architecture](https://el37628.github.io/FluxFast-Docs/architecture/), [protocol](https://el37628.github.io/FluxFast-Docs/protocol/),
+[stability contract](https://el37628.github.io/FluxFast-Docs/stability/),
+[developer schema](https://el37628.github.io/FluxFast-Docs/developer-schema/),
+[caching](https://el37628.github.io/FluxFast-Docs/caching/), [distributed resource
+coherence](https://el37628.github.io/FluxFast-Docs/distributed-cache/), [deferred
+resources](https://el37628.github.io/FluxFast-Docs/deferred-resources/), [Live Resources](https://el37628.github.io/FluxFast-Docs/live-resources/),
+[typed contracts](https://el37628.github.io/FluxFast-Docs/type-safety/), [general application
+contracts](https://el37628.github.io/FluxFast-Docs/contracts/), [native client validation](https://el37628.github.io/FluxFast-Docs/validation/),
+[migration guide](https://el37628.github.io/FluxFast-Docs/migration/),
+[Next.js integration](https://el37628.github.io/FluxFast-Docs/nextjs-adapter/), [production
+deployment](https://el37628.github.io/FluxFast-Docs/production/), [containers](https://el37628.github.io/FluxFast-Docs/containers/), and
+[mutations](https://el37628.github.io/FluxFast-Docs/mutations/) before extending a wire, schema, cache, or
 deployment boundary. The [compatibility and versioning
-policy](docs/versioning.md) lists supported runtimes and release rules; the
-[stability contract](docs/stability.md) defines the public boundary,
+policy](https://el37628.github.io/FluxFast-Docs/versioning/) lists supported runtimes and release rules; the
+[stability contract](https://el37628.github.io/FluxFast-Docs/stability/) defines the public boundary,
 compatibility meaning, and deprecation policy; the [Python public API
-contract](docs/python-api.md) classifies every
+contract](https://el37628.github.io/FluxFast-Docs/python-api/) classifies every
 official top-level export, and the [`@fluxfast/core` API
-contract](docs/core-api.md) classifies the framework-neutral runtime. The
-[`@fluxfast/next` API contract](docs/next-api.md) defines the supported adapter
-exports and package paths, while the [DevTools guide](docs/devtools.md) defines
+contract](https://el37628.github.io/FluxFast-Docs/core-api/) classifies the framework-neutral runtime. The
+[`@fluxfast/next` API contract](https://el37628.github.io/FluxFast-Docs/next-api/) defines the supported adapter
+exports and package paths, while the [DevTools guide](https://el37628.github.io/FluxFast-Docs/devtools/) defines
 the optional `@fluxfast/devtools` root API and diagnostics boundary. Maintainers
-can find the registry and tag procedure in the [release guide](docs/releasing.md).
+can find the registry and tag procedure in the [release guide](https://el37628.github.io/FluxFast-Docs/releasing/).
 
 FluxFast is not an Inertia wrapper and does not implement the Inertia protocol.
