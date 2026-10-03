@@ -284,6 +284,10 @@ test("compatibility gates preserve v1.0.1 and add actual published v1.1 upgrade 
   assert.doesNotMatch(publishedProduction, /playwright@1\.62\.1/);
   assert.match(publishedProduction, /FLUXFAST_REGISTRY_PROPAGATION_ATTEMPTS: "60"/);
   assert.match(publishedProduction, /Verify published DevTools package/);
+  assert.match(publishedProduction, /node scripts\/wait-for-npm-publication\.mjs "\$version"/);
+  assert.ok(publishedProduction.indexOf("wait-for-npm-publication.mjs") < publishedProduction.indexOf("npm install"));
+  assert.match(publishedProduction, /--prefer-online/);
+  assert.doesNotMatch(publishedProduction, /npm view|continue-on-error/);
   assert.match(publishedProduction, /"@fluxfast\/devtools@\$\{version\}"/);
   assert.match(publishedProduction, /node --conditions=production/);
 
