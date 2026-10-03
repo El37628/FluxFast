@@ -411,21 +411,7 @@ jobs:
       - name: Verify published DevTools package
         run: |
           version="${GITHUB_REF_NAME#v}"
-          attempts=60
-          for attempt in $(seq 1 "$attempts"); do
-            if npm view \
-              "@fluxfast/devtools@${version}" \
-              version \
-              --registry=https://registry.npmjs.org/ \
-              >/dev/null 2>&1; then
-              break
-            fi
-            if [ "$attempt" -eq "$attempts" ]; then
-              echo "@fluxfast/devtools@${version} did not propagate to npm." >&2
-              exit 1
-            fi
-            sleep 5
-          done
+          node scripts/wait-for-npm-publication.mjs "$version"
 
           consumer="$RUNNER_TEMP/fluxfast-published-devtools"
           mkdir -p "$consumer"
@@ -433,6 +419,7 @@ jobs:
           npm install \
             --prefix "$consumer" \
             --package-lock=false \
+            --prefer-online \
             "@fluxfast/core@${version}" \
             "@fluxfast/next@${version}" \
             "@fluxfast/devtools@${version}" \
