@@ -49,13 +49,13 @@
     "release:prepare": "node scripts/set-release-version.mjs"
   },
   "devDependencies": {
-    "@types/node": "^22.20.4",
+    "@types/node": "^22.20.5",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
   "pnpm": {
     "overrides": {
-      "@types/node": "22.20.4"
+      "@types/node": "22.20.5"
     }
   },
   "engines": {
