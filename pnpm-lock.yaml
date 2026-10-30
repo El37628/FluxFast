@@ -19,7 +19,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
+        version: 4.1.11(@types/node@22.20.4)(happy-dom@21.0.4)(vite@7.3.6(@types/node@22.20.4))
 
   packages/codegen:
     dependencies:
@@ -35,7 +35,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
+        version: 4.1.11(@types/node@22.20.4)(happy-dom@21.0.4)(vite@7.3.6(@types/node@22.20.4))
 
   packages/core:
     devDependencies:
@@ -44,7 +44,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
+        version: 4.1.11(@types/node@22.20.4)(happy-dom@21.0.4)(vite@7.3.6(@types/node@22.20.4))
 
   packages/devtools:
     dependencies:
@@ -68,8 +68,8 @@ importers:
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       happy-dom:
-        specifier: ^20.14.5
-        version: 20.14.5
+        specifier: ^21.0.4
+        version: 21.0.4
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -81,7 +81,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
+        version: 4.1.11(@types/node@22.20.4)(happy-dom@21.0.4)(vite@7.3.6(@types/node@22.20.4))
 
   packages/next:
     dependencies:
@@ -105,8 +105,8 @@ importers:
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       happy-dom:
-        specifier: ^20.14.5
-        version: 20.14.5
+        specifier: ^21.0.4
+        version: 21.0.4
       next:
         specifier: ^16.3.6
         version: 16.3.6(@playwright/test@1.63.0)(@types/node@22.20.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -121,7 +121,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
+        version: 4.1.11(@types/node@22.20.4)(happy-dom@21.0.4)(vite@7.3.6(@types/node@22.20.4))
 
   packages/react:
     dependencies:
@@ -142,8 +142,8 @@ importers:
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       happy-dom:
-        specifier: ^20.14.5
-        version: 20.14.5
+        specifier: ^21.0.4
+        version: 21.0.4
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -155,7 +155,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
+        version: 4.1.11(@types/node@22.20.4)(happy-dom@21.0.4)(vite@7.3.6(@types/node@22.20.4))
 
   packages/vite:
     dependencies:
@@ -192,7 +192,7 @@ importers:
         version: 7.3.6(@types/node@22.20.4)
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4))
+        version: 4.1.11(@types/node@22.20.4)(happy-dom@21.0.4)(vite@7.3.6(@types/node@22.20.4))
 
   tests/adapter-conformance:
     devDependencies:
@@ -812,8 +812,8 @@ packages:
   '@types/whatwg-mimetype@3.0.2':
     resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
 
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -1030,8 +1030,8 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  happy-dom@20.14.5:
-    resolution: {integrity: sha512-x/RzkpWO40bTjIoT30iQtt64FLLmH/iRcUCN2X//bLx7H3ifkdfPXyqsro/OYtqzIAhiLMMA7mmiOR9C3NOKjQ==}
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
     engines: {node: '>=20.0.0'}
 
   magic-string@0.30.21:
@@ -1268,8 +1268,8 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  ws@8.21.3:
-    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+  ws@8.22.0:
+    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -1611,7 +1611,7 @@ snapshots:
 
   '@types/whatwg-mimetype@3.0.2': {}
 
-  '@types/ws@8.18.1':
+  '@types/ws@8.18.2':
     dependencies:
       '@types/node': 22.20.4
 
@@ -1783,15 +1783,15 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  happy-dom@20.14.5:
+  happy-dom@21.0.4:
     dependencies:
       '@types/node': 22.20.4
       '@types/whatwg-mimetype': 3.0.2
-      '@types/ws': 8.18.1
+      '@types/ws': 8.18.2
       buffer-image-size: 0.6.4
       entities: 7.0.1
       whatwg-mimetype: 3.0.0
-      ws: 8.21.3
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -1995,7 +1995,7 @@ snapshots:
       '@types/node': 22.20.4
       fsevents: 2.3.3
 
-  vitest@4.1.11(@types/node@22.20.4)(happy-dom@20.14.5)(vite@7.3.6(@types/node@22.20.4)):
+  vitest@4.1.11(@types/node@22.20.4)(happy-dom@21.0.4)(vite@7.3.6(@types/node@22.20.4)):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@7.3.6(@types/node@22.20.4))
@@ -2019,7 +2019,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.4
-      happy-dom: 20.14.5
+      happy-dom: 21.0.4
     transitivePeerDependencies:
       - msw
 
@@ -2030,4 +2030,4 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  ws@8.21.3: {}
+  ws@8.22.0: {}
